@@ -8,6 +8,8 @@ const _accentOrange = Color(0xFFEAB308);
 const _saleRed = Color(0xFFDC2626);
 const _hotPurple = Color(0xFF7C3AED);
 
+enum _NavItem { home, tours, hotels, flight, news, contact }
+
 class TravelHomePage extends StatefulWidget {
   const TravelHomePage({super.key});
 
@@ -19,6 +21,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
   int _searchTabIndex = 0;
   final _searchTabs = ['Hotels', 'Tours', 'Flights', 'Cars'];
 
+  _NavItem _current = _NavItem.home;
+  RangeValues _priceRange = const RangeValues(50, 300);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -27,6 +32,16 @@ class _TravelHomePageState extends State<TravelHomePage> {
         slivers: [
           _buildTopBar(),
           _buildNavBar(),
+          ..._buildPageSlivers(),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildPageSlivers() {
+    switch (_current) {
+      case _NavItem.home:
+        return [
           SliverToBoxAdapter(child: _buildHero()),
           SliverToBoxAdapter(child: _buildCategories()),
           SliverToBoxAdapter(child: _buildSectionTitle('Trending Places', "The world's best luxury travel tours.")),
@@ -35,20 +50,101 @@ class _TravelHomePageState extends State<TravelHomePage> {
           SliverToBoxAdapter(child: _buildTopDestinations()),
           SliverToBoxAdapter(child: _buildSectionTitle('Our Tour Packages', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
           SliverToBoxAdapter(child: _buildTourPackages()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Popular Tour Packages', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
-          SliverToBoxAdapter(child: _buildPopularPackages()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Checkout With Bank Event', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
-          SliverToBoxAdapter(child: _buildBankEvents()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Our Blog', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
-          SliverToBoxAdapter(child: _buildBlog()),
+          // SliverToBoxAdapter(child: _buildSectionTitle('Popular Tour Packages', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
+          // SliverToBoxAdapter(child: _buildPopularPackages()),
+          // SliverToBoxAdapter(child: _buildSectionTitle('Checkout With Bank Event', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
+          // SliverToBoxAdapter(child: _buildBankEvents()),
+          SliverToBoxAdapter(child: _buildSectionTitle('Our news', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
+          SliverToBoxAdapter(child: _buildNews()),
           SliverToBoxAdapter(child: _buildKnowYourCityBanner()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Our Guides', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
-          SliverToBoxAdapter(child: _buildGuides()),
+          SliverToBoxAdapter(child: _buildSectionTitle('Our Happy Customers', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
+          SliverToBoxAdapter(child: _buildRatings()),
           SliverToBoxAdapter(child: _buildNewsletter()),
           SliverToBoxAdapter(child: _buildFooter()),
-        ],
-      ),
-    );
+        ];
+      case _NavItem.tours:
+        return [
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours')),
+          SliverToBoxAdapter(child: _buildFooter()),
+        ];
+      case _NavItem.hotels:
+        return [
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for hotel', itemLabel: 'hotels')),
+          SliverToBoxAdapter(child: _buildFooter()),
+        ];
+      case _NavItem.flight:
+        return [
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for flight', itemLabel: 'flights')),
+          SliverToBoxAdapter(child: _buildFooter()),
+        ];
+      case _NavItem.news:
+        return [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(48, 40, 48, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('News', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: _navBlue)),
+                  const SizedBox(height: 8),
+                  Text('Latest stories and travel advice.', style: TextStyle(color: Colors.grey[600])),
+                  const SizedBox(height: 24),
+                  _buildNews(),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(child: _buildFooter()),
+        ];
+      case _NavItem.contact:
+        return [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(48, 80, 48, 80),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Contact us', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: _navBlue)),
+                  const SizedBox(height: 8),
+                  Text('We would love to hear from you.', style: TextStyle(color: Colors.grey[600])),
+                  const SizedBox(height: 32),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(decoration: InputDecoration(labelText: 'Your name', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
+                            const SizedBox(height: 16),
+                            TextField(decoration: InputDecoration(labelText: 'Email', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
+                            const SizedBox(height: 16),
+                            TextField(
+                              maxLines: 4,
+                              decoration: InputDecoration(labelText: 'Message', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () {},
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _primaryBlue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                              ),
+                              child: const Text('Send message'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 48),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(child: _buildFooter()),
+        ];
+    }
   }
 
   Widget _buildTopBar() {
@@ -76,9 +172,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
                 if (isWide)
                   Row(
                     children: [
-                      // _dropdown('EN', ['EN', 'ES', 'FR']),
+                      // _dropdown('EN', const ['EN', 'ES', 'FR']),
                       // const SizedBox(width: 16),
-                      // _dropdown('USD', ['USD', 'EUR', 'GBP']),
+                      // _dropdown('USD', const ['USD', 'EUR', 'GBP']),
                       // const SizedBox(width: 24),
                       TextButton(onPressed: () {}, child: Text('Sign In', style: TextStyle(color: Colors.grey[300], fontSize: 13))),
                       TextButton(onPressed: () {}, child: Text('Register', style: TextStyle(color: Colors.grey[300], fontSize: 13))),
@@ -112,18 +208,50 @@ class _TravelHomePageState extends State<TravelHomePage> {
           children: [
             _buildLogo(),
             const SizedBox(width: 48),
-            const _NavLink(label: 'Home'),
-            const _NavLink(label: 'Tours'),
-            const _NavLink(label: 'Hotel'),
-            const _NavLink(label: 'Flight'),
-            const _NavLink(label: 'Blog'),
-            const _NavLink(label: 'Contact'),
+            _NavLink(
+              label: 'Home',
+              isActive: _current == _NavItem.home,
+              onTap: () => setState(() => _current = _NavItem.home),
+            ),
+            _NavLink(
+              label: 'Tours',
+              isActive: _current == _NavItem.tours,
+              onTap: () => setState(() => _current = _NavItem.tours),
+            ),
+            _NavLink(
+              label: 'Hotel',
+              isActive: _current == _NavItem.hotels,
+              onTap: () => setState(() => _current = _NavItem.hotels),
+            ),
+            _NavLink(
+              label: 'Flight',
+              isActive: _current == _NavItem.flight,
+              onTap: () => setState(() => _current = _NavItem.flight),
+            ),
+            _NavLink(
+              label: 'News',
+              isActive: _current == _NavItem.news,
+              onTap: () => setState(() => _current = _NavItem.news),
+            ),
+            _NavLink(
+              label: 'Contact',
+              isActive: _current == _NavItem.contact,
+              onTap: () => setState(() => _current = _NavItem.contact),
+            ),
             const Spacer(),
             // Stack(
             //   clipBehavior: Clip.none,
             //   children: [
             //     IconButton(icon: const Icon(Icons.notification_important_outlined, color: Colors.white), onPressed: () {}),
-            //     Positioned(right: 4, top: 4, child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: _saleRed, shape: BoxShape.circle), child: const Text('0', style: TextStyle(color: Colors.white, fontSize: 10)))),
+            //     Positioned(
+            //       right: 4,
+            //       top: 4,
+            //       child: Container(
+            //         padding: const EdgeInsets.all(4),
+            //         decoration: const BoxDecoration(color: _saleRed, shape: BoxShape.circle),
+            //         child: const Text('0', style: TextStyle(color: Colors.white, fontSize: 10)),
+            //       ),
+            //     ),
             //   ],
             // ),
             // IconButton(icon: const Icon(Icons.search, color: Colors.white), onPressed: () {}),
@@ -148,17 +276,21 @@ class _TravelHomePageState extends State<TravelHomePage> {
         Container(
           height: 520,
           width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF1E3A5F).withOpacity(0.7),
-                  const Color(0xFF0F172A),
-                ],
-              ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFF1E3A5F).withOpacity(0.7),
+                const Color(0xFF0F172A),
+              ],
             ),
-          child: Image.network('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200', fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox()),
+          ),
+          child: Image.network(
+            'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const SizedBox(),
+          ),
         ),
         Container(
           height: 520,
@@ -176,17 +308,6 @@ class _TravelHomePageState extends State<TravelHomePage> {
               const SizedBox(height: 75),
               _buildSearchWidget(),
               const SizedBox(height: 16),
-              // Container(
-              //   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              //   decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
-              //   child: Row(
-              //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              //     children: [
-              //       Text('Find unforgettable experiences and deals with us.', style: TextStyle(color: Colors.grey[300], fontSize: 14)),
-              //       OutlinedButton(onPressed: () {}, style: OutlinedButton.styleFrom(foregroundColor: _accentOrange, side: const BorderSide(color: _accentOrange)), child: const Text('Learn More')),
-              //     ],
-              //   ),
-              // ),
             ],
           ),
         ),
@@ -200,7 +321,13 @@ class _TravelHomePageState extends State<TravelHomePage> {
         final isWide = constraints.maxWidth > 900;
         return Container(
           padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12, offset: const Offset(0, 4))]),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, 4)),
+            ],
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -212,8 +339,17 @@ class _TravelHomePageState extends State<TravelHomePage> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(color: isActive ? _primaryBlue : Colors.transparent, borderRadius: BorderRadius.circular(8)),
-                      child: Text(_searchTabs[i], style: TextStyle(color: isActive ? Colors.white : Colors.grey[700], fontWeight: isActive ? FontWeight.w600 : FontWeight.normal)),
+                      decoration: BoxDecoration(
+                        color: isActive ? _primaryBlue : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _searchTabs[i],
+                        style: TextStyle(
+                          color: isActive ? Colors.white : Colors.grey[700],
+                          fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                      ),
                     ),
                   );
                 }),
@@ -224,38 +360,132 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   children: [
                     Expanded(
                       child: TextField(
-                        decoration: InputDecoration(hintText: 'Where are you going?', 
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)), 
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)))),
+                        decoration: InputDecoration(
+                          hintText: 'Where are you going?',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        ),
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    SizedBox(width: 160, child: TextField(decoration: InputDecoration(hintText: 'Check In', suffixIcon: const Icon(Icons.calendar_today, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14)))),
+                    SizedBox(
+                      width: 160,
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Check In',
+                          suffixIcon: const Icon(Icons.calendar_today, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    SizedBox(width: 160, child: TextField(decoration: InputDecoration(hintText: 'Check Out', suffixIcon: const Icon(Icons.calendar_today, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14)))),
+                    SizedBox(
+                      width: 160,
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Check Out',
+                          suffixIcon: const Icon(Icons.calendar_today, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    SizedBox(width: 120, child: DropdownButtonFormField<String>(value: '2', decoration: InputDecoration(hintText: 'Guest', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14)), items: const [DropdownMenuItem(value: '2', child: Text('2 Guest'))], onChanged: (_) {})),
+                    SizedBox(
+                      width: 120,
+                      child: DropdownButtonFormField<String>(
+                        value: '2',
+                        decoration: InputDecoration(
+                          hintText: 'Guest',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: '2', child: Text('2 Guest')),
+                        ],
+                        onChanged: (_) {},
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    ElevatedButton.icon(onPressed: () {}, icon: const Icon(Icons.search, size: 20), label: const Text('Search'), style: ElevatedButton.styleFrom(backgroundColor: _primaryBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)))),
+                    ElevatedButton.icon(
+                      onPressed: () {},
+                      icon: const Icon(Icons.search, size: 20),
+                      label: const Text('Search'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
                   ],
                 )
               else
                 Column(
                   children: [
-                    TextField(decoration: InputDecoration(hintText: 'Where are you going?', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14))),
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Where are you going?',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: TextField(decoration: InputDecoration(hintText: 'Check In', suffixIcon: const Icon(Icons.calendar_today, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14)))),
+                        Expanded(
+                          child: TextField(
+                            decoration: InputDecoration(
+                              hintText: 'Check In',
+                              suffixIcon: const Icon(Icons.calendar_today, size: 18),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: TextField(decoration: InputDecoration(hintText: 'Check Out', suffixIcon: const Icon(Icons.calendar_today, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14)))),
+                        Expanded(
+                          child: TextField(
+                            decoration: InputDecoration(
+                              hintText: 'Check Out',
+                              suffixIcon: const Icon(Icons.calendar_today, size: 18),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: DropdownButtonFormField<String>(value: '2', decoration: InputDecoration(hintText: 'Guest', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14)), items: const [DropdownMenuItem(value: '2', child: Text('2 Guest'))], onChanged: (_) {})),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: '2',
+                            decoration: InputDecoration(
+                              hintText: 'Guest',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: '2', child: Text('2 Guest')),
+                            ],
+                            onChanged: (_) {},
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        ElevatedButton.icon(onPressed: () {}, icon: const Icon(Icons.search, size: 20), label: const Text('Search'), style: ElevatedButton.styleFrom(backgroundColor: _primaryBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)))),
+                        ElevatedButton.icon(
+                          onPressed: () {},
+                          icon: const Icon(Icons.search, size: 20),
+                          label: const Text('Search'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primaryBlue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -485,7 +715,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     );
   }
 
-  Widget _buildBlog() {
+  Widget _buildNews() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 48),
       child: GridView.count(
@@ -494,7 +724,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
         crossAxisCount: 3,
         mainAxisSpacing: 24,
         crossAxisSpacing: 24,
-        childAspectRatio: 1.3,
+        childAspectRatio: 1.2,
         children: List.generate(6, (_) {
           return Container(
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black, blurRadius: 10, offset: const Offset(0, 2))]),
@@ -525,6 +755,392 @@ class _TravelHomePageState extends State<TravelHomePage> {
     );
   }
 
+  Widget _buildSearchListPage({required String title, required String itemLabel}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Hero banner with title
+        Stack(
+          children: [
+            SizedBox(
+              height: 260,
+              width: double.infinity,
+              child: Image.network(
+                'https://images.unsplash.com/photo-1519710164239-da123dc03ef4?w=1200',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(color: Colors.green[200]),
+              ),
+            ),
+            Container(
+              height: 260,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.4),
+                    Colors.black.withOpacity(0.7),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 48,
+              bottom: 40,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Find the best $itemLabel for your next trip.',
+                    style: TextStyle(color: Colors.white.withOpacity(0.9)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        // Search row
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(48, 24, 48, 24),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 900;
+              final fields = [
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Location',
+                      hintText: 'Where are you going?',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Check-in – Check-out',
+                      hintText: 'DD/MM/YYYY – DD/MM/YYYY',
+                      suffixIcon: const Icon(Icons.calendar_today, size: 18),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<String>(
+                    value: '1 Adult · 0 Child',
+                    decoration: InputDecoration(
+                      labelText: 'Guests',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: '1 Adult · 0 Child', child: Text('1 Adult · 0 Child')),
+                      DropdownMenuItem(value: '2 Adults · 0 Child', child: Text('2 Adults · 0 Child')),
+                    ],
+                    onChanged: (_) {},
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () {},
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryBlue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                    ),
+                    child: const Text('Search'),
+                  ),
+                ),
+              ];
+
+              if (isWide) {
+                return Row(children: fields);
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  fields[0],
+                  const SizedBox(height: 12),
+                  fields[2],
+                  const SizedBox(height: 12),
+                  fields[4],
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerRight, child: fields[6]),
+                ],
+              );
+            },
+          ),
+        ),
+        // Filter + results
+        Padding(
+          padding: const EdgeInsets.fromLTRB(48, 16, 48, 48),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 260, child: _buildHotelFilterCard()),
+              const SizedBox(width: 24),
+              Expanded(child: _buildHotelResultList(itemLabel: itemLabel)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHotelFilterCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Filter by', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _navBlue)),
+          const SizedBox(height: 16),
+          const Text('Filter Price', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          RangeSlider(
+            values: _priceRange,
+            min: 0,
+            max: 500,
+            divisions: 10,
+            labels: RangeLabels('\$${_priceRange.start.round()}', '\$${_priceRange.end.round()}'),
+            activeColor: _primaryBlue,
+            onChanged: (values) {
+              setState(() => _priceRange = values);
+            },
+          ),
+          const SizedBox(height: 4),
+          Text('Price: \$${_priceRange.start.round()} - \$${_priceRange.end.round()}', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+          const Divider(height: 32),
+          const Text('Hotel Star', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          _staticCheckbox('5 star'),
+          _staticCheckbox('4 star'),
+          _staticCheckbox('3 star'),
+          const Divider(height: 32),
+          const Text('Review Score', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          _staticCheckbox('Wonderful 9+'),
+          _staticCheckbox('Very good 8+'),
+          _staticCheckbox('Good 7+'),
+          const Divider(height: 32),
+          const Text('Property type', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          _staticCheckbox('Apartments'),
+          _staticCheckbox('Hostels'),
+          _staticCheckbox('Hotels'),
+        ],
+      ),
+    );
+  }
+
+  Widget _staticCheckbox(String label) {
+    return Row(
+      children: [
+        Checkbox(value: false, onChanged: null),
+        Flexible(child: Text(label, style: const TextStyle(fontSize: 13))),
+      ],
+    );
+  }
+
+  Widget _buildHotelResultList({required String itemLabel}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '285 $itemLabel found',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: _navBlue),
+            ),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('Show on the map', style: TextStyle(fontSize: 13)),
+                ),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: 'Recommended',
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(value: 'Recommended', child: Text('Recommended')),
+                    DropdownMenuItem(value: 'Top rated', child: Text('Top rated')),
+                  ],
+                  onChanged: (_) {},
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 3,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 16,
+          childAspectRatio: 0.9,
+          children: List.generate(6, (index) => _buildHotelResultCard(index)),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(onPressed: () {}, icon: const Icon(Icons.chevron_left)),
+            ...List.generate(5, (i) {
+              final isActive = i == 0;
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isActive ? _primaryBlue : Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: isActive ? _primaryBlue : Colors.grey[300]!),
+                ),
+                child: Text(
+                  '${i + 1}',
+                  style: TextStyle(color: isActive ? Colors.white : Colors.black87, fontSize: 13),
+                ),
+              );
+            }),
+            IconButton(onPressed: () {}, icon: const Icon(Icons.chevron_right)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHotelResultCard(int index) {
+    final names = [
+      'Dusit Thani Manila',
+      'The Monarch Hotel',
+      'Hotel Gracery Shinjuku',
+      'A Romantic Escape at Hotel Relance',
+      'Red Planet Cagayan de Oro',
+      'Discovery Coron Beach Resort',
+    ];
+    final locations = [
+      'Philippines',
+      'Philippines',
+      'Japan',
+      'Philippines',
+      'Philippines',
+      'Philippines',
+    ];
+    final prices = ['₱7,500 / night', '₱4,495 / night', '₱7,315 / night', '₱5,128 / night', '₱1,997 / night', '₱5,050 / night'];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                child: SizedBox(
+                  height: 140,
+                  width: double.infinity,
+                  child: Image.network(
+                    'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(color: Colors.grey[300]),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _saleRed,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Featured',
+                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  names[index % names.length],
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  locations[index % locations.length],
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.star, size: 14, color: Colors.amber[700]),
+                    Icon(Icons.star, size: 14, color: Colors.amber[700]),
+                    Icon(Icons.star, size: 14, color: Colors.amber[700]),
+                    Icon(Icons.star, size: 14, color: Colors.amber[700]),
+                    Icon(Icons.star_border, size: 14, color: Colors.amber[700]),
+                    const SizedBox(width: 4),
+                    Text('4.${index + 1}', style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'from ${prices[index % prices.length]}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildKnowYourCityBanner() {
     return Container(
       margin: const EdgeInsets.fromLTRB(48, 48, 48, 0),
@@ -540,8 +1156,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
     );
   }
 
-  Widget _buildGuides() {
-    final guides = [('Irvin Deo', 'Travel Guide'), ('Jane Smith', 'Travel Guide'), ('John Doe', 'Travel Guide')];
+  Widget _buildRatings() {
+    final guides = [('Irvin Deo', 'Sample Rating'), ('Jane Smith', 'Sample Rating'), ('John Doe', 'Sample Rating')];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 48),
       child: Row(
@@ -661,15 +1277,32 @@ class _TravelHomePageState extends State<TravelHomePage> {
 }
 
 class _NavLink extends StatelessWidget {
-  const _NavLink({required this.label});
+  const _NavLink({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
 
   final String label;
+  final bool isActive;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final color = isActive ? _accentOrange : Colors.white;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: TextButton(onPressed: () {}, child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 15))),
+      child: TextButton(
+        onPressed: onTap,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 15,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
     );
   }
 }
