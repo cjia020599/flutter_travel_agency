@@ -273,10 +273,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
   Widget _buildLogo() {
     return Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(color: Colors.green[700], shape: BoxShape.circle),
-      child: const Center(child: Text('T', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22))),
+      width: 125,
+      height: 125,
+      decoration: BoxDecoration(color: Colors.grey[400], shape: BoxShape.circle),
+      child:  Center(child: ClipOval(child: Image.network('https://res.cloudinary.com/dxqkafity/image/upload/v1772964451/Logo_i0iag0.png', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]))),
+                  ),
     );
   }
 
