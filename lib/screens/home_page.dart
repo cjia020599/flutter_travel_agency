@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'admin_dashboard_page.dart';
+
 // Design colors
 const _navBlue = Color(0xFF1E3A5F);
 const _topBarGrey = Color(0xFF2C3E50);
@@ -8,7 +10,7 @@ const _accentOrange = Color(0xFFEAB308);
 const _saleRed = Color(0xFFDC2626);
 const _hotPurple = Color(0xFF7C3AED);
 
-enum _NavItem { home, tours, hotels, flight, news, contact }
+enum _NavItem { home, tours, hotels, cars, news, contact }
 
 class TravelHomePage extends StatefulWidget {
   const TravelHomePage({super.key});
@@ -19,7 +21,7 @@ class TravelHomePage extends StatefulWidget {
 
 class _TravelHomePageState extends State<TravelHomePage> {
   int _searchTabIndex = 0;
-  final _searchTabs = ['Hotels', 'Tours', 'Flights', 'Cars'];
+  final _searchTabs = ['Tours', 'Cars'];
 
   _NavItem _current = _NavItem.home;
   RangeValues _priceRange = const RangeValues(50, 300);
@@ -72,9 +74,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
           SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for hotel', itemLabel: 'hotels')),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
-      case _NavItem.flight:
+      case _NavItem.cars:
         return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for flight', itemLabel: 'flights')),
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for car', itemLabel: 'cars')),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.news:
@@ -176,6 +178,14 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       // const SizedBox(width: 16),
                       // _dropdown('USD', const ['USD', 'EUR', 'GBP']),
                       // const SizedBox(width: 24),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const AdminDashboardPage()),
+                          );
+                        },
+                        child: Text('Admin', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                      ),
                       TextButton(onPressed: () {}, child: Text('Sign In', style: TextStyle(color: Colors.grey[300], fontSize: 13))),
                       TextButton(onPressed: () {}, child: Text('Register', style: TextStyle(color: Colors.grey[300], fontSize: 13))),
                     ],
@@ -218,15 +228,15 @@ class _TravelHomePageState extends State<TravelHomePage> {
               isActive: _current == _NavItem.tours,
               onTap: () => setState(() => _current = _NavItem.tours),
             ),
+            // _NavLink(
+            //   label: 'Hotel',
+            //   isActive: _current == _NavItem.hotels,
+            //   onTap: () => setState(() => _current = _NavItem.hotels),
+            // ),
             _NavLink(
-              label: 'Hotel',
-              isActive: _current == _NavItem.hotels,
-              onTap: () => setState(() => _current = _NavItem.hotels),
-            ),
-            _NavLink(
-              label: 'Flight',
-              isActive: _current == _NavItem.flight,
-              onTap: () => setState(() => _current = _NavItem.flight),
+              label: 'Cars',
+              isActive: _current == _NavItem.cars,
+              onTap: () => setState(() => _current = _NavItem.cars),
             ),
             _NavLink(
               label: 'News',
@@ -515,7 +525,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final items = [
       (_navBlue, 'NEW', 'Creative Hotels', 'Our Hotels are all about the experience.', Icons.hotel),
       (Colors.grey[700]!, 'SALE', 'Best Travel', 'Our trips are all about the experience.', Icons.travel_explore),
-      (_navBlue, null, 'Holiday Planning', 'Our Flights are all about the experience.', Icons.flight),
+      (_navBlue, null, 'Holiday Planning', 'Our Cars are all about the experience.', Icons.flight),
       (Colors.orange[700]!, null, 'Amazing Cars', 'Our Cars are all about the experience.', Icons.directions_car),
     ];
     return Padding(
