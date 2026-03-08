@@ -272,11 +272,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
   }
 
   Widget _buildLogo() {
-    return Container(
+    return SizedBox(
       width: 125,
       height: 125,
-      decoration: BoxDecoration(color: Colors.grey[400], shape: BoxShape.circle),
-      child:  Center(child: ClipOval(child: Image.network('https://res.cloudinary.com/dxqkafity/image/upload/v1772964451/Logo_i0iag0.png', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]))),
+      child:  Center(child: ClipOval(child: Image.network('https://res.cloudinary.com/dxqkafity/image/upload/v1772970426/logo_transparent_bg_h0jjhc.png', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]))),
                   ),
     );
   }
