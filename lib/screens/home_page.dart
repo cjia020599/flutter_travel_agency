@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../api/api_client.dart';
+import '../api/tours_api.dart';
+import '../api/cars_api.dart';
+import '../api/lookups_api.dart';
+import '../api/auth_api.dart';
+import '../api/user_api.dart';
 import 'admin_dashboard_page.dart';
+import 'login_page.dart';
+import 'register_page.dart';
+import 'user_profile_page.dart';
 
 // Design colors
 const _navBlue = Color(0xFF1E3A5F);
@@ -26,6 +35,34 @@ class _TravelHomePageState extends State<TravelHomePage> {
   _NavItem _current = _NavItem.home;
   RangeValues _priceRange = const RangeValues(50, 300);
 
+  bool _isLoggedIn = false;
+  bool _isAdmin = false;
+  List<dynamic> _tours = [];
+  List<dynamic> _cars = [];
+  List<dynamic> _locations = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final loggedIn = await ApiClient.instance.isLoggedIn;
+    final isAdmin = await UserApi.isAdmin();
+    final tours = await ToursApi.list();
+    final cars = await CarsApi.list();
+    final locations = await LookupsApi.locations();
+    if (!mounted) return;
+    setState(() {
+      _isLoggedIn = loggedIn;
+      _isAdmin = isAdmin;
+      _tours = tours is List ? tours : [];
+      _cars = cars is List ? cars : [];
+      _locations = locations is List ? locations : [];
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -48,35 +85,29 @@ class _TravelHomePageState extends State<TravelHomePage> {
           SliverToBoxAdapter(child: _buildCategories()),
           SliverToBoxAdapter(child: _buildSectionTitle('Trending Places', "The world's best luxury travel tours.")),
           SliverToBoxAdapter(child: _buildTrendingPlaces()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Top Destinations', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
+          SliverToBoxAdapter(child: _buildSectionTitle('Top Destinations', 'Explore our destinations.')),
           SliverToBoxAdapter(child: _buildTopDestinations()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Our Tour Packages', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
+          SliverToBoxAdapter(child: _buildSectionTitle('Our Tour Packages', 'Browse available tours.')),
           SliverToBoxAdapter(child: _buildTourPackages()),
-          // SliverToBoxAdapter(child: _buildSectionTitle('Popular Tour Packages', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
-          // SliverToBoxAdapter(child: _buildPopularPackages()),
-          // SliverToBoxAdapter(child: _buildSectionTitle('Checkout With Bank Event', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
-          // SliverToBoxAdapter(child: _buildBankEvents()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Our news', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
-          SliverToBoxAdapter(child: _buildNews()),
+          SliverToBoxAdapter(child: _buildSectionTitle('Our Cars', 'Browse available cars.')),
+          SliverToBoxAdapter(child: _buildCarPackages()),
           SliverToBoxAdapter(child: _buildKnowYourCityBanner()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Our Happy Customers', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')),
-          SliverToBoxAdapter(child: _buildRatings()),
           SliverToBoxAdapter(child: _buildNewsletter()),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.tours:
         return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours')),
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours', items: _tours, isTour: true)),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.hotels:
         return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for hotel', itemLabel: 'hotels')),
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours', items: _tours, isTour: true)),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.cars:
         return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for car', itemLabel: 'cars')),
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for car', itemLabel: 'cars', items: _cars, isTour: false)),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.news:
@@ -91,7 +122,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   const SizedBox(height: 8),
                   Text('Latest stories and travel advice.', style: TextStyle(color: Colors.grey[600])),
                   const SizedBox(height: 24),
-                  _buildNews(),
+                  Center(child: Text('No news available.', style: TextStyle(color: Colors.grey[600]))),
                 ],
               ),
             ),
@@ -171,25 +202,46 @@ class _TravelHomePageState extends State<TravelHomePage> {
                     Text('info@domain.com', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
                   ],
                 ),
-                if (isWide)
-                  Row(
-                    children: [
-                      // _dropdown('EN', const ['EN', 'ES', 'FR']),
-                      // const SizedBox(width: 16),
-                      // _dropdown('USD', const ['USD', 'EUR', 'GBP']),
-                      // const SizedBox(width: 24),
+                Row(
+                  children: [
+                    if (_isAdmin)
                       TextButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const AdminDashboardPage()),
-                          );
-                        },
+                        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminDashboardPage())),
                         child: Text('Admin', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
                       ),
-                      TextButton(onPressed: () {}, child: Text('Sign In', style: TextStyle(color: Colors.grey[300], fontSize: 13))),
-                      TextButton(onPressed: () {}, child: Text('Register', style: TextStyle(color: Colors.grey[300], fontSize: 13))),
+                    if (_isLoggedIn) ...[
+                      TextButton(
+                        onPressed: () async {
+                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UserProfilePage()));
+                          _loadData();
+                        },
+                        child: Text('My Profile', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await AuthApi.logout();
+                          _loadData();
+                        },
+                        child: Text('Logout', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                      ),
+                    ] else ...[
+                      TextButton(
+                        onPressed: () async {
+                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginPage()));
+                          _loadData();
+                        },
+                        child: Text('Sign In', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegisterPage()));
+                          _loadData();
+                        },
+                        child: Text('Register', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                      ),
                     ],
-                  ),
+                  ],
+                ),
               ],
             );
           },
@@ -275,7 +327,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     return SizedBox(
       width: 125,
       height: 125,
-      child:  Center(child: ClipOval(child: Image.network('https://res.cloudinary.com/dxqkafity/image/upload/v1772970426/logo_transparent_bg_h0jjhc.png', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]))),
+      child:  Center(child: ClipOval(child: Image.network('https://res.cloudinary.com/das4hjjvf/image/upload/v1773481328/logo_transparent_bg_dfoqlw.webp', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]))),
                   ),
     );
   }
@@ -553,20 +605,21 @@ class _TravelHomePageState extends State<TravelHomePage> {
   }
 
   Widget _buildTrendingPlaces() {
-    final places = [
-      ('Rome, Italy', '\$50 - \$120 / person', 4.5, true),
-      ('London, UK', '\$60 - \$140 / person', 4.8, false),
-      ('Paris, France', '\$70 - \$150 / person', 4.6, true),
-      ('Dubai, UAE', '\$90 - \$200 / person', 4.9, false),
-    ];
+    if (_tours.isEmpty) {
+      return const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()));
+    }
     return SizedBox(
       height: 320,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 48),
-        itemCount: places.length,
+        itemCount: _tours.length,
         itemBuilder: (context, i) {
-          final (city, price, stars, sale) = places[i];
+          final t = _tours[i] as Map<String, dynamic>;
+          final title = t['title']?.toString() ?? 'Tour';
+          final price = t['salePrice'] ?? t['price'];
+          final priceStr = price != null ? '\$$price / person' : '';
+          final featured = t['isFeatured'] == true;
           return Container(
             width: 280,
             margin: const EdgeInsets.only(right: 20),
@@ -580,17 +633,16 @@ class _TravelHomePageState extends State<TravelHomePage> {
                     fit: StackFit.expand,
                     children: [
                       ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(12)), child: Image.network('https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]))),
-                      if (sale) Positioned(top: 12, left: 12, child: _tag('SALE', _saleRed)),
-                      Positioned(bottom: 12, left: 12, right: 12, child: Text(city, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, shadows: [Shadow(color: Colors.black54, blurRadius: 4)]))),
+                      if (featured) Positioned(top: 12, left: 12, child: _tag('FEATURED', _saleRed)),
+                      Positioned(bottom: 12, left: 12, right: 12, child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, shadows: [Shadow(color: Colors.black54, blurRadius: 4)]))),
                     ],
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(city, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text(price, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                    Row(children: [Icon(Icons.star, size: 16, color: Colors.amber[700]), const SizedBox(width: 4), Text('$stars', style: const TextStyle(fontSize: 13))]),
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(priceStr, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                   ]),
                 ),
               ],
@@ -606,9 +658,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
   }
 
   Widget _buildTopDestinations() {
-    final cities = ['New York', 'London', 'Paris', 'Tokyo', 'Sydney', 'Dubai'];
+    if (_locations.isEmpty) return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()));
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 48,),
+      padding: const EdgeInsets.symmetric(horizontal: 48),
       child: GridView.count(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
@@ -616,7 +668,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
         mainAxisSpacing: 16,
         crossAxisSpacing: 16,
         childAspectRatio: 1.8,
-        children: cities.map((city) {
+        children: _locations.map<Widget>((loc) {
+          final name = (loc is Map ? loc['name'] : loc.toString()) ?? 'Destination';
           return Container(
             decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0, 2))]),
             child: ClipRRect(
@@ -626,7 +679,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
                 children: [
                   Image.network('https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400])),
                   Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black54]))),
-                  Positioned(bottom: 16, left: 16, right: 16, child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(city, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)), Text('12 properties', style: TextStyle(color: Colors.white70, fontSize: 12))]), const Icon(Icons.arrow_forward, color: Colors.white)])),
+                  Positioned(bottom: 16, left: 16, right: 16, child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(name.toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)), Text('Explore', style: TextStyle(color: Colors.white70, fontSize: 12))]), const Icon(Icons.arrow_forward, color: Colors.white)])),
                 ],
               ),
             ),
@@ -677,6 +730,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
   }
 
   Widget _buildTourPackages() {
+    if (_tours.isEmpty) return const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()));
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 48),
       child: GridView.count(
@@ -686,7 +740,35 @@ class _TravelHomePageState extends State<TravelHomePage> {
         mainAxisSpacing: 24,
         crossAxisSpacing: 24,
         childAspectRatio: 1.3,
-        children: List.generate(6, (_) => _buildCard(buttonLabel: 'View Details')),
+        children: _tours.map<Widget>((t) {
+          final m = t as Map<String, dynamic>;
+          final title = m['title']?.toString() ?? 'Tour';
+          final price = m['salePrice'] ?? m['price'];
+          final priceStr = price != null ? '\$$price / person' : '';
+          return _buildCard(title: title, price: priceStr, buttonLabel: 'View Details');
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildCarPackages() {
+    if (_cars.isEmpty) return const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 48),
+      child: GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 3,
+        mainAxisSpacing: 24,
+        crossAxisSpacing: 24,
+        childAspectRatio: 1.3,
+        children: _cars.map<Widget>((c) {
+          final m = c as Map<String, dynamic>;
+          final title = m['title']?.toString() ?? 'Car';
+          final price = m['salePrice'] ?? m['price'];
+          final priceStr = price != null ? '\$$price / day' : '';
+          return _buildCard(title: title, price: priceStr, desc: '${m['passenger'] ?? '-'} passengers · ${m['gearShift'] ?? '-'}', buttonLabel: 'View Details');
+        }).toList(),
       ),
     );
   }
@@ -765,7 +847,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     );
   }
 
-  Widget _buildSearchListPage({required String title, required String itemLabel}) {
+  Widget _buildSearchListPage({required String title, required String itemLabel, required List<dynamic> items, required bool isTour}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -910,7 +992,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
             children: [
               SizedBox(width: 260, child: _buildHotelFilterCard()),
               const SizedBox(width: 24),
-              Expanded(child: _buildHotelResultList(itemLabel: itemLabel)),
+              Expanded(child: _buildResultList(itemLabel: itemLabel, items: items, isTour: isTour)),
             ],
           ),
         ),
@@ -980,7 +1062,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     );
   }
 
-  Widget _buildHotelResultList({required String itemLabel}) {
+  Widget _buildResultList({required String itemLabel, required List<dynamic> items, required bool isTour}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -988,85 +1070,32 @@ class _TravelHomePageState extends State<TravelHomePage> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              '285 $itemLabel found',
+              '${items.length} $itemLabel found',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: _navBlue),
-            ),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('Show on the map', style: TextStyle(fontSize: 13)),
-                ),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: 'Recommended',
-                  underline: const SizedBox(),
-                  items: const [
-                    DropdownMenuItem(value: 'Recommended', child: Text('Recommended')),
-                    DropdownMenuItem(value: 'Top rated', child: Text('Top rated')),
-                  ],
-                  onChanged: (_) {},
-                ),
-              ],
             ),
           ],
         ),
         const SizedBox(height: 12),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 3,
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
-          childAspectRatio: 0.9,
-          children: List.generate(6, (index) => _buildHotelResultCard(index)),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(onPressed: () {}, icon: const Icon(Icons.chevron_left)),
-            ...List.generate(5, (i) {
-              final isActive = i == 0;
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isActive ? _primaryBlue : Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: isActive ? _primaryBlue : Colors.grey[300]!),
-                ),
-                child: Text(
-                  '${i + 1}',
-                  style: TextStyle(color: isActive ? Colors.white : Colors.black87, fontSize: 13),
-                ),
-              );
-            }),
-            IconButton(onPressed: () {}, icon: const Icon(Icons.chevron_right)),
-          ],
-        ),
+        items.isEmpty
+            ? const Padding(padding: EdgeInsets.all(48), child: Center(child: Text('No items found.')))
+            : GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: 0.9,
+                children: List.generate(items.length, (index) => _buildResultCard(items[index] as Map<String, dynamic>, isTour)),
+              ),
       ],
     );
   }
 
-  Widget _buildHotelResultCard(int index) {
-    final names = [
-      'Dusit Thani Manila',
-      'The Monarch Hotel',
-      'Hotel Gracery Shinjuku',
-      'A Romantic Escape at Hotel Relance',
-      'Red Planet Cagayan de Oro',
-      'Discovery Coron Beach Resort',
-    ];
-    final locations = [
-      'Philippines',
-      'Philippines',
-      'Japan',
-      'Philippines',
-      'Philippines',
-      'Philippines',
-    ];
-    final prices = ['₱7,500 / night', '₱4,495 / night', '₱7,315 / night', '₱5,128 / night', '₱1,997 / night', '₱5,050 / night'];
+  Widget _buildResultCard(Map<String, dynamic> item, bool isTour) {
+    final title = item['title']?.toString() ?? 'Item';
+    final price = item['salePrice'] ?? item['price'];
+    final priceStr = price != null ? '\$$price${isTour ? ' / person' : ' / day'}' : '';
+    final featured = item['isFeatured'] == true;
 
     return Container(
       decoration: BoxDecoration(
@@ -1093,58 +1122,33 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   ),
                 ),
               ),
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _saleRed,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    'Featured',
-                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              if (featured)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: _saleRed, borderRadius: BorderRadius.circular(4)),
+                    child: const Text('Featured', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
                   ),
                 ),
-              ),
             ],
           ),
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  names[index % names.length],
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  locations[index % locations.length],
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.star, size: 14, color: Colors.amber[700]),
-                    Icon(Icons.star, size: 14, color: Colors.amber[700]),
-                    Icon(Icons.star, size: 14, color: Colors.amber[700]),
-                    Icon(Icons.star, size: 14, color: Colors.amber[700]),
-                    Icon(Icons.star_border, size: 14, color: Colors.amber[700]),
-                    const SizedBox(width: 4),
-                    Text('4.${index + 1}', style: const TextStyle(fontSize: 12)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'from ${prices[index % prices.length]}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-              ],
-            ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 4),
+                  if (isTour)
+                    Text('Tour', style: TextStyle(color: Colors.grey[600], fontSize: 12))
+                  else
+                    Text('${item['passenger'] ?? '-'} passengers · ${item['gearShift'] ?? '-'}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                  const SizedBox(height: 8),
+                  Text('from $priceStr', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
           ),
         ],
       ),

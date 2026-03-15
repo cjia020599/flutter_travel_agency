@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../api/tours_api.dart';
+import '../api/cars_api.dart';
+import '../api/admin_api.dart';
+import '../api/user_api.dart';
+import '../api/api_client.dart';
+
 // Minimal admin dashboard with dark sidebar (Booking Core–style)
 const _sidebarBg = Color(0xFF1E3A5F);
 const _sidebarActive = Color(0xFF2C5282);
@@ -8,6 +14,7 @@ const _sidebarTextMuted = Color(0xFFB0BEC5);
 
 enum AdminSection {
   dashboard,
+  users,
   toursAll,
   toursAdd,
   carsAll,
@@ -27,6 +34,59 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   AdminSection _current = AdminSection.dashboard;
   bool _toursExpanded = true;
   bool _carsExpanded = false;
+  bool _isAdmin = false;
+  bool _checkingAdmin = true;
+  List<dynamic> _tours = [];
+  List<dynamic> _cars = [];
+  List<dynamic> _users = [];
+  String? _currentUserId;
+  bool _loading = true;
+  bool _loadingUsers = false;
+  String? _usersError;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final isAdmin = await UserApi.isAdmin();
+    final userId = await ApiClient.instance.currentUserId;
+    if (!mounted) return;
+
+    if (!isAdmin) {
+      // If a non-admin somehow navigates here, show an unauthorized message.
+      setState(() {
+        _isAdmin = false;
+        _checkingAdmin = false;
+        _loading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isAdmin = true;
+      _checkingAdmin = false;
+      _currentUserId = userId;
+    });
+
+    await _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+    });
+    final tours = await ToursApi.list();
+    final cars = await CarsApi.list();
+    if (!mounted) return;
+    setState(() {
+      _tours = tours;
+      _cars = cars;
+      _loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +129,15 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             label: 'Dashboard',
             isActive: _current == AdminSection.dashboard,
             onTap: () => setState(() => _current = AdminSection.dashboard),
+          ),
+          _sideItem(
+            icon: Icons.people_outline,
+            label: 'Users',
+            isActive: _current == AdminSection.users,
+            onTap: () {
+              setState(() => _current = AdminSection.users);
+              _loadUsers();
+            },
           ),
           const SizedBox(height: 8),
           _sideGroup(
@@ -259,6 +328,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     switch (_current) {
       case AdminSection.dashboard:
         return 'Dashboard';
+      case AdminSection.users:
+        return 'Users';
       case AdminSection.toursAll:
         return 'All Tours';
       case AdminSection.toursAdd:
@@ -275,17 +346,42 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildSectionContent() {
+    if (_checkingAdmin) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (!_isAdmin) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.lock, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text('Unauthorized', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text('You do not have permission to view this page.'),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Go back'),
+            ),
+          ],
+        ),
+      );
+    }
+
     switch (_current) {
       case AdminSection.dashboard:
         return _buildDashboardContent();
+      case AdminSection.users:
+        return _buildUsersList();
       case AdminSection.toursAll:
-        return _buildListPlaceholder('Tours', 'All Tours');
+        return _buildToursList();
       case AdminSection.toursAdd:
-        return _buildFormPlaceholder('Tour');
+        return _buildTourForm();
       case AdminSection.carsAll:
-        return _buildListPlaceholder('Cars', 'All Cars');
+        return _buildCarsList();
       case AdminSection.carsAdd:
-        return _buildFormPlaceholder('Car');
+        return _buildCarForm();
       case AdminSection.reports:
         return _buildPlaceholder('Reports', Icons.assessment);
       case AdminSection.settings:
@@ -304,9 +400,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         const SizedBox(height: 24),
         Row(
           children: [
-            _statCard('Tours', '0', Icons.tour),
+            _statCard('Tours', '${_tours.length}', Icons.tour),
             const SizedBox(width: 16),
-            _statCard('Cars', '0', Icons.directions_car),
+            _statCard('Cars', '${_cars.length}', Icons.directions_car),
           ],
         ),
       ],
@@ -339,48 +435,446 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
-  Widget _buildListPlaceholder(String entity, String title) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.list_alt, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: TextStyle(fontSize: 18, color: Colors.grey[700]),
+  Widget _buildUsersList() {
+    if (_loadingUsers) return const Center(child: CircularProgressIndicator());
+    if (_usersError != null) return Center(child: Text(_usersError!));
+    if (_users.isEmpty) return const Center(child: Text('No users found.'));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DataTable(
+          columns: const [
+            DataColumn(label: Text('ID')),
+            DataColumn(label: Text('Name')),
+            DataColumn(label: Text('Email')),
+            DataColumn(label: Text('Role')),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: _users.map<DataRow>((u) {
+            final m = u as Map<String, dynamic>;
+            final id = m['id']?.toString() ?? '';
+            final name = m['userName'] ?? m['username'] ?? '';
+            final email = m['email'] ?? '';
+
+            // Role is often stored in different fields depending on backend.
+            String role = '';
+            final roleCandidates = [
+              m['role'],
+              m['roles'],
+              m['roleName'],
+              m['userType'],
+              m['type'],
+              m['role_id'],
+              m['roleId'],
+            ];
+            for (final candidate in roleCandidates) {
+              if (candidate == null) continue;
+              if (candidate is String && candidate.isNotEmpty) {
+                role = candidate;
+                break;
+              }
+              if (candidate is List && candidate.isNotEmpty) {
+                role = candidate.first.toString();
+                break;
+              }
+            }
+
+            // Normalize role display
+            role = role.toString().toLowerCase();
+            if (role == 'customer') role = 'Customer';
+            if (role == 'vendor') role = 'Vendor';
+            if (role == 'administrator' || role == 'admin') role = 'Administrator';
+            if (role.isEmpty) role = 'Unknown';
+
+            final isSelf = id == _currentUserId;
+            return DataRow(cells: [
+              DataCell(Text(id)),
+              DataCell(Text(name?.toString() ?? '')),
+              DataCell(Text(email?.toString() ?? '')),
+              DataCell(Text(role)),
+              DataCell(Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _showEditUserDialog(m),
+                    tooltip: 'Edit User',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: isSelf ? null : () => _deleteUser(id),
+                    tooltip: isSelf ? 'Cannot delete yourself' : 'Delete User',
+                  ),
+                ],
+              )),
+            ]);
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToursList() {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_tours.isEmpty) return const Center(child: Text('No tours yet.'));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DataTable(
+          columns: const [
+            DataColumn(label: Text('ID')),
+            DataColumn(label: Text('Name')),
+            DataColumn(label: Text('Price')),
+            DataColumn(label: Text('Status')),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: _tours.map<DataRow>((t) {
+            final m = t as Map<String, dynamic>;
+            return DataRow(cells: [
+              DataCell(Text('${m['id']}')),
+              DataCell(Text(m['title']?.toString() ?? '')),
+              DataCell(Text('\$${m['salePrice'] ?? m['price'] ?? '-'}')),
+              DataCell(Text(m['status']?.toString() ?? '')),
+              DataCell(Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _showEditTourDialog(m),
+                    tooltip: 'Edit Tour',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () => _deleteTour(m['id']),
+                    tooltip: 'Delete Tour',
+                  ),
+                ],
+              )),
+            ]);
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCarsList() {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_cars.isEmpty) return const Center(child: Text('No cars yet.'));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DataTable(
+          columns: const [
+            DataColumn(label: Text('ID')),
+            DataColumn(label: Text('Name')),
+            DataColumn(label: Text('Price')),
+            DataColumn(label: Text('Status')),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: _cars.map<DataRow>((c) {
+            final m = c as Map<String, dynamic>;
+            return DataRow(cells: [
+              DataCell(Text('${m['id']}')),
+              DataCell(Text(m['title']?.toString() ?? '')),
+              DataCell(Text('\$${m['salePrice'] ?? m['price'] ?? '-'}')),
+              DataCell(Text(m['status']?.toString() ?? '')),
+              DataCell(Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _showEditCarDialog(m),
+                    tooltip: 'Edit Car',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () => _deleteCar(m['id']),
+                    tooltip: 'Delete Car',
+                  ),
+                ],
+              )),
+            ]);
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  void _showEditTourDialog(Map<String, dynamic> tour) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Tour'),
+        content: SizedBox(
+          width: 400,
+          child: _AddTourForm(
+            onCreated: () {
+              Navigator.of(context).pop();
+              _loadData();
+            },
+            itemToEdit: tour,
           ),
-          const SizedBox(height: 8),
-          Text(
-            'List and manage $entity. (CRUD + listing UI will go here.)',
-            style: TextStyle(color: Colors.grey[500], fontSize: 14),
-            textAlign: TextAlign.center,
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildFormPlaceholder(String entity) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.add_circle_outline, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'Add new $entity',
-            style: TextStyle(fontSize: 18, color: Colors.grey[700]),
+  void _showEditCarDialog(Map<String, dynamic> car) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Car'),
+        content: SizedBox(
+          width: 400,
+          child: _AddCarForm(
+            onCreated: () {
+              Navigator.of(context).pop();
+              _loadData();
+            },
+            itemToEdit: car,
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Create and edit $entity. (Form UI will go here.)',
-            style: TextStyle(color: Colors.grey[500], fontSize: 14),
-            textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteTour(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Tour'),
+        content: const Text('Are you sure you want to delete this tour?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
+    if (confirm == true) {
+      try {
+        await ToursApi.delete(id);
+        _loadData();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tour deleted')));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting tour: $e')));
+      }
+    }
+  }
+
+  Future<void> _deleteCar(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Car'),
+        content: const Text('Are you sure you want to delete this car?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await CarsApi.delete(id);
+        _loadData();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Car deleted')));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting car: $e')));
+      }
+    }
+  }
+
+  Future<void> _loadUsers() async {
+    setState(() {
+      _loadingUsers = true;
+      _usersError = null;
+    });
+
+    try {
+      final users = await AdminApi.listUsers();
+      if (!mounted) return;
+      setState(() {
+        _users = users;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _usersError = e is ApiException ? 'Error ${e.statusCode}: ${e.message}' : e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingUsers = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteUser(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final navigator = Navigator.of(context);
+        return AlertDialog(
+          title: const Text('Delete User'),
+          content: const Text('Are you sure you want to delete this user?'),
+          actions: [
+            TextButton(
+              onPressed: () => navigator.pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => navigator.pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirm != true) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await AdminApi.deleteUser(id);
+      _loadUsers();
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(content: Text('User deleted')));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Error deleting user: $e')));
+    }
+  }
+
+  String _normalizeRoleForDropdown(String? role) {
+    if (role == null) return '';
+    switch (role.toLowerCase()) {
+      case 'user':
+      case 'customer':
+        return 'customer';
+      case 'admin':
+      case 'administrator':
+        return 'administrator';
+      case 'vendor':
+        return 'vendor';
+      default:
+        return 'customer';
+    }
+  }
+
+  void _showEditUserDialog(Map<String, dynamic> user) {
+    final firstName = TextEditingController(text: user['firstName']?.toString() ?? '');
+    final lastName = TextEditingController(text: user['lastName']?.toString() ?? '');
+    final email = TextEditingController(text: user['email']?.toString() ?? '');
+    final username = TextEditingController(text: user['userName']?.toString() ?? user['username']?.toString() ?? '');
+
+    // Extract role using same logic as in _buildUsersList
+    String rawRole = '';
+    final roleCandidates = [
+      user['role'],
+      user['roles'],
+      user['roleName'],
+      user['userType'],
+      user['type'],
+      user['role_id'],
+      user['roleId'],
+    ];
+    for (final candidate in roleCandidates) {
+      if (candidate == null) continue;
+      if (candidate is String && candidate.isNotEmpty) {
+        rawRole = candidate;
+        break;
+      }
+      if (candidate is List && candidate.isNotEmpty) {
+        rawRole = candidate.first.toString();
+        break;
+      }
+    }
+
+    String role = _normalizeRoleForDropdown(rawRole);
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        final dialogNavigator = Navigator.of(context);
+        final messenger = ScaffoldMessenger.of(context);
+
+        return AlertDialog(
+          title: const Text('Edit User'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: firstName, decoration: const InputDecoration(labelText: 'First name')),
+                const SizedBox(height: 12),
+                TextField(controller: lastName, decoration: const InputDecoration(labelText: 'Last name')),
+                const SizedBox(height: 12),
+                TextField(controller: username, decoration: const InputDecoration(labelText: 'Username')),
+                const SizedBox(height: 12),
+                TextField(controller: email, decoration: const InputDecoration(labelText: 'Email')),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: role.isEmpty ? null : role,
+                  decoration: const InputDecoration(labelText: 'Role'),
+                  items: [
+                    DropdownMenuItem(value: 'customer', child: const Text('Customer')),
+                    DropdownMenuItem(value: 'vendor', child: const Text('Vendor')),
+                    DropdownMenuItem(value: 'administrator', child: const Text('Administrator')),
+                  ],
+                  onChanged: (v) => role = v ?? role,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => dialogNavigator.pop(), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  final body = {
+                    'firstName': firstName.text.trim(),
+                    'lastName': lastName.text.trim(),
+                    'userName': username.text.trim(),
+                    'email': email.text.trim(),
+                    if (role.isNotEmpty) 'role': role,
+                  };
+                  await AdminApi.updateUser(user['id'].toString(), body);
+                  if (!mounted) return;
+                  dialogNavigator.pop();
+                  _loadUsers();
+                  messenger.showSnackBar(const SnackBar(content: Text('User updated')));
+                } catch (e) {
+                  if (!mounted) return;
+                  messenger.showSnackBar(SnackBar(content: Text('Error updating user: $e')));
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTourForm() {
+    return _AddTourForm(onCreated: _loadData);
+  }
+
+  Widget _buildCarForm() {
+    return _AddCarForm(onCreated: _loadData);
   }
 
   Widget _buildPlaceholder(String title, IconData icon) {
@@ -394,6 +888,261 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             title,
             style: TextStyle(fontSize: 18, color: Colors.grey[700]),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddTourForm extends StatefulWidget {
+  const _AddTourForm({required this.onCreated, this.itemToEdit});
+
+  final VoidCallback onCreated;
+  final Map<String, dynamic>? itemToEdit;
+
+  @override
+  State<_AddTourForm> createState() => _AddTourFormState();
+}
+
+class _AddTourFormState extends State<_AddTourForm> {
+  final _title = TextEditingController();
+  final _slug = TextEditingController();
+  final _price = TextEditingController();
+  final _salePrice = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.itemToEdit != null) {
+      final item = widget.itemToEdit!;
+      _title.text = item['title']?.toString() ?? '';
+      _slug.text = item['slug']?.toString() ?? '';
+      _price.text = item['price']?.toString() ?? '';
+      _salePrice.text = item['salePrice']?.toString() ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _slug.dispose();
+    _price.dispose();
+    _salePrice.dispose();
+    super.dispose();
+  }
+
+  void _generateSlug() {
+    final title = _title.text.trim();
+    if (title.isNotEmpty) {
+      _slug.text = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+    }
+  }
+
+  Future<void> _submit() async {
+    setState(() => _loading = true);
+    try {
+      final body = {
+        'title': _title.text.trim(),
+        'slug': _slug.text.trim(),
+        'price': _price.text.isEmpty ? "0" : _price.text.trim(),
+        'salePrice': _salePrice.text.isEmpty ? "" : _salePrice.text.trim(),
+        'status': 'publish',
+      };
+      if (widget.itemToEdit != null) {
+        await ToursApi.update(widget.itemToEdit!['id'], body);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tour updated')));
+      } else {
+        await ToursApi.create(body);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tour created')));
+      }
+      if (!mounted) return;
+      _title.clear();
+      _slug.clear();
+      _price.clear();
+      _salePrice.clear();
+      widget.onCreated();
+    } catch (e) {
+      if (!mounted) return;
+      String errorMsg = 'Unknown error';
+      if (e is ApiException) {
+        errorMsg = 'Error ${e.statusCode}: ${e.message}';
+        if (e.body is Map<String, dynamic>) {
+          final body = e.body as Map<String, dynamic>;
+          final details = body.entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
+          if (details.length < 200) {
+            errorMsg += ' ($details)';
+          }
+        }
+      } else {
+        errorMsg = 'Error: $e';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()), onChanged: (_) => _generateSlug()),
+          const SizedBox(height: 16),
+          TextField(controller: _slug, decoration: const InputDecoration(labelText: 'Slug', border: OutlineInputBorder())),
+          const SizedBox(height: 16),
+          TextField(controller: _price, decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 16),
+          TextField(controller: _salePrice, decoration: const InputDecoration(labelText: 'Sale Price (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 24),
+          ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(widget.itemToEdit != null ? 'Update Tour' : 'Add Tour')),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddCarForm extends StatefulWidget {
+  const _AddCarForm({required this.onCreated, this.itemToEdit});
+
+  final VoidCallback onCreated;
+  final Map<String, dynamic>? itemToEdit;
+
+  @override
+  State<_AddCarForm> createState() => _AddCarFormState();
+}
+
+class _AddCarFormState extends State<_AddCarForm> {
+  final _title = TextEditingController();
+  final _slug = TextEditingController();
+  final _price = TextEditingController();
+  final _salePrice = TextEditingController();
+  final _passenger = TextEditingController(text: '4');
+  final _gearShift = TextEditingController(text: 'Auto');
+  final _baggage = TextEditingController(text: '2');
+  final _door = TextEditingController(text: '4');
+  final _mapLat = TextEditingController();
+  final _mapLng = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.itemToEdit != null) {
+      final item = widget.itemToEdit!;
+      _title.text = item['title']?.toString() ?? '';
+      _slug.text = item['slug']?.toString() ?? '';
+      _price.text = item['price']?.toString() ?? '';
+      _salePrice.text = item['salePrice']?.toString() ?? '';
+      _passenger.text = item['passenger']?.toString() ?? '4';
+      _gearShift.text = item['gearShift']?.toString() ?? 'Auto';
+      _baggage.text = item['baggage']?.toString() ?? '2';
+      _door.text = item['door']?.toString() ?? '4';
+      _mapLat.text = item['mapLat']?.toString() ?? '';
+      _mapLng.text = item['mapLng']?.toString() ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _slug.dispose();
+    _price.dispose();
+    _salePrice.dispose();
+    _passenger.dispose();
+    _gearShift.dispose();
+    _baggage.dispose();
+    _door.dispose();
+    _mapLat.dispose();
+    _mapLng.dispose();
+    super.dispose();
+  }
+
+  void _generateSlug() {
+    final title = _title.text.trim();
+    if (title.isNotEmpty) {
+      _slug.text = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+    }
+  }
+
+  Future<void> _submit() async {
+    setState(() => _loading = true);
+    try {
+      final body = {
+        'title': _title.text.trim(),
+        'slug': _slug.text.trim(),
+        'price': _price.text.isEmpty ? "0" : _price.text.trim(),
+        'salePrice': _salePrice.text.isEmpty ? "" : _salePrice.text.trim(),
+        'passenger': _passenger.text.isEmpty ? "4" : _passenger.text.trim(),
+        'gearShift': _gearShift.text.isEmpty ? "Auto" : _gearShift.text.trim(),
+        'baggage': _baggage.text.isEmpty ? "2" : _baggage.text.trim(),
+        'door': _door.text.isEmpty ? "4" : _door.text.trim(),
+        'mapLat': _mapLat.text.isEmpty ? "" : _mapLat.text.trim(),
+        'mapLng': _mapLng.text.isEmpty ? "" : _mapLng.text.trim(),
+        'status': 'publish',
+      };
+      if (widget.itemToEdit != null) {
+        await CarsApi.update(widget.itemToEdit!['id'], body);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Car updated')));
+      } else {
+        await CarsApi.create(body);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Car created')));
+      }
+      _title.clear();
+      _slug.clear();
+      _price.clear();
+      _salePrice.clear();
+      widget.onCreated();
+    } catch (e) {
+      if (!mounted) return;
+      String errorMsg = 'Unknown error';
+      if (e is ApiException) {
+        errorMsg = 'Error ${e.statusCode}: ${e.message}';
+        if (e.body is Map<String, dynamic>) {
+          final body = e.body as Map<String, dynamic>;
+          final details = body.entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
+          if (details.length < 200) {
+            errorMsg += ' ($details)';
+          }
+        }
+      } else {
+        errorMsg = 'Error: $e';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()), onChanged: (_) => _generateSlug()),
+          const SizedBox(height: 16),
+          TextField(controller: _slug, decoration: const InputDecoration(labelText: 'Slug', border: OutlineInputBorder())),
+          const SizedBox(height: 16),
+          TextField(controller: _price, decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 16),
+          TextField(controller: _salePrice, decoration: const InputDecoration(labelText: 'Sale Price (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 16),
+          TextField(controller: _passenger, decoration: const InputDecoration(labelText: 'Passenger', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 16),
+          TextField(controller: _gearShift, decoration: const InputDecoration(labelText: 'Gear Shift', border: OutlineInputBorder())),
+          const SizedBox(height: 16),
+          TextField(controller: _baggage, decoration: const InputDecoration(labelText: 'Baggage', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 16),
+          TextField(controller: _door, decoration: const InputDecoration(labelText: 'Door', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 16),
+          TextField(controller: _mapLat, decoration: const InputDecoration(labelText: 'Map Latitude (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 16),
+          TextField(controller: _mapLng, decoration: const InputDecoration(labelText: 'Map Longitude (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 24),
+          ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(widget.itemToEdit != null ? 'Update Car' : 'Add Car')),
         ],
       ),
     );
