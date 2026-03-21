@@ -108,7 +108,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         await AuthApi.logout();
         if (!mounted) return;
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginPage()),
+          MaterialPageRoute(builder: (_) => const LoginDialogContent()),
           (route) => false,
         );
         return;

@@ -227,14 +227,39 @@ class _TravelHomePageState extends State<TravelHomePage> {
                     ] else ...[
                       TextButton(
                         onPressed: () async {
-                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LoginPage()));
-                          _loadData();
+showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                              title: const Text('Sign In'),
+                              content: LoginDialogContent(onSuccess: _loadData),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                              ],
+                            ),
+                          );
                         },
                         child: Text('Sign In', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
                       ),
                       TextButton(
                         onPressed: () async {
-                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegisterPage()));
+await showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                              title: const Text('Register'),
+                              content: const RegisterDialogContent(),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                              ],
+                            ),
+                          );
                           _loadData();
                         },
                         child: Text('Register', style: TextStyle(color: Colors.grey[300], fontSize: 13)),

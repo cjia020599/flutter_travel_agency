@@ -605,13 +605,16 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       builder: (context) => AlertDialog(
         title: const Text('Edit Tour'),
         content: SizedBox(
-          width: 400,
-          child: _AddTourForm(
-            onCreated: () {
-              Navigator.of(context).pop();
-              _loadData();
-            },
-            itemToEdit: tour,
+          width: 550,
+          height: 500,
+          child: SingleChildScrollView(
+            child: _AddTourForm(
+              onCreated: () {
+                Navigator.of(context).pop();
+                _loadData();
+              },
+              itemToEdit: tour,
+            ),
           ),
         ),
       ),
@@ -624,13 +627,16 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       builder: (context) => AlertDialog(
         title: const Text('Edit Car'),
         content: SizedBox(
-          width: 400,
-          child: _AddCarForm(
-            onCreated: () {
-              Navigator.of(context).pop();
-              _loadData();
-            },
-            itemToEdit: car,
+          width: 600,
+          height: 550,
+          child: SingleChildScrollView(
+            child: _AddCarForm(
+              onCreated: () {
+                Navigator.of(context).pop();
+                _loadData();
+              },
+              itemToEdit: car,
+            ),
           ),
         ),
       ),

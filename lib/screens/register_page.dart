@@ -6,14 +6,15 @@ import 'login_page.dart';
 const _navBlue = Color(0xFF1E3A5F);
 const _primaryBlue = Color(0xFF2563EB);
 
-class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+class RegisterDialogContent extends StatefulWidget {
+  final VoidCallback? onSuccess;
+  const RegisterDialogContent({super.key, this.onSuccess});
 
   @override
-  State<RegisterPage> createState() => _RegisterPageState();
+  State<RegisterDialogContent> createState() => _RegisterDialogContentState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
+class _RegisterDialogContentState extends State<RegisterDialogContent> {
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -37,6 +38,7 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() {
       _error = null;
       _loading = true;
@@ -52,11 +54,9 @@ class _RegisterPageState extends State<RegisterPage> {
         businessName: _role == 'vendor' ? _businessNameController.text.trim() : null,
       );
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-        (route) => false,
-      );
+      Navigator.of(context).pop(context);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registration successful. Please sign in.')));
+      widget.onSuccess?.call();
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -70,144 +70,146 @@ class _RegisterPageState extends State<RegisterPage> {
         _loading = false;
       });
     }
-    if (mounted) setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.8,
+          minWidth: 450,
+          maxHeight: 700,
         ),
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Register',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _navBlue),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Create a new account',
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              if (_error != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Text(_error!, style: TextStyle(color: Colors.red.shade800, fontSize: 13)),
+                ),
+                const SizedBox(height: 16),
+              ],
+              Row(
                 children: [
-                  Text(
-                    'Register',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _navBlue),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Create a new account',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  ),
-                  const SizedBox(height: 24),
-                  if (_error != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Text(_error!, style: TextStyle(color: Colors.red.shade800, fontSize: 13)),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _firstNameController,
+                      decoration: const InputDecoration(labelText: 'First name *', border: OutlineInputBorder()),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                     ),
-                    const SizedBox(height: 16),
-                  ],
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _firstNameController,
-                          decoration: const InputDecoration(labelText: 'First name *', border: OutlineInputBorder()),
-                          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _lastNameController,
-                          decoration: const InputDecoration(labelText: 'Last name *', border: OutlineInputBorder()),
-                          validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                        ),
-                      ),
-                    ],
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _usernameController,
-                    decoration: const InputDecoration(labelText: 'User name *', border: OutlineInputBorder()),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'E-mail *', border: OutlineInputBorder()),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Password *', border: OutlineInputBorder()),
-                    validator: (v) => v == null || v.length < 6 ? 'At least 6 characters' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _role,
-                    decoration: const InputDecoration(labelText: 'Role *', border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'customer', child: Text('Customer')),
-                      DropdownMenuItem(value: 'vendor', child: Text('Vendor')),
-                      DropdownMenuItem(value: 'administrator', child: Text('Administrator')),
-                    ],
-                    onChanged: (v) => setState(() => _role = v ?? 'customer'),
-                  ),
-                  if (_role == 'vendor') ...[
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _businessNameController,
-                      decoration: const InputDecoration(labelText: 'Business name', border: OutlineInputBorder()),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _lastNameController,
+                      decoration: const InputDecoration(labelText: 'Last name *', border: OutlineInputBorder()),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                     ),
-                  ],
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _loading
-                        ? null
-                        : () {
-                            if (_formKey.currentState!.validate()) _submit();
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _primaryBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Register'),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Already have an account? ', style: TextStyle(color: Colors.grey[600])),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => const LoginPage()),
-                          );
-                        },
-                        child: const Text('Sign In'),
-                      ),
-                    ],
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _usernameController,
+                decoration: const InputDecoration(labelText: 'User name *', border: OutlineInputBorder()),
+                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'E-mail *', border: OutlineInputBorder()),
+                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Password *', border: OutlineInputBorder()),
+                validator: (v) => v == null || v.length < 6 ? 'At least 6 characters' : null,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _role,
+                decoration: const InputDecoration(labelText: 'Role *', border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: 'customer', child: Text('Customer')),
+                  DropdownMenuItem(value: 'vendor', child: Text('Vendor')),
+                  DropdownMenuItem(value: 'administrator', child: Text('Administrator')),
+                ],
+                onChanged: (v) => setState(() => _role = v ?? 'customer'),
+              ),
+              if (_role == 'vendor') ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _businessNameController,
+                  decoration: const InputDecoration(labelText: 'Business name', border: OutlineInputBorder()),
+                ),
+              ],
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _loading
+                    ? null
+                    : () => _submit(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: _loading 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                    : const Text('Register'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Already have an account? ', style: TextStyle(color: Colors.grey[600])),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop(context);
+                      // Open signin dialog from parent context
+                      await showDialog(
+                        context: Navigator.of(context).context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Sign In'),
+                          content: const LoginDialogContent(),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    child: const Text('Sign In'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

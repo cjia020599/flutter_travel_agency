@@ -7,14 +7,15 @@ import 'home_page.dart';
 const _navBlue = Color(0xFF1E3A5F);
 const _primaryBlue = Color(0xFF2563EB);
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class LoginDialogContent extends StatefulWidget {
+  final VoidCallback? onSuccess;
+  const LoginDialogContent({super.key, this.onSuccess});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<LoginDialogContent> createState() => _LoginDialogContentState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginDialogContentState extends State<LoginDialogContent> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -29,6 +30,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() {
       _error = null;
       _loading = true;
@@ -36,10 +38,8 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await AuthApi.login(_emailController.text.trim(), _passwordController.text);
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const TravelHomePage()),
-        (route) => false,
-      );
+      Navigator.of(context).pop(context);
+      widget.onSuccess?.call();
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -53,24 +53,24 @@ class _LoginPageState extends State<LoginPage> {
         _loading = false;
       });
     }
-    if (mounted) setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.8,
+          minWidth: 380,
+          maxHeight: 600,
+        ),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
                   Icon(Icons.lock_outline, size: 56, color: _navBlue),
                   const SizedBox(height: 24),
                   Text(
@@ -141,9 +141,21 @@ class _LoginPageState extends State<LoginPage> {
                     children: [
                       Text("Don't have an account? ", style: TextStyle(color: Colors.grey[600])),
                       TextButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const RegisterPage()),
+                        onPressed: () async {
+                          Navigator.of(context).pop(context);
+                          // Open register dialog from parent context
+                          await showDialog(
+                            context: Navigator.of(context).context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Register'),
+                              content: const RegisterDialogContent(),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text('Cancel'),
+                                ),
+                              ],
+                            ),
                           );
                         },
                         child: const Text('Register'),
@@ -154,8 +166,6 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
-        ),
-      ),
-    );
+        );
   }
 }
