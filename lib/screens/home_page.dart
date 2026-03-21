@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../api/api_client.dart';
 import '../api/tours_api.dart';
 import '../api/cars_api.dart';
@@ -12,6 +11,7 @@ import 'register_page.dart';
 import 'user_profile_page.dart';
 import '../models/car_rental.dart';
 import '../api/car_rentals_api.dart';
+import '../api/tour_bookings_api.dart';
 import 'package:intl/intl.dart';
 
 // Design colors
@@ -120,6 +120,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
     final startController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 1))));
     final endController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 5))));
+    final buyerNameController = TextEditingController();
+    final buyerEmailController = TextEditingController(text: 'test@example.com');
+    final buyerPhoneController = TextEditingController(text: '+1234567890');
 
     await showDialog(
       context: context,
@@ -249,10 +252,13 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   final startDate = DateFormat('MMM dd, yyyy').parse(startController.text);
                   final endDate = DateFormat('MMM dd, yyyy').parse(endController.text);
                   
-                  final request = CreateRentalRequest(
+                  final CreateRentalRequest request = CreateRentalRequest(
                     carId: carId,
                     startDate: startDate,
                     endDate: endDate,
+                    buyerName: buyerNameController.text.trim(),
+                    buyerEmail: buyerEmailController.text.trim(),
+                    buyerPhone: buyerPhoneController.text.trim(),
                   );
 
                   final success = await CarRentalsApi.rentCar(request);
@@ -326,13 +332,33 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       ? IconButton(
                           icon: const Icon(Icons.cancel, color: Colors.red),
                           onPressed: () async {
-                            final success = await CarRentalsApi.cancelRental(rental.id);
-                            if (success && mounted) {
-                              Navigator.pop(context);
-                              await _loadRentals();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Rental cancelled')),
-                              );
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Confirm Cancel'),
+                                content: const Text('Are you sure you want to cancel this car rental booking? This action cannot be undone.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                    child: const Text('Cancel Booking'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true) {
+                              final success = await CarRentalsApi.cancelRental(rental.id);
+                              if (success && mounted) {
+                                Navigator.pop(context);
+                                await _loadRentals();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Rental cancelled')),
+                                );
+                              }
                             }
                           },
                         )
@@ -348,6 +374,186 @@ class _TravelHomePageState extends State<TravelHomePage> {
             child: const Text('Close'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showTourDetailsDialog(Map<String, dynamic> tour) async {
+    final tourId = tour['id'] as int? ?? 0;
+    if (tourId == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid tour ID')),
+      );
+      return;
+    }
+
+    final title = tour['title']?.toString() ?? 'Tour';
+    final price = tour['salePrice'] ?? tour['price'];
+    final priceStr = price != null ? '\$${price.toString()} / person' : '';
+    final imageUrl = tour['imageUrl'] ?? '';
+
+    final startController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 1))));
+    final endController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 5))));
+    final buyerNameController = TextEditingController(text: 'John Doe');
+    final buyerEmailController = TextEditingController(text: 'test@example.com');
+    final buyerPhoneController = TextEditingController(text: '+1234567890');
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 550,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      imageUrl,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        height: 180,
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.travel_explore, size: 80, color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    priceStr,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _primaryBlue),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Tour Dates:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: startController,
+                          decoration: InputDecoration(
+                            labelText: 'Start Date',
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.calendar_today),
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: DateTime.now().add(const Duration(days: 1)),
+                                  firstDate: DateTime.now().add(const Duration(days: 1)),
+                                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                                );
+                                if (picked != null) startController.text = DateFormat('MMM dd, yyyy').format(picked);
+                              },
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          readOnly: true,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: endController,
+                          decoration: InputDecoration(
+                            labelText: 'End Date',
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.calendar_today),
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: DateTime.now().add(const Duration(days: 5)),
+                                  firstDate: DateTime.now().add(const Duration(days: 1)),
+                                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                                );
+                                if (picked != null) endController.text = DateFormat('MMM dd, yyyy').format(picked);
+                              },
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          readOnly: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Text('Buyer Information:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: buyerNameController,
+                    decoration: InputDecoration(
+                      labelText: 'Full Name',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: buyerEmailController,
+                    decoration:  InputDecoration(
+                      labelText: 'Email',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 12),
+    TextField(
+                    controller: buyerPhoneController,
+                    decoration: InputDecoration(
+                      labelText: 'Phone',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    keyboardType: TextInputType.phone,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  final startDate = DateFormat('MMM dd, yyyy').parse(startController.text);
+                  final endDate = DateFormat('MMM dd, yyyy').parse(endController.text);
+                  final request = CreateTourBookingRequest(
+                    tourId: tourId,
+                    startDate: startDate,
+                    endDate: endDate,
+                    buyerName: buyerNameController.text.trim(),
+                    buyerEmail: buyerEmailController.text.trim(),
+                    buyerPhone: buyerPhoneController.text.trim(),
+                  );
+                  final success = await TourBookingsApi.buyTour(request);
+                  Navigator.pop(context);
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duration: Duration(seconds: 2)),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Booking failed')),
+                    );
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: _primaryBlue, foregroundColor: Colors.white),
+              child: const Text('Book Now'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1408,7 +1614,7 @@ await showDialog(
                 crossAxisSpacing: 16,
                 childAspectRatio: 0.9,
                 children: List.generate(items.length, (index) => InkWell(
-                  onTap: isTour ? null : () => _showCarDetailsDialog(items[index] as Map<String, dynamic>),
+                  onTap: () => isTour ? _showTourDetailsDialog(items[index] as Map<String, dynamic>) : _showCarDetailsDialog(items[index] as Map<String, dynamic>),
                   child: _buildResultCard(items[index] as Map<String, dynamic>, isTour),
                 )),
               ),

@@ -9,6 +9,9 @@ class CarRental {
   final DateTime startDate;
   final DateTime endDate;
   final String status;
+  final String? buyerName;
+  final String? buyerEmail;
+  final String? buyerPhone;
 
   CarRental({
     required this.id,
@@ -19,6 +22,9 @@ class CarRental {
     required this.startDate,
     required this.endDate,
     required this.status,
+    this.buyerName,
+    this.buyerEmail,
+    this.buyerPhone,
   });
 
   factory CarRental.fromJson(Map<String, dynamic> json) {
@@ -31,6 +37,9 @@ class CarRental {
       startDate: DateTime.parse(json['startDate']),
       endDate: DateTime.parse(json['endDate']),
       status: json['status'] ?? 'active',
+      buyerName: json['buyerName'],
+      buyerEmail: json['buyerEmail'],
+      buyerPhone: json['buyerPhone'],
     );
   }
 
@@ -43,25 +52,11 @@ class CarRental {
     'startDate': startDate.toIso8601String(),
     'endDate': endDate.toIso8601String(),
     'status': status,
+    'buyerName': buyerName,
+    'buyerEmail': buyerEmail,
+    'buyerPhone': buyerPhone,
   };
 }
 
-class CreateRentalRequest {
-  final int carId;
-  final DateTime startDate;
-  final DateTime endDate;
 
-  CreateRentalRequest({
-    required this.carId,
-    required this.startDate,
-    required this.endDate,
-  });
-
-  Map<String, dynamic> toJson() => {
-    'carId': carId,
-    'startDate': startDate.toUtc().toIso8601String(),
-    'endDate': endDate.toUtc().toIso8601String(),
-  };
-
-}
 

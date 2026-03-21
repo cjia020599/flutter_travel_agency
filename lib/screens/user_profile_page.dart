@@ -6,7 +6,9 @@ import 'login_page.dart';
 import 'home_page.dart';
 import 'admin_dashboard_page.dart';
 import '../api/car_rentals_api.dart';
+import '../api/tour_bookings_api.dart';
 import '../models/car_rental.dart';
+import '../models/tour_booking.dart';
 import 'package:intl/intl.dart';
 
 const _navBlue = Color(0xFF1E3A5F);
@@ -41,6 +43,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   late TextEditingController _zipCode;
   String? _country;
   late List<CarRental> _rentals = [];
+  late List<TourBooking> _tourBookings = [];
 
   @override
   void initState() {
@@ -59,7 +62,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _state = TextEditingController();
     _zipCode = TextEditingController();
     _loadProfile();
-    _loadRentals();
+    _loadBookings();
   }
 
   @override
@@ -154,65 +157,154 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  Future<void> _loadRentals() async {
+  Future<void> _loadBookings() async {
     try {
       _rentals = await CarRentalsApi.getCarRentals();
+      _tourBookings = await TourBookingsApi.getMyBookings();
       setState(() {});
     } catch (e) {
-      print('Error loading rentals: $e');
+      print('Error loading bookings: $e');
     }
   }
 
-  Future<void> _showRentals() async {
-    await _loadRentals();
-    if (_rentals.isEmpty) {
+  Future<void> _showBookingsHistory() async {
+    await _loadBookings();
+    final allBookings = [..._rentals, ..._tourBookings];
+    if (allBookings.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No car rentals found')),
+        const SnackBar(content: Text('No bookings found')),
       );
       return;
     }
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('My Car Rentals'),
+        title: const Text('Booking History'),
         content: SizedBox(
           width: double.maxFinite,
-          height: 400,
+          height: 500,
           child: ListView.builder(
-            itemCount: _rentals.length,
+            itemCount: allBookings.length,
             itemBuilder: (context, index) {
-              final rental = _rentals[index];
-              return Card(
-                child: ListTile(
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      rental.carImageUrl,
-                      width: 60,
-                      height: 60,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.directions_car, size: 60),
+              final booking = allBookings[index];
+              if (booking is CarRental) {
+                return Card(
+                  child: ListTile(
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        booking.carImageUrl,
+                        width: 60,
+                        height: 60,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.directions_car, size: 60),
+                      ),
                     ),
-                  ),
-                  title: Text(rental.carTitle),
-                  subtitle: Text('${DateFormat('MMM dd, yyyy').format(rental.startDate)} - ${DateFormat('MMM dd, yyyy').format(rental.endDate)}'),
-                  trailing: rental.status != 'cancelled'
-                      ? IconButton(
-                          icon: const Icon(Icons.cancel, color: Colors.red),
-                          onPressed: () async {
-                            final success = await CarRentalsApi.cancelRental(rental.id);
-                            if (success) {
-                              Navigator.pop(context);
-                              _showRentals();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Rental cancelled')),
+                    title: Text(booking.carTitle),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}'),
+                        Text('Car Rental', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      ],
+                    ),
+                    trailing: booking.status != 'cancelled'
+                        ? IconButton(
+                            icon: const Icon(Icons.cancel, color: Colors.red),
+                            onPressed: () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Confirm Cancel'),
+                                  content: const Text('Are you sure you want to cancel this car rental booking? This action cannot be undone.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                      child: const Text('Cancel Booking'),
+                                    ),
+                                  ],
+                                ),
                               );
-                            }
-                          },
-                        )
-                      : const Text('Cancelled', style: TextStyle(color: Colors.grey)),
-                ),
-              );
+                              if (confirmed == true) {
+                                final success = await CarRentalsApi.cancelRental(booking.id);
+                                if (success && mounted) {
+                                  Navigator.pop(context);
+                                  _showBookingsHistory();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Car rental cancelled')),
+                                  );
+                                }
+                              }
+                            },
+                          )
+                        : const Text('Cancelled', style: TextStyle(color: Colors.grey)),
+                  ),
+                );
+              } else if (booking is TourBooking) {
+                return Card(
+                  child: ListTile(
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        booking.tourImageUrl,
+                        width: 60,
+                        height: 60,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.card_travel, size: 60),
+                      ),
+                    ),
+                    title: Text(booking.tourTitle),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}'),
+                        Text('Tour Booking', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      ],
+                    ),
+                    trailing: booking.status != 'cancelled'
+                        ? IconButton(
+                            icon: const Icon(Icons.cancel, color: Colors.red),
+                            onPressed: () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Confirm Cancel'),
+                                  content: const Text('Are you sure you want to cancel this tour booking? This action cannot be undone.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                      child: const Text('Cancel Booking'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed == true) {
+                                final success = await TourBookingsApi.cancelBooking(booking.id);
+                                if (success && mounted) {
+                                  Navigator.pop(context);
+                                  _showBookingsHistory();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Tour booking cancelled')),
+                                  );
+                                }
+                              }
+                            },
+                          )
+                        : const Text('Cancelled', style: TextStyle(color: Colors.grey)),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
             },
           ),
         ),
@@ -392,7 +484,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           ),
           _sideItem(Icons.dashboard, 'Dashboard', () => Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const TravelHomePage()), (r) => false)),
           _sideItem(Icons.person, 'My Profile', () {}),
-          _sideItem(Icons.history, 'Booking History', _showRentals),
+          _sideItem(Icons.history, 'Booking History', _showBookingsHistory),
           const Spacer(),
           _sideItem(Icons.logout, 'Log Out', _logout),
         ],
