@@ -10,6 +10,9 @@ import 'admin_dashboard_page.dart';
 import 'login_page.dart';
 import 'register_page.dart';
 import 'user_profile_page.dart';
+import '../models/car_rental.dart';
+import '../api/car_rentals_api.dart';
+import 'package:intl/intl.dart';
 
 // Design colors
 const _navBlue = Color(0xFF1E3A5F);
@@ -40,6 +43,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
   List<dynamic> _tours = [];
   List<dynamic> _cars = [];
   List<dynamic> _locations = [];
+  List<CarRental> _rentals = [];
+  DateTimeRange _selectedDateRange = DateTimeRange(
+    start: DateTime.now().add(const Duration(days: 1)),
+    end: DateTime.now().add(const Duration(days: 5)),
+  );
 
   @override
   void initState() {
@@ -61,6 +69,287 @@ class _TravelHomePageState extends State<TravelHomePage> {
       _cars = cars is List ? cars : [];
       _locations = locations is List ? locations : [];
     });
+    await _loadRentals();
+  }
+
+  Future<void> _loadRentals() async {
+    if (!_isLoggedIn) {
+      if (mounted) setState(() => _rentals = []);
+      return;
+    }
+    try {
+      final rentals = await CarRentalsApi.getCarRentals();
+      if (mounted) setState(() => _rentals = rentals);
+    } catch (e) {
+      if (mounted) setState(() => _rentals = []);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load rentals: $e')),
+      );
+    }
+  }
+
+  Widget _infoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.grey[600]),
+          const SizedBox(width: 12),
+          Text('$label: ', style: TextStyle(fontWeight: FontWeight.w500)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCarDetailsDialog(Map<String, dynamic> car) async {
+    final carId = car['id'] as int? ?? 0;
+    if (carId == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid car ID')),
+      );
+      return;
+    }
+
+    final title = car['title']?.toString() ?? 'Car';
+    final price = car['salePrice'] ?? car['price'];
+    final priceStr = price != null ? '\$${price.toString()} / day' : '';
+    final imageUrl = car['imageUrl'] ?? '';
+    final passengers = car['passenger']?.toString() ?? '-';
+    final gear = car['gearShift']?.toString() ?? '-';
+
+    final startController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 1))));
+    final endController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 5))));
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 450,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Car Image
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      imageUrl,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        height: 180,
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.directions_car, size: 80, color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Price
+                  Text(
+                    priceStr,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _primaryBlue),
+                  ),
+                  const SizedBox(height: 12),
+                  // Details
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _infoRow(Icons.people, 'Passengers', passengers),
+                          const SizedBox(height: 8),
+                          _infoRow(Icons.speed, 'Gear Shift', gear),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Date Pickers (compact style)
+                  Text('Rental Dates:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: startController,
+                          decoration: InputDecoration(
+                            labelText: 'Start Date',
+                            hintText: 'Select start date',
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.calendar_today, size: 20),
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: DateTime.now().add(const Duration(days: 1)),
+                                  firstDate: DateTime.now().add(const Duration(days: 1)),
+                                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                                );
+                                if (picked != null) {
+                                  startController.text = DateFormat('MMM dd, yyyy').format(picked);
+                                  setDialogState(() {});
+                                }
+                              },
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          ),
+                          readOnly: true,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: endController,
+                          decoration: InputDecoration(
+                            labelText: 'End Date',
+                            hintText: 'Select end date',
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.calendar_today, size: 20),
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: DateTime.now().add(const Duration(days: 5)),
+                                  firstDate: DateTime.now().add(const Duration(days: 1)),
+                                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                                );
+                                if (picked != null) {
+                                  endController.text = DateFormat('MMM dd, yyyy').format(picked);
+                                  setDialogState(() {});
+                                }
+                              },
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          ),
+                          readOnly: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  final startDate = DateFormat('MMM dd, yyyy').parse(startController.text);
+                  final endDate = DateFormat('MMM dd, yyyy').parse(endController.text);
+                  
+                  final request = CreateRentalRequest(
+                    carId: carId,
+                    startDate: startDate,
+                    endDate: endDate,
+                  );
+
+                  final success = await CarRentalsApi.rentCar(request);
+                  Navigator.pop(context);
+                  
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('$title rented successfully!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                    await _loadRentals();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Failed to rent car')),
+                    );
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryBlue,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Rent Now'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMyRentals() async {
+    if (_rentals.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No rentals found')),
+      );
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('My Car Rentals'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: ListView.builder(
+            itemCount: _rentals.length,
+            itemBuilder: (context, index) {
+              final rental = _rentals[index];
+              return Card(
+                child: ListTile(
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      rental.carImageUrl,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.directions_car, size: 60),
+                    ),
+                  ),
+                  title: Text(rental.carTitle),
+                  subtitle: Text('${DateFormat('MMM dd, yyyy').format(rental.startDate)} - ${DateFormat('MMM dd, yyyy').format(rental.endDate)}'),
+                  trailing: rental.status != 'cancelled'
+                      ? IconButton(
+                          icon: const Icon(Icons.cancel, color: Colors.red),
+                          onPressed: () async {
+                            final success = await CarRentalsApi.cancelRental(rental.id);
+                            if (success && mounted) {
+                              Navigator.pop(context);
+                              await _loadRentals();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Rental cancelled')),
+                              );
+                            }
+                          },
+                        )
+                      : const Text('Cancelled', style: TextStyle(color: Colors.grey)),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -74,6 +363,14 @@ class _TravelHomePageState extends State<TravelHomePage> {
           ..._buildPageSlivers(),
         ],
       ),
+      floatingActionButton: _isLoggedIn
+          ? FloatingActionButton(
+              onPressed: _showMyRentals,
+              backgroundColor: _primaryBlue,
+              child: const Icon(Icons.directions_car, color: Colors.white),
+              tooltip: 'My Rentals',
+            )
+          : null,
     );
   }
 
@@ -1110,7 +1407,10 @@ await showDialog(
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 16,
                 childAspectRatio: 0.9,
-                children: List.generate(items.length, (index) => _buildResultCard(items[index] as Map<String, dynamic>, isTour)),
+                children: List.generate(items.length, (index) => InkWell(
+                  onTap: isTour ? null : () => _showCarDetailsDialog(items[index] as Map<String, dynamic>),
+                  child: _buildResultCard(items[index] as Map<String, dynamic>, isTour),
+                )),
               ),
       ],
     );

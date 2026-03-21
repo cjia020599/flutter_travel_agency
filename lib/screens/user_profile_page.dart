@@ -5,6 +5,9 @@ import '../api/api_client.dart';
 import 'login_page.dart';
 import 'home_page.dart';
 import 'admin_dashboard_page.dart';
+import '../api/car_rentals_api.dart';
+import '../models/car_rental.dart';
+import 'package:intl/intl.dart';
 
 const _navBlue = Color(0xFF1E3A5F);
 const _primaryBlue = Color(0xFF2563EB);
@@ -37,6 +40,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   late TextEditingController _state;
   late TextEditingController _zipCode;
   String? _country;
+  late List<CarRental> _rentals = [];
 
   @override
   void initState() {
@@ -55,6 +59,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _state = TextEditingController();
     _zipCode = TextEditingController();
     _loadProfile();
+    _loadRentals();
   }
 
   @override
@@ -147,6 +152,78 @@ class _UserProfilePageState extends State<UserProfilePage> {
     } catch (e) {
       setState(() => _error = e.toString());
     }
+  }
+
+  Future<void> _loadRentals() async {
+    try {
+      _rentals = await CarRentalsApi.getCarRentals();
+      setState(() {});
+    } catch (e) {
+      print('Error loading rentals: $e');
+    }
+  }
+
+  Future<void> _showRentals() async {
+    await _loadRentals();
+    if (_rentals.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No car rentals found')),
+      );
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('My Car Rentals'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: ListView.builder(
+            itemCount: _rentals.length,
+            itemBuilder: (context, index) {
+              final rental = _rentals[index];
+              return Card(
+                child: ListTile(
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      rental.carImageUrl,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.directions_car, size: 60),
+                    ),
+                  ),
+                  title: Text(rental.carTitle),
+                  subtitle: Text('${DateFormat('MMM dd, yyyy').format(rental.startDate)} - ${DateFormat('MMM dd, yyyy').format(rental.endDate)}'),
+                  trailing: rental.status != 'cancelled'
+                      ? IconButton(
+                          icon: const Icon(Icons.cancel, color: Colors.red),
+                          onPressed: () async {
+                            final success = await CarRentalsApi.cancelRental(rental.id);
+                            if (success) {
+                              Navigator.pop(context);
+                              _showRentals();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Rental cancelled')),
+                              );
+                            }
+                          },
+                        )
+                      : const Text('Cancelled', style: TextStyle(color: Colors.grey)),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -315,7 +392,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           ),
           _sideItem(Icons.dashboard, 'Dashboard', () => Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const TravelHomePage()), (r) => false)),
           _sideItem(Icons.person, 'My Profile', () {}),
-          _sideItem(Icons.history, 'Booking History', () {}),
+          _sideItem(Icons.history, 'Booking History', _showRentals),
           const Spacer(),
           _sideItem(Icons.logout, 'Log Out', _logout),
         ],

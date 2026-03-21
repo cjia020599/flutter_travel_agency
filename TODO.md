@@ -1,8 +1,43 @@
-# Image Upload Fix TODO
+# Car Rental Dialog Feature - Implementation Steps
 
-## Steps:
-- [x] Step 1: Case-insensitive picker with UPPER/lower extensions ✓
-- [x] Step 2: Added http_parser + safe MIME mapping in UploadApi ✓
-- [x] Step 3: Added pubspec + pub get pending (terminal running)
-- [ ] Step 4: Hot reload, test PNG upload ✓
-- [x] Complete: Backend 'invalid file type' fixed with correct Content-Type
+## Status: [IN PROGRESS]
+
+### 1. [✅] Create lib/models/car_rental.dart
+   - Add CarRental and CreateRentalRequest models
+
+### 2. [✅] Create lib/api/car_rentals_api.dart  
+   - Add CarRentalsApi class with getCarRentals(), rentCar(), cancelRental()
+
+### 3. [✅] Update lib/screens/home_page.dart
+   - Add _showCarDetailsDialog() function
+   - Add _rentals state and _loadRentals()
+   - Hook 'View Details' buttons to dialog
+   - Add FloatingActionButton for 'My Rentals' dialog
+
+### 4. [ ] Test & Followup
+   - Add _showCarDetailsDialog() function
+   - Add _rentals state and _loadRentals()
+   - Hook 'View Details' buttons to dialog
+   - Add FloatingActionButton for 'My Rentals' dialog
+
+### 4. [ ] Test & Followup
+   - flutter pub get
+   - Login → View car details → Rent → Check My Rentals
+
+**Next Step:** Create API file
+
+### 2. [ ] Create lib/api/car_rentals_api.dart  
+   - Add CarRentalsApi class with getCarRentals(), rentCar(), cancelRental()
+
+### 3. [ ] Update lib/screens/home_page.dart
+   - Add _showCarDetailsDialog() function
+   - Add _rentals state and _loadRentals()
+   - Hook 'View Details' buttons to dialog
+   - Add FloatingActionButton for 'My Rentals' dialog
+
+### 4. [ ] Test & Followup
+   - flutter pub get
+   - Login → View car details → Rent → Check My Rentals
+
+**Next Step:** Create models file ✅
+

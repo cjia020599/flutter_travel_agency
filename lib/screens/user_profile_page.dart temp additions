@@ -1,0 +1,84 @@
+// Add these imports at top
+import '../api/car_rentals_api.dart';
+import '../models/car_rental.dart';
+import 'package:intl/intl.dart';
+
+// Add this state var in _UserProfilePageState
+late List<CarRental> _rentals = [];
+
+// Add this method in _UserProfilePageState class
+Future<void> _loadRentals() async {
+  try {
+    _rentals = await CarRentalsApi.getCarRentals();
+    setState(() {});
+  } catch (e) {
+    print('Error loading rentals: $e');
+  }
+}
+
+Future<void> _showRentals() async {
+  await _loadRentals();
+  if (_rentals.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No car rentals found')),
+    );
+    return;
+  }
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('My Car Rentals'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 400,
+        child: ListView.builder(
+          itemCount: _rentals.length,
+          itemBuilder: (context, index) {
+            final rental = _rentals[index];
+            return Card(
+              child: ListTile(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    rental.carImageUrl,
+                    width: 60,
+                    height: 60,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.directions_car, size: 60),
+                  ),
+                ),
+                title: Text(rental.carTitle),
+                subtitle: Text('${DateFormat('MMM dd, yyyy').format(rental.startDate)} - ${DateFormat('MMM dd, yyyy').format(rental.endDate)}'),
+                trailing: rental.status != 'cancelled'
+                    ? IconButton(
+                        icon: const Icon(Icons.cancel, color: Colors.red),
+                        onPressed: () async {
+                          final success = await CarRentalsApi.cancelRental(rental.id);
+                          if (success) {
+                            Navigator.pop(context);
+                            _showRentals();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Rental cancelled')),
+                            );
+                          }
+                        },
+                      )
+                    : const Text('Cancelled', style: TextStyle(color: Colors.grey)),
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+// Call in initState() after _loadProfile():
+// await _loadRentals();
+
