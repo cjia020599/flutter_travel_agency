@@ -1116,7 +1116,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   height: 140,
                   width: double.infinity,
                   child: Image.network(
-                    'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600',
+                    item['imageUrl'] ?? 'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600',
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(color: Colors.grey[300]),
                   ),

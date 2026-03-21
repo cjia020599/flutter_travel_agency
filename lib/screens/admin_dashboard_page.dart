@@ -5,6 +5,7 @@ import '../api/cars_api.dart';
 import '../api/admin_api.dart';
 import '../api/user_api.dart';
 import '../api/api_client.dart';
+import '../widgets/image_upload_widget.dart';
 
 // Minimal admin dashboard with dark sidebar (Booking Core–style)
 const _sidebarBg = Color(0xFF1E3A5F);
@@ -909,6 +910,8 @@ class _AddTourFormState extends State<_AddTourForm> {
   final _slug = TextEditingController();
   final _price = TextEditingController();
   final _salePrice = TextEditingController();
+  String? _imageUrl;
+  String? _imagePublicId;
   bool _loading = false;
 
   @override
@@ -920,6 +923,8 @@ class _AddTourFormState extends State<_AddTourForm> {
       _slug.text = item['slug']?.toString() ?? '';
       _price.text = item['price']?.toString() ?? '';
       _salePrice.text = item['salePrice']?.toString() ?? '';
+      _imageUrl = item['imageUrl']?.toString();
+      _imagePublicId = item['imagePublicId']?.toString();
     }
   }
 
@@ -939,6 +944,13 @@ class _AddTourFormState extends State<_AddTourForm> {
     }
   }
 
+  void _onImageSelected(String? url, String? publicId) {
+    setState(() {
+      _imageUrl = url;
+      _imagePublicId = publicId;
+    });
+  }
+
   Future<void> _submit() async {
     setState(() => _loading = true);
     try {
@@ -947,6 +959,8 @@ class _AddTourFormState extends State<_AddTourForm> {
         'slug': _slug.text.trim(),
         'price': _price.text.isEmpty ? "0" : _price.text.trim(),
         'salePrice': _salePrice.text.isEmpty ? "" : _salePrice.text.trim(),
+        'imageUrl': _imageUrl,
+        'imagePublicId': _imagePublicId,
         'status': 'publish',
       };
       if (widget.itemToEdit != null) {
@@ -961,6 +975,8 @@ class _AddTourFormState extends State<_AddTourForm> {
       _slug.clear();
       _price.clear();
       _salePrice.clear();
+      _imageUrl = null;
+      _imagePublicId = null;
       widget.onCreated();
     } catch (e) {
       if (!mounted) return;
@@ -996,6 +1012,14 @@ class _AddTourFormState extends State<_AddTourForm> {
           TextField(controller: _price, decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder()), keyboardType: TextInputType.number),
           const SizedBox(height: 16),
           TextField(controller: _salePrice, decoration: const InputDecoration(labelText: 'Sale Price (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 16),
+          const Text('Tour Image', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          ImageUploadWidget(
+            initialImageUrl: _imageUrl,
+            initialImagePublicId: _imagePublicId,
+            onImageSelected: _onImageSelected,
+          ),
           const SizedBox(height: 24),
           ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(widget.itemToEdit != null ? 'Update Tour' : 'Add Tour')),
         ],
@@ -1025,6 +1049,8 @@ class _AddCarFormState extends State<_AddCarForm> {
   final _door = TextEditingController(text: '4');
   final _mapLat = TextEditingController();
   final _mapLng = TextEditingController();
+  String? _imageUrl;
+  String? _imagePublicId;
   bool _loading = false;
 
   @override
@@ -1042,6 +1068,8 @@ class _AddCarFormState extends State<_AddCarForm> {
       _door.text = item['door']?.toString() ?? '4';
       _mapLat.text = item['mapLat']?.toString() ?? '';
       _mapLng.text = item['mapLng']?.toString() ?? '';
+      _imageUrl = item['imageUrl']?.toString();
+      _imagePublicId = item['imagePublicId']?.toString();
     }
   }
 
@@ -1067,6 +1095,13 @@ class _AddCarFormState extends State<_AddCarForm> {
     }
   }
 
+  void _onImageSelected(String? url, String? publicId) {
+    setState(() {
+      _imageUrl = url;
+      _imagePublicId = publicId;
+    });
+  }
+
   Future<void> _submit() async {
     setState(() => _loading = true);
     try {
@@ -1075,12 +1110,14 @@ class _AddCarFormState extends State<_AddCarForm> {
         'slug': _slug.text.trim(),
         'price': _price.text.isEmpty ? "0" : _price.text.trim(),
         'salePrice': _salePrice.text.isEmpty ? "" : _salePrice.text.trim(),
-        'passenger': _passenger.text.isEmpty ? "4" : _passenger.text.trim(),
+'passenger': int.parse(_passenger.text.isEmpty ? "4" : _passenger.text.trim()),
         'gearShift': _gearShift.text.isEmpty ? "Auto" : _gearShift.text.trim(),
-        'baggage': _baggage.text.isEmpty ? "2" : _baggage.text.trim(),
-        'door': _door.text.isEmpty ? "4" : _door.text.trim(),
+        'baggage': int.parse(_baggage.text.isEmpty ? "2" : _baggage.text.trim()),
+        'door': int.parse(_door.text.isEmpty ? "4" : _door.text.trim()),
         'mapLat': _mapLat.text.isEmpty ? "" : _mapLat.text.trim(),
         'mapLng': _mapLng.text.isEmpty ? "" : _mapLng.text.trim(),
+        'imageUrl': _imageUrl,
+        'imagePublicId': _imagePublicId,
         'status': 'publish',
       };
       if (widget.itemToEdit != null) {
@@ -1094,6 +1131,8 @@ class _AddCarFormState extends State<_AddCarForm> {
       _slug.clear();
       _price.clear();
       _salePrice.clear();
+      _imageUrl = null;
+      _imagePublicId = null;
       widget.onCreated();
     } catch (e) {
       if (!mounted) return;
@@ -1141,6 +1180,14 @@ class _AddCarFormState extends State<_AddCarForm> {
           TextField(controller: _mapLat, decoration: const InputDecoration(labelText: 'Map Latitude (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
           const SizedBox(height: 16),
           TextField(controller: _mapLng, decoration: const InputDecoration(labelText: 'Map Longitude (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
+          const SizedBox(height: 16),
+          const Text('Car Image', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          ImageUploadWidget(
+            initialImageUrl: _imageUrl,
+            initialImagePublicId: _imagePublicId,
+            onImageSelected: _onImageSelected,
+          ),
           const SizedBox(height: 24),
           ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(widget.itemToEdit != null ? 'Update Car' : 'Add Car')),
         ],

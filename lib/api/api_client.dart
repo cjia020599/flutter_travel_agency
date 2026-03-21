@@ -102,6 +102,24 @@ class ApiClient {
     await _handleResponse(res);
   }
 
+  Future<Map<String, dynamic>> postMultipart(String path, {Map<String, String>? fields, List<http.MultipartFile>? files, bool auth = false}) async {
+    await _ensureInitialized();
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'));
+    request.headers.addAll(_headers(auth: auth));
+
+    if (fields != null) {
+      request.fields.addAll(fields);
+    }
+
+    if (files != null) {
+      request.files.addAll(files);
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    return _handleResponse(response);
+  }
+
   Map<String, dynamic>? _parseJwtClaims(String token) {
     try {
       final parts = token.split('.');
