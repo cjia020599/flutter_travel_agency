@@ -12,6 +12,7 @@ import 'user_profile_page.dart';
 import '../models/car_rental.dart';
 import '../api/car_rentals_api.dart';
 import '../api/tour_bookings_api.dart';
+import '../api/ratings_api.dart';
 import 'package:intl/intl.dart';
 
 // Design colors
@@ -44,6 +45,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
   List<dynamic> _cars = [];
   List<dynamic> _locations = [];
   List<CarRental> _rentals = [];
+  final Map<String, List<dynamic>> _ratingsByKey = {};
+  final Map<String, bool> _ratingsLoadingByKey = {};
   DateTimeRange _selectedDateRange = DateTimeRange(
     start: DateTime.now().add(const Duration(days: 1)),
     end: DateTime.now().add(const Duration(days: 5)),
@@ -88,6 +91,317 @@ class _TravelHomePageState extends State<TravelHomePage> {
     }
   }
 
+  String _ratingsKey(String moduleType, int moduleId) => '$moduleType:$moduleId';
+
+  Future<List<dynamic>> _loadRatingsFor(String moduleType, int moduleId) async {
+    final key = _ratingsKey(moduleType, moduleId);
+    if (mounted) {
+      setState(() {
+        _ratingsLoadingByKey[key] = true;
+      });
+    }
+    try {
+      final ratings = await RatingsApi.list(moduleType: moduleType, moduleId: moduleId);
+      if (mounted) {
+        setState(() {
+          _ratingsByKey[key] = ratings;
+          _ratingsLoadingByKey[key] = false;
+        });
+      }
+      return ratings;
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _ratingsByKey[key] = [];
+          _ratingsLoadingByKey[key] = false;
+        });
+      }
+      return [];
+    }
+  }
+
+  Future<void> _promptLoginIfNeeded() async {
+    if (_isLoggedIn) return;
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        title: const Text('Sign In'),
+        content: LoginDialogContent(onSuccess: _loadData),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    await _loadData();
+  }
+
+  int? _extractUserId(dynamic rating) {
+    if (rating is! Map) return null;
+    final user = rating['user'];
+    if (user is Map && user['id'] != null) {
+      return int.tryParse(user['id'].toString());
+    }
+    if (rating['userId'] != null) {
+      return int.tryParse(rating['userId'].toString());
+    }
+    return null;
+  }
+
+  Future<void> _upsertRating({
+    required String moduleType,
+    required int moduleId,
+    Map<String, dynamic>? existing,
+  }) async {
+    if (!_isLoggedIn) {
+      await _promptLoginIfNeeded();
+      if (!_isLoggedIn) return;
+    }
+
+    final starsController = TextEditingController(
+      text: (existing?['stars']?.toString() ?? '5'),
+    );
+    final commentController = TextEditingController(
+      text: existing?['comment']?.toString() ?? '',
+    );
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(existing == null ? 'Add Rating' : 'Edit Rating'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: starsController,
+                decoration: const InputDecoration(
+                  labelText: 'Stars (1-5)',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: commentController,
+                decoration: const InputDecoration(
+                  labelText: 'Comment (optional)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved != true) return;
+
+    final stars = int.tryParse(starsController.text.trim());
+    if (stars == null || stars < 1 || stars > 5) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stars must be an integer from 1 to 5')),
+        );
+      }
+      return;
+    }
+
+    try {
+      if (existing == null) {
+        await RatingsApi.create(
+          moduleType: moduleType,
+          moduleId: moduleId,
+          stars: stars,
+          comment: commentController.text.trim(),
+        );
+      } else {
+        final ratingId = int.tryParse(existing['id'].toString());
+        if (ratingId == null) {
+          throw Exception('Invalid rating ID');
+        }
+        await RatingsApi.update(
+          ratingId,
+          stars: stars,
+          comment: commentController.text.trim(),
+        );
+      }
+
+      await _loadRatingsFor(moduleType, moduleId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(existing == null ? 'Rating added' : 'Rating updated')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Rating save failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteRating({
+    required String moduleType,
+    required int moduleId,
+    required int ratingId,
+  }) async {
+    if (!_isLoggedIn) {
+      await _promptLoginIfNeeded();
+      if (!_isLoggedIn) return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Rating'),
+        content: const Text('Are you sure you want to delete this rating?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await RatingsApi.delete(ratingId);
+      await _loadRatingsFor(moduleType, moduleId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Rating deleted')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildRatingsSection({
+    required String moduleType,
+    required int moduleId,
+  }) {
+    final key = _ratingsKey(moduleType, moduleId);
+    final ratings = _ratingsByKey[key] ?? const [];
+    final isLoading = _ratingsLoadingByKey[key] == true;
+    final avg = ratings.isEmpty
+        ? 0.0
+        : ratings
+                .map((r) => double.tryParse((r['stars'] ?? 0).toString()) ?? 0.0)
+                .reduce((a, b) => a + b) /
+            ratings.length;
+    final currentUserId = int.tryParse((_clientCurrentUserIdCached ?? '').toString());
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Ratings', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+            const SizedBox(width: 8),
+            if (ratings.isNotEmpty)
+              Text(
+                '${avg.toStringAsFixed(1)} / 5 (${ratings.length})',
+                style: TextStyle(color: Colors.grey[700], fontSize: 13),
+              ),
+            const Spacer(),
+            ElevatedButton.icon(
+              onPressed: () => _upsertRating(moduleType: moduleType, moduleId: moduleId),
+              icon: const Icon(Icons.rate_review, size: 18),
+              label: const Text('Add'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (isLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: CircularProgressIndicator(),
+          )
+        else if (ratings.isEmpty)
+          Text('No ratings yet.', style: TextStyle(color: Colors.grey[600]))
+        else
+          ...ratings.map((r) {
+            final ratingId = int.tryParse((r['id'] ?? '').toString());
+            final stars = (r['stars'] ?? '').toString();
+            final comment = (r['comment'] ?? '').toString();
+            final userName = (r['username'] ?? r['userName'] ?? (
+                    (r['user'] is Map && r['user']['name'] != null)
+                        ? r['user']['name']
+                        : ((r['user'] is Map && r['user']['email'] != null)
+                            ? r['user']['email']
+                            : 'User')))
+                .toString();
+            final ownerId = _extractUserId(r);
+            final isOwner = currentUserId != null && ownerId != null && ownerId == currentUserId;
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                title: Text('$stars ★  •  $userName'),
+                subtitle: Text(comment.isEmpty ? 'No comment' : comment),
+                trailing: isOwner && ratingId != null
+                    ? Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit, size: 20),
+                            onPressed: () => _upsertRating(
+                              moduleType: moduleType,
+                              moduleId: moduleId,
+                              existing: Map<String, dynamic>.from(r),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                            onPressed: () => _deleteRating(
+                              moduleType: moduleType,
+                              moduleId: moduleId,
+                              ratingId: ratingId,
+                            ),
+                          ),
+                        ],
+                      )
+                    : null,
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  String? _clientCurrentUserIdCached;
+
+  Future<void> _cacheCurrentUserId() async {
+    _clientCurrentUserIdCached = await ApiClient.instance.currentUserId;
+    if (mounted) setState(() {});
+  }
+
   Widget _infoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -123,6 +437,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final buyerNameController = TextEditingController();
     final buyerEmailController = TextEditingController(text: 'test@example.com');
     final buyerPhoneController = TextEditingController(text: '+1234567890');
+
+    await _loadRatingsFor('car', carId);
+    await _cacheCurrentUserId();
 
     await showDialog(
       context: context,
@@ -236,6 +553,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  _buildRatingsSection(moduleType: 'car', moduleId: carId),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -398,6 +717,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final buyerEmailController = TextEditingController(text: 'test@example.com');
     final buyerPhoneController = TextEditingController(text: '+1234567890');
 
+    await _loadRatingsFor('tour', tourId);
+    await _cacheCurrentUserId();
+
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -482,6 +804,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  _buildRatingsSection(moduleType: 'tour', moduleId: tourId),
                   const SizedBox(height: 24),
                   Text('Buyer Information:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                   const SizedBox(height: 8),

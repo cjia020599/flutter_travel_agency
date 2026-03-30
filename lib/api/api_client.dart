@@ -75,10 +75,22 @@ class ApiClient {
 
   Future<Map<String, dynamic>> get(String path, {bool auth = false}) async {
     await _ensureInitialized();
+    final headers = _headers(auth: auth);
+    // Disable conditional caching for dynamic API reads (e.g. ratings list)
+    headers['Cache-Control'] = 'no-cache';
+    headers['Pragma'] = 'no-cache';
+
     final res = await http.get(
       Uri.parse('$baseUrl$path'),
-      headers: _headers(auth: auth),
+      headers: headers,
     );
+
+    // Some servers may return 304 (Not Modified) for cached resources.
+    // For API JSON consumers, return an empty payload instead of throwing.
+    if (res.statusCode == 304) {
+      return <String, dynamic>{'data': []};
+    }
+
     return _handleResponse(res);
   }
 

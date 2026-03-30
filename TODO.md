@@ -1,10 +1,8 @@
-# Flutter Travel Agency - Add Tours to Booking History
+# Rating Feature TODO
 
-**Task Complete ✅**
-
-- Added lib/models/tour_booking.dart model 
-- Updated lib/screens/user_profile_page.dart: unified booking history shows car rentals + tour bookings with cancel buttons (confirmation dialogs added)
-- Updated lib/screens/home_page.dart: car rental cancel confirmation
-- Updated APIs for typed models
-
-Test in Profile page > Booking History. With flutter run active, navigate to profile to verify.
+- [x] Add Ratings API client (`lib/api/ratings_api.dart`)
+- [ ] Integrate ratings state + data loading in `lib/screens/home_page.dart`
+- [ ] Show rating list for selected car/tour in details dialogs
+- [ ] Add create/edit/delete rating actions (use current logged-in user; show existing login dialog if not logged in)
+- [ ] Refresh ratings after mutations and show success/error feedback
+- [ ] Run analysis/checks and fix issues
