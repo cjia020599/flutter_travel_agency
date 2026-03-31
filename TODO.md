@@ -1,8 +1,11 @@
-# Rating Feature TODO
+# PDF Report Button Implementation
 
-- [x] Add Ratings API client (`lib/api/ratings_api.dart`)
-- [ ] Integrate ratings state + data loading in `lib/screens/home_page.dart`
-- [ ] Show rating list for selected car/tour in details dialogs
-- [ ] Add create/edit/delete rating actions (use current logged-in user; show existing login dialog if not logged in)
-- [ ] Refresh ratings after mutations and show success/error feedback
-- [ ] Run analysis/checks and fix issues
+## Plan Steps
+- [ ] 1. Create TODO.md ✅
+- [x] 2. Add PDF button to _buildReportsDashboard()
+- [x] 3. Implement _generatePdfReport() with professional design
+- [x] 4. Add loading states and error handling
+- [ ] 5. Test PDF generation
+- [ ] 6. attempt_completion
+
+Current: Step 1 complete.

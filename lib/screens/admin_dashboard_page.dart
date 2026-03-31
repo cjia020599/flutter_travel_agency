@@ -6,6 +6,11 @@ import '../api/admin_api.dart';
 import '../api/user_api.dart';
 import '../api/api_client.dart';
 import '../widgets/image_upload_widget.dart';
+import '../api/reports_api.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
 
 // Minimal admin dashboard with dark sidebar (Booking Core–style)
 const _sidebarBg = Color(0xFF1E3A5F);
@@ -44,6 +49,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   bool _loading = true;
   bool _loadingUsers = false;
   String? _usersError;
+  Map<String, dynamic?> _reportsData = {};
+  bool _loadingReports = false;
 
   @override
   void initState() {
@@ -166,7 +173,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             icon: Icons.assessment_outlined,
             label: 'Reports',
             isActive: _current == AdminSection.reports,
-            onTap: () => setState(() => _current = AdminSection.reports),
+            onTap: () {
+              setState(() => _current = AdminSection.reports);
+              _loadReports();
+            },
           ),
           _sideItem(
             icon: Icons.settings_outlined,
@@ -384,10 +394,100 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       case AdminSection.carsAdd:
         return _buildCarForm();
       case AdminSection.reports:
-        return _buildPlaceholder('Reports', Icons.assessment);
+        return _buildReportsDashboard();
       case AdminSection.settings:
         return _buildPlaceholder('Settings', Icons.settings);
     }
+  }
+
+  Widget _buildReportsDashboard() {
+    // Simple reports dashboard showing counts and raw data summaries.
+    if (_loadingReports) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final toursData = _reportsData['tours'];
+    final carsData = _reportsData['cars'];
+    final bookingsData = _reportsData['bookings'];
+    final locationsData = _reportsData['locations'];
+
+    String count(dynamic v) {
+      if (v == null) return '0';
+      if (v is List) return v.length.toString();
+      if (v is Map) return v.length.toString();
+      return v.toString();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Reports Overview',
+          style: TextStyle(fontSize: 16, color: Colors.black87),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            _statCard('Tours', count(toursData), Icons.tour),
+            const SizedBox(width: 16),
+            _statCard('Cars', count(carsData), Icons.directions_car),
+            const SizedBox(width: 16),
+            _statCard('Bookings', count(bookingsData), Icons.book_online),
+            const SizedBox(width: 16),
+            _statCard('Locations', count(locationsData), Icons.location_on),
+          ],
+        ),
+        const SizedBox(height: 24),
+        const Text('Raw report data', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Text(
+              // Show a compact string representation of the reports map
+              _reportsData.entries.map((e) {
+                final v = e.value;
+                if (v is List) return '${e.key}: ${v.length} items';
+                return '${e.key}: ${v ?? 'null'}';
+              }).join('  •  '),
+              style: TextStyle(color: Colors.grey[800]),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Center(
+          child: SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.picture_as_pdf, size: 24),
+              label: const Text(
+                'Generate PDF Report',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _sidebarBg,
+                foregroundColor: Colors.white,
+                elevation: 8,
+                shadowColor: Colors.black26,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              onPressed: _loadingReports || _reportsData.isEmpty 
+                ? null 
+                : () => _generatePdfReport(context),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildDashboardContent() {
@@ -705,7 +805,293 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     }
   }
 
-  Future<void> _loadUsers() async {
+Future<void> _loadReports() async {
+  if (_loadingReports) return;
+  setState(() {
+    _loadingReports = true;
+  });
+  try {
+    final results = await Future.wait([
+      ReportsApi.tours(),
+      ReportsApi.cars(),
+      ReportsApi.bookings(),
+      ReportsApi.locations(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _reportsData = {
+        'tours': results[0],
+        'cars': results[1],
+        'bookings': results[2],
+        'locations': results[3],
+      };
+      _loadingReports = false;
+    });
+  } catch (e) {
+    if (mounted) {
+      setState(() => _loadingReports = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load reports: $e')),
+      );
+    }
+  }
+}
+
+Future<void> _generatePdfReport(BuildContext context) async {
+  setState(() => _loadingReports = true); // Reuse loading for button
+  try {
+    // Get current user profile for header
+    final profile = await UserApi.getProfile();
+    final userName = profile['userName'] ?? profile['username'] ?? profile['firstName'] ?? 'Admin';
+    final userEmail = profile['email'] ?? 'admin@example.com';
+    final now = DateTime.now();
+    final formatter = DateFormat('MMMM dd, yyyy \'at\' h:mm a');
+
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            // Header
+            pw.Container(
+              padding: const pw.EdgeInsets.all(20),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromHex('#1E3A5F'),
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Column(
+                children: [
+                  pw.Text(
+                    'Travel Agency Reports',
+                    style: pw.TextStyle(
+                      fontSize: 28,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                    'Comprehensive Dashboard Summary',
+                    style: pw.TextStyle(fontSize: 16, color: PdfColors.grey200),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 20),
+
+            // Account Details Card - Center Top
+            pw.Container(
+              margin: const pw.EdgeInsets.symmetric(horizontal: 40),
+              padding: const pw.EdgeInsets.all(16),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey200,
+                borderRadius: pw.BorderRadius.circular(8),
+                border: pw.Border.all(color: PdfColors.grey300),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      pw.Text(
+                        'Printed by: $userName',
+                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        userEmail,
+                        style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'Generated: ${formatter.format(now)}',
+                        style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 30),
+
+            // Stats Row
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
+              children: _buildPdfStatCards(_reportsData),
+            ),
+            pw.SizedBox(height: 30),
+
+            // Data Tables
+            ..._buildPdfDataTables(_reportsData),
+
+            // Footer
+            pw.Spacer(),
+            pw.Container(
+              alignment: pw.Alignment.center,
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300)),
+              ),
+              child: pw.Text(
+                'Page ${context.pageNumber} | Travel Agency Admin System v1.0',
+                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Share/print PDF
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'travel-agency-reports-${DateFormat('yyyy-MM-dd-HHmmss').format(now)}.pdf',
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('PDF report generated and shared successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error generating PDF: $e')),
+      );
+    }
+  } finally {
+    if (mounted) {
+      setState(() => _loadingReports = false);
+    }
+  }
+}
+
+List<pw.Widget> _buildPdfStatCards(Map<String, dynamic?> data) {
+  final stats = {
+    'Tours': data['tours'],
+    'Cars': data['cars'],
+    'Bookings': data['bookings'],
+    'Locations': data['locations'],
+  };
+  return stats.entries.map((e) {
+    final count = _pdfCount(e.value);
+    return pw.Container(
+      width: 120,
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: PdfColor.fromHex('#3B82F6'),
+        borderRadius: pw.BorderRadius.circular(8),
+      ),
+      child: pw.Column(
+        children: [
+          pw.Text(e.key, style: const pw.TextStyle(fontSize: 12, color: PdfColors.white)),
+          pw.SizedBox(height: 4),
+          pw.Text('$count', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+        ],
+      ),
+    );
+  }).toList();
+}
+
+List<pw.Widget> _buildPdfDataTables(Map<String, dynamic?> data) {
+  final sections = ['tours', 'cars', 'bookings', 'locations'];
+  return sections.map((key) {
+    final items = data[key];
+    final rows = _extractTableRows(items ?? []);
+            if (rows.isEmpty) return pw.SizedBox.shrink();
+
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 20),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            '${key.toUpperCase()} (${rows.length})',
+            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey400),
+            defaultColumnWidth: const pw.FlexColumnWidth(),
+            children: [
+              // Header
+              pw.TableRow(
+                decoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E3A5F')),
+                children: [
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Text('ID', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Text('Title/Name', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Text('Price', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: pw.Text('Status', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  ),
+                ],
+              ),
+              // Data rows
+              ...rows.asMap().entries.take(20).map((entry) {
+                final row = rows[entry.key];
+                return pw.TableRow( // Limit to 20 rows per table
+                  decoration: pw.BoxDecoration(color: entry.key % 2 == 0 ? PdfColors.white : PdfColors.grey50),
+                  children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(row.id.toString(), style: const pw.TextStyle(fontSize: 11))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(row.title ?? '', style: const pw.TextStyle(fontSize: 11), maxLines: 2)),
+                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(row.price ?? '-', style: const pw.TextStyle(fontSize: 11))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(row.status ?? '-', style: const pw.TextStyle(fontSize: 11))),
+                  ],
+                );
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }).where((w) => w != pw.SizedBox.shrink()).toList();
+}
+
+int _pdfCount(dynamic data) {
+  if (data == null) return 0;
+  if (data is List) return data.length;
+  if (data is Map) return data.length;
+  return 1;
+}
+
+List<({int id, String? title, String? price, String? status})> _extractTableRows(dynamic data) {
+  final List<({int id, String? title, String? price, String? status})> rows = [];
+  if (data is List) {
+    for (int i = 0; i < data.length; i++) {
+      final item = data[i];
+      if (item is Map<String, dynamic>) {
+        final id = item['id'] ?? i;
+        rows.add((
+          id: id is int ? id : (id?.hashCode ?? i),
+          title: item['title'] ?? item['name'] ?? item['userName'] ?? '-',
+          price: '\$${item['price'] ?? item['salePrice'] ?? '-'}',
+          status: item['status']?.toString() ?? '-',
+        ));
+      }
+    }
+  }
+  return rows;
+}
+
+Future<void> _loadUsers() async {
     setState(() {
       _loadingUsers = true;
       _usersError = null;
