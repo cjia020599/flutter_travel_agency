@@ -865,7 +865,7 @@ Future<void> _generatePdfReport(BuildContext context) async {
               child: pw.Column(
                 children: [
                   pw.Text(
-                    'Travel Agency Reports',
+                    'Travelista Adventures Reports',
                     style: pw.TextStyle(
                       fontSize: 28,
                       fontWeight: pw.FontWeight.bold,
