@@ -5,6 +5,7 @@ import '../api/cars_api.dart';
 import '../api/admin_api.dart';
 import '../api/user_api.dart';
 import '../api/api_client.dart';
+import '../api/chatbot_api.dart';
 import '../widgets/image_upload_widget.dart';
 import '../api/reports_api.dart';
 import 'package:pdf/pdf.dart';
@@ -25,8 +26,14 @@ enum AdminSection {
   toursAdd,
   carsAll,
   carsAdd,
+  chatbot,
   reports,
   settings,
+}
+
+enum _ChatbotFilter {
+  all,
+  unanswered,
 }
 
 class AdminDashboardPage extends StatefulWidget {
@@ -51,6 +58,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   String? _usersError;
   Map<String, dynamic?> _reportsData = {};
   bool _loadingReports = false;
+  List<dynamic> _chatQuestions = [];
+  bool _loadingChatQuestions = false;
+  String? _chatError;
+  String _chatSearchQuery = '';
+  _ChatbotFilter _chatFilter = _ChatbotFilter.all;
 
   @override
   void initState() {
@@ -176,6 +188,15 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             onTap: () {
               setState(() => _current = AdminSection.reports);
               _loadReports();
+            },
+          ),
+          _sideItem(
+            icon: Icons.chat_bubble_outline,
+            label: 'Chatbot Q&A',
+            isActive: _current == AdminSection.chatbot,
+            onTap: () {
+              setState(() => _current = AdminSection.chatbot);
+              _loadChatQuestions();
             },
           ),
           _sideItem(
@@ -349,6 +370,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         return 'All Cars';
       case AdminSection.carsAdd:
         return 'Add Car';
+      case AdminSection.chatbot:
+        return 'Chatbot Q&A';
       case AdminSection.reports:
         return 'Reports';
       case AdminSection.settings:
@@ -393,6 +416,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         return _buildCarsList();
       case AdminSection.carsAdd:
         return _buildCarForm();
+      case AdminSection.chatbot:
+        return _buildChatbotManager();
       case AdminSection.reports:
         return _buildReportsDashboard();
       case AdminSection.settings:
@@ -837,7 +862,292 @@ Future<void> _loadReports() async {
   }
 }
 
-Future<void> _generatePdfReport(BuildContext context) async {
+Future<void> _loadChatQuestions() async {
+  if (_loadingChatQuestions) return;
+  setState(() {
+    _loadingChatQuestions = true;
+    _chatError = null;
+  });
+  try {
+    final questions = await ChatbotApi.listQuestions();
+    if (!mounted) return;
+    setState(() {
+      _chatQuestions = questions;
+      _loadingChatQuestions = false;
+    });
+  } catch (e) {
+    if (!mounted) return;
+    setState(() {
+      _loadingChatQuestions = false;
+      _chatError = e.toString();
+    });
+  }
+}
+
+Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
+  final questionController = TextEditingController(
+    text: existing?['question']?.toString() ?? '',
+  );
+  final answerController = TextEditingController(
+    text: existing?['answer']?.toString() ?? '',
+  );
+
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(existing == null ? 'Add Q&A' : 'Edit Q&A'),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: questionController,
+              decoration: const InputDecoration(
+                labelText: 'Question',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: answerController,
+              decoration: const InputDecoration(
+                labelText: 'Answer',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 4,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+
+  if (saved != true) return;
+  final question = questionController.text.trim();
+  final answer = answerController.text.trim();
+  if (question.isEmpty || answer.isEmpty) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Question and answer are required.')),
+    );
+    return;
+  }
+
+  try {
+    if (existing == null) {
+      await ChatbotApi.createQuestion(question: question, answer: answer);
+    } else {
+      final id = existing['id']?.toString() ?? '';
+      if (id.isEmpty) {
+        throw Exception('Invalid question id');
+      }
+      await ChatbotApi.updateQuestion(id, question: question, answer: answer);
+    }
+    await _loadChatQuestions();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(existing == null ? 'Q&A added' : 'Q&A updated')),
+    );
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Save failed: $e')),
+    );
+  }
+}
+
+  Widget _buildChatbotManager() {
+    if (_loadingChatQuestions) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final query = _chatSearchQuery.trim().toLowerCase();
+    final filtered = _chatQuestions.where((item) {
+      final map = item is Map ? Map<String, dynamic>.from(item as Map) : <String, dynamic>{};
+      final question = map['question']?.toString().toLowerCase() ?? '';
+      final answer = map['answer']?.toString().toLowerCase() ?? '';
+      if (_chatFilter == _ChatbotFilter.unanswered && answer.isNotEmpty) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      return question.contains(query) || answer.contains(query);
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Chatbot Questions & Answers',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const Spacer(),
+            IconButton(
+              onPressed: _loadChatQuestions,
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _openChatQuestionDialog(),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add Q&A'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                onChanged: (value) => setState(() => _chatSearchQuery = value),
+                decoration: InputDecoration(
+                  hintText: 'Search questions or answers',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _chatSearchQuery.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setState(() => _chatSearchQuery = ''),
+                        ),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 200,
+              child: DropdownButtonFormField<_ChatbotFilter>(
+                value: _chatFilter,
+                decoration: const InputDecoration(
+                  labelText: 'Filter',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: _ChatbotFilter.all,
+                    child: Text('All'),
+                  ),
+                  DropdownMenuItem(
+                    value: _ChatbotFilter.unanswered,
+                    child: Text('Unanswered'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _chatFilter = value);
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_chatError != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF7ED),
+              border: Border.all(color: const Color(0xFFFED7AA)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text('Failed to load Q&A: $_chatError'),
+          ),
+        if (filtered.isEmpty && _chatError == null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              _chatQuestions.isEmpty
+                  ? 'No questions yet. Click "Add Q&A" to create the first one.'
+                  : 'No results match your search.',
+            ),
+          )
+        else
+          ...filtered.map((item) {
+            final map = item is Map ? Map<String, dynamic>.from(item as Map) : <String, dynamic>{};
+            final question = map['question']?.toString() ?? 'Untitled question';
+            final answer = map['answer']?.toString() ?? '';
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(question, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Text(answer.isEmpty ? 'No answer yet.' : answer),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => _openChatQuestionDialog(existing: map),
+                          icon: const Icon(Icons.edit, size: 16),
+                          label: const Text('Edit'),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: () => _deleteChatQuestion(map),
+                          icon: const Icon(Icons.delete_outline, size: 16),
+                          label: const Text('Delete'),
+                          style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Future<void> _deleteChatQuestion(Map<String, dynamic> item) async {
+    final id = item['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Q&A'),
+        content: const Text('Are you sure you want to delete this question?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await ChatbotApi.deleteQuestion(id);
+      await _loadChatQuestions();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Q&A deleted')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+    }
+  }
+
+  Future<void> _generatePdfReport(BuildContext context) async {
   setState(() => _loadingReports = true); // Reuse loading for button
   try {
     // Get current user profile for header

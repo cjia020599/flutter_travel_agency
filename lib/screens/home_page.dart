@@ -1143,14 +1143,7 @@ SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duratio
           ..._buildPageSlivers(),
         ],
       ),
-      floatingActionButton: _isLoggedIn
-          ? FloatingActionButton(
-              onPressed: _showMyRentals,
-              backgroundColor: _primaryBlue,
-              child: const Icon(Icons.directions_car, color: Colors.white),
-              tooltip: 'My Rentals',
-            )
-          : null,
+      floatingActionButton: null,
     );
   }
 
@@ -2441,4 +2434,5 @@ class _NavLink extends StatelessWidget {
     );
   }
 }
+
 

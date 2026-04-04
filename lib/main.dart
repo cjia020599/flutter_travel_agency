@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_travel_agency/screens/home_page.dart';
+import 'package:flutter_travel_agency/widgets/chat_overlay_shell.dart';
 
 void main() {
   runApp(const MyApp());
@@ -22,6 +23,15 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
+      builder: (context, child) {
+        return Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (context) => ChatOverlayShell(child: child ?? const SizedBox.shrink()),
+            ),
+          ],
+        );
+      },
       home: const TravelHomePage(),
     );
   }
