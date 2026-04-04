@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../api/tours_api.dart';
 import '../api/cars_api.dart';
+import '../api/lookups_api.dart';
 import '../api/admin_api.dart';
 import '../api/user_api.dart';
 import '../api/api_client.dart';
 import '../api/chatbot_api.dart';
 import '../widgets/image_upload_widget.dart';
+import '../widgets/car_location_map_picker.dart';
+import 'package:latlong2/latlong.dart';
 import '../api/reports_api.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -217,12 +220,12 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           ),
           _sideGroup(
             icon: Icons.directions_car_outlined,
-            label: 'Cars',
+            label: 'Car Rental',
             expanded: _carsExpanded,
             onToggle: () => setState(() => _carsExpanded = !_carsExpanded),
             children: [
               _sideSubItem('All Cars', _current == AdminSection.carsAll, () => setState(() => _current = AdminSection.carsAll)),
-              _sideSubItem('Add Car', _current == AdminSection.carsAdd, () => setState(() => _current = AdminSection.carsAdd)),
+              _sideSubItem('Add new car', _current == AdminSection.carsAdd, () => setState(() => _current = AdminSection.carsAdd)),
             ],
           ),
           const SizedBox(height: 8),
@@ -417,7 +420,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       case AdminSection.carsAll:
         return 'All Cars';
       case AdminSection.carsAdd:
-        return 'Add Car';
+        return 'Add new car';
       case AdminSection.chatbot:
         return 'Chatbot Q&A';
       case AdminSection.reports:
@@ -730,6 +733,25 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
+  Widget _carStatusChip(String? status) {
+    final isPublish = (status ?? 'publish').toString().toLowerCase() != 'draft';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isPublish ? Colors.green.shade50 : Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        isPublish ? 'Publish' : 'Draft',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: isPublish ? Colors.green.shade800 : Colors.grey.shade800,
+        ),
+      ),
+    );
+  }
+
   Widget _buildCarsList() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_cars.isEmpty) return const Center(child: Text('No cars yet.'));
@@ -750,7 +772,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
               DataCell(Text('${m['id']}')),
               DataCell(Text(m['title']?.toString() ?? '')),
               DataCell(Text('\$${m['salePrice'] ?? m['price'] ?? '-'}')),
-              DataCell(Text(m['status']?.toString() ?? '')),
+              DataCell(_carStatusChip(m['status']?.toString())),
               DataCell(Row(
                 children: [
                   IconButton(
@@ -778,8 +800,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       builder: (context) => AlertDialog(
         title: const Text('Edit Tour'),
         content: SizedBox(
-          width: 550,
-          height: 500,
+          width: 920,
+          height: 720,
           child: SingleChildScrollView(
             child: _AddTourForm(
               onCreated: () {
@@ -800,8 +822,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       builder: (context) => AlertDialog(
         title: const Text('Edit Car'),
         content: SizedBox(
-          width: 600,
-          height: 550,
+          width: 720,
+          height: 640,
           child: SingleChildScrollView(
             child: _AddCarForm(
               onCreated: () {
@@ -1656,13 +1678,28 @@ class _AddTourForm extends StatefulWidget {
 }
 
 class _AddTourFormState extends State<_AddTourForm> {
+  static const _availabilityOptions = <MapEntry<String, String>>[
+    MapEntry('always', 'Always available'),
+    MapEntry('fixed', 'Fixed dates'),
+    MapEntry('open_hours', 'Open hours'),
+  ];
+
   final _title = TextEditingController();
   final _slug = TextEditingController();
   final _price = TextEditingController();
   final _salePrice = TextEditingController();
+  final _realTourAddress = TextEditingController();
   String? _imageUrl;
   String? _imagePublicId;
   bool _loading = false;
+  String _status = 'publish';
+  String _availability = 'always';
+  bool _isFeatured = false;
+  double? _mapLat;
+  double? _mapLng;
+  String? _locationId;
+  List<Map<String, dynamic>> _locationRows = [];
+  bool _locationsLoading = true;
 
   @override
   void initState() {
@@ -1673,8 +1710,43 @@ class _AddTourFormState extends State<_AddTourForm> {
       _slug.text = item['slug']?.toString() ?? '';
       _price.text = item['price']?.toString() ?? '';
       _salePrice.text = item['salePrice']?.toString() ?? '';
+      _realTourAddress.text = item['realTourAddress']?.toString() ?? item['address']?.toString() ?? '';
       _imageUrl = item['imageUrl']?.toString();
       _imagePublicId = item['imagePublicId']?.toString();
+      _mapLat = double.tryParse(item['mapLat']?.toString() ?? '');
+      _mapLng = double.tryParse(item['mapLng']?.toString() ?? '');
+      final st = item['status']?.toString().toLowerCase() ?? 'publish';
+      _status = st == 'draft' ? 'draft' : 'publish';
+      _isFeatured = item['isFeatured'] == true || item['featured'] == true;
+      final av = item['availability']?.toString() ?? '';
+      if (_availabilityOptions.any((e) => e.key == av)) {
+        _availability = av;
+      }
+      final loc = item['location'];
+      final lid = item['locationId'] ?? (loc is Map ? loc['id'] : loc);
+      _locationId = lid?.toString();
+    }
+    _loadLocations();
+  }
+
+  Future<void> _loadLocations() async {
+    try {
+      final list = await LookupsApi.locations();
+      if (!mounted) return;
+      final rows = <Map<String, dynamic>>[];
+      for (final e in list) {
+        if (e is Map<String, dynamic>) {
+          rows.add(e);
+        } else if (e is Map) {
+          rows.add(Map<String, dynamic>.from(e));
+        }
+      }
+      setState(() {
+        _locationRows = rows;
+        _locationsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _locationsLoading = false);
     }
   }
 
@@ -1684,6 +1756,7 @@ class _AddTourFormState extends State<_AddTourForm> {
     _slug.dispose();
     _price.dispose();
     _salePrice.dispose();
+    _realTourAddress.dispose();
     super.dispose();
   }
 
@@ -1701,23 +1774,61 @@ class _AddTourFormState extends State<_AddTourForm> {
     });
   }
 
+  Widget _formCard(String heading, List<Widget> children) {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(heading, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _submit() async {
+    if (_slug.text.trim().isEmpty && _title.text.trim().isNotEmpty) {
+      _generateSlug();
+    }
     setState(() => _loading = true);
     try {
-      final body = {
+      final body = <String, dynamic>{
         'title': _title.text.trim(),
         'slug': _slug.text.trim(),
-        'price': _price.text.isEmpty ? "0" : _price.text.trim(),
-        'salePrice': _salePrice.text.isEmpty ? "" : _salePrice.text.trim(),
+        'price': _price.text.isEmpty ? '0' : _price.text.trim(),
+        'salePrice': _salePrice.text.isEmpty ? '' : _salePrice.text.trim(),
+        'realTourAddress': _realTourAddress.text.trim(),
+        'mapLat': _mapLat != null ? _mapLat!.toString() : '',
+        'mapLng': _mapLng != null ? _mapLng!.toString() : '',
         'imageUrl': _imageUrl,
         'imagePublicId': _imagePublicId,
-        'status': 'publish',
+        'status': _status,
+        'availability': _availability,
+        'isFeatured': _isFeatured,
       };
+      if (_locationId != null && _locationId!.isNotEmpty) {
+        final n = int.tryParse(_locationId!);
+        body['locationId'] = n ?? _locationId;
+      }
       if (widget.itemToEdit != null) {
         await ToursApi.update(widget.itemToEdit!['id'], body);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tour updated')));
       } else {
         await ToursApi.create(body);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tour created')));
       }
       if (!mounted) return;
@@ -1725,8 +1836,15 @@ class _AddTourFormState extends State<_AddTourForm> {
       _slug.clear();
       _price.clear();
       _salePrice.clear();
+      _realTourAddress.clear();
       _imageUrl = null;
       _imagePublicId = null;
+      _status = 'publish';
+      _availability = 'always';
+      _isFeatured = false;
+      _mapLat = null;
+      _mapLng = null;
+      _locationId = null;
       widget.onCreated();
     } catch (e) {
       if (!mounted) return;
@@ -1734,8 +1852,8 @@ class _AddTourFormState extends State<_AddTourForm> {
       if (e is ApiException) {
         errorMsg = 'Error ${e.statusCode}: ${e.message}';
         if (e.body is Map<String, dynamic>) {
-          final body = e.body as Map<String, dynamic>;
-          final details = body.entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
+          final errBody = e.body as Map<String, dynamic>;
+          final details = errBody.entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
           if (details.length < 200) {
             errorMsg += ' ($details)';
           }
@@ -1748,31 +1866,261 @@ class _AddTourFormState extends State<_AddTourForm> {
     if (mounted) setState(() => _loading = false);
   }
 
+  Widget _publishSidebar() {
+    return _formCard(
+      'Publish',
+      [
+        RadioListTile<String>(
+          title: const Text('Publish'),
+          value: 'publish',
+          groupValue: _status,
+          onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'publish'),
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        RadioListTile<String>(
+          title: const Text('Draft'),
+          value: 'draft',
+          groupValue: _status,
+          onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'draft'),
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        const SizedBox(height: 8),
+        const Divider(),
+        const SizedBox(height: 4),
+        Text('Availability', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _availability,
+          decoration: const InputDecoration(
+            labelText: 'Availability',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          items: _availabilityOptions
+              .map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value)))
+              .toList(),
+          onChanged: _loading ? null : (v) => setState(() => _availability = v ?? 'always'),
+        ),
+        const SizedBox(height: 12),
+        CheckboxListTile(
+          value: _isFeatured,
+          onChanged: _loading ? null : (v) => setState(() => _isFeatured = v ?? false),
+          title: const Text('Enable featured'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          dense: true,
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF1976D2),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            onPressed: _loading ? null : _submit,
+            icon: _loading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.save_outlined, size: 20),
+            label: Text(widget.itemToEdit != null ? 'Save changes' : 'Add tour'),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    const pageBg = Color(0xFFF0F2F5);
+    final mapInitial = (_mapLat != null && _mapLng != null) ? LatLng(_mapLat!, _mapLng!) : null;
+
+    final locationItems = <DropdownMenuItem<String?>>[
+      const DropdownMenuItem<String?>(value: null, child: Text('-- Please Select --')),
+      ..._locationRows.map((loc) {
+        final id = loc['id']?.toString();
+        final name = loc['name']?.toString() ?? id ?? 'Location';
+        return DropdownMenuItem<String?>(value: id, child: Text(name));
+      }),
+    ];
+
+    final locationDropdown = _locationsLoading
+        ? const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+          )
+        : DropdownButtonFormField<String?>(
+            value: _locationId,
+            decoration: const InputDecoration(
+              labelText: 'Location',
+              border: OutlineInputBorder(),
+            ),
+            items: locationItems,
+            onChanged: _loading ? null : (v) => setState(() => _locationId = v),
+          );
+
+    Widget mainColumn() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()), onChanged: (_) => _generateSlug()),
-          const SizedBox(height: 16),
-          TextField(controller: _slug, decoration: const InputDecoration(labelText: 'Slug', border: OutlineInputBorder())),
-          const SizedBox(height: 16),
-          TextField(controller: _price, decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder()), keyboardType: TextInputType.number),
-          const SizedBox(height: 16),
-          TextField(controller: _salePrice, decoration: const InputDecoration(labelText: 'Sale Price (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
-          const SizedBox(height: 16),
-          const Text('Tour Image', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          ImageUploadWidget(
-            initialImageUrl: _imageUrl,
-            initialImagePublicId: _imagePublicId,
-            onImageSelected: _onImageSelected,
+          _formCard(
+            'Tour content',
+            [
+              TextField(
+                controller: _title,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  hintText: 'Title',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) {
+                  if (widget.itemToEdit == null) _generateSlug();
+                },
+              ),
+            ],
           ),
-          const SizedBox(height: 24),
-          ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(widget.itemToEdit != null ? 'Update Tour' : 'Add Tour')),
+          _formCard(
+            'Pricing',
+            [
+              LayoutBuilder(
+                builder: (context, c) {
+                  final row = c.maxWidth >= 480;
+                  final priceField = TextField(
+                    controller: _price,
+                    decoration: const InputDecoration(
+                      labelText: 'Price',
+                      hintText: 'Tour Price',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  );
+                  final saleField = TextField(
+                    controller: _salePrice,
+                    decoration: const InputDecoration(
+                      labelText: 'Sale Price',
+                      hintText: 'Tour Sale Price',
+                      border: OutlineInputBorder(),
+                      helperText: 'If the regular price is less than the discount, it will show the regular price',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  );
+                  if (row) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: priceField),
+                        const SizedBox(width: 16),
+                        Expanded(child: saleField),
+                      ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      priceField,
+                      const SizedBox(height: 16),
+                      saleField,
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+          _formCard(
+            'Tour locations',
+            [
+              locationDropdown,
+              const SizedBox(height: 16),
+              TextField(
+                controller: _realTourAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Real tour address',
+                  hintText: 'Real tour address',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Tap the map to set the meeting point. Latitude and longitude are saved automatically (no manual entry).',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 12),
+              CarLocationMapPicker(
+                key: ValueKey(
+                  '${widget.itemToEdit?['id'] ?? 'new'}_${mapInitial?.latitude}_${mapInitial?.longitude}',
+                ),
+                initial: mapInitial,
+                height: 260,
+                onPick: (p) => setState(() {
+                  _mapLat = p.latitude;
+                  _mapLng = p.longitude;
+                }),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '© OpenStreetMap contributors',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+          _formCard(
+            'Feature image',
+            [
+              ImageUploadWidget(
+                initialImageUrl: _imageUrl,
+                initialImagePublicId: _imagePublicId,
+                onImageSelected: _onImageSelected,
+              ),
+            ],
+          ),
         ],
+      );
+    }
+
+    return ColoredBox(
+      color: pageBg,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 900;
+          if (wide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 0, 24),
+                    child: mainColumn(),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 8, 24),
+                    child: _publishSidebar(),
+                  ),
+                ),
+              ],
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                mainColumn(),
+                _publishSidebar(),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -1789,16 +2137,19 @@ class _AddCarForm extends StatefulWidget {
 }
 
 class _AddCarFormState extends State<_AddCarForm> {
+  static const _gearOptions = ['Auto', 'Manual', 'CVT'];
+
   final _title = TextEditingController();
   final _slug = TextEditingController();
   final _price = TextEditingController();
   final _salePrice = TextEditingController();
   final _passenger = TextEditingController(text: '4');
-  final _gearShift = TextEditingController(text: 'Auto');
   final _baggage = TextEditingController(text: '2');
   final _door = TextEditingController(text: '4');
-  final _mapLat = TextEditingController();
-  final _mapLng = TextEditingController();
+  String _gearShift = 'Auto';
+  String _status = 'publish';
+  double? _mapLat;
+  double? _mapLng;
   String? _imageUrl;
   String? _imagePublicId;
   bool _loading = false;
@@ -1813,11 +2164,14 @@ class _AddCarFormState extends State<_AddCarForm> {
       _price.text = item['price']?.toString() ?? '';
       _salePrice.text = item['salePrice']?.toString() ?? '';
       _passenger.text = item['passenger']?.toString() ?? '4';
-      _gearShift.text = item['gearShift']?.toString() ?? 'Auto';
+      final g = item['gearShift']?.toString() ?? 'Auto';
+      _gearShift = _gearOptions.contains(g) ? g : 'Auto';
       _baggage.text = item['baggage']?.toString() ?? '2';
       _door.text = item['door']?.toString() ?? '4';
-      _mapLat.text = item['mapLat']?.toString() ?? '';
-      _mapLng.text = item['mapLng']?.toString() ?? '';
+      _mapLat = double.tryParse(item['mapLat']?.toString() ?? '');
+      _mapLng = double.tryParse(item['mapLng']?.toString() ?? '');
+      final st = item['status']?.toString().toLowerCase() ?? 'publish';
+      _status = st == 'draft' ? 'draft' : 'publish';
       _imageUrl = item['imageUrl']?.toString();
       _imagePublicId = item['imagePublicId']?.toString();
     }
@@ -1830,11 +2184,8 @@ class _AddCarFormState extends State<_AddCarForm> {
     _price.dispose();
     _salePrice.dispose();
     _passenger.dispose();
-    _gearShift.dispose();
     _baggage.dispose();
     _door.dispose();
-    _mapLat.dispose();
-    _mapLng.dispose();
     super.dispose();
   }
 
@@ -1852,7 +2203,34 @@ class _AddCarFormState extends State<_AddCarForm> {
     });
   }
 
+  Widget _formCard(String heading, List<Widget> children) {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(heading, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _submit() async {
+    if (_slug.text.trim().isEmpty && _title.text.trim().isNotEmpty) {
+      _generateSlug();
+    }
     setState(() => _loading = true);
     try {
       final body = {
@@ -1860,15 +2238,15 @@ class _AddCarFormState extends State<_AddCarForm> {
         'slug': _slug.text.trim(),
         'price': _price.text.isEmpty ? "0" : _price.text.trim(),
         'salePrice': _salePrice.text.isEmpty ? "" : _salePrice.text.trim(),
-'passenger': int.parse(_passenger.text.isEmpty ? "4" : _passenger.text.trim()),
-        'gearShift': _gearShift.text.isEmpty ? "Auto" : _gearShift.text.trim(),
+        'passenger': int.parse(_passenger.text.isEmpty ? "4" : _passenger.text.trim()),
+        'gearShift': _gearShift,
         'baggage': int.parse(_baggage.text.isEmpty ? "2" : _baggage.text.trim()),
         'door': int.parse(_door.text.isEmpty ? "4" : _door.text.trim()),
-        'mapLat': _mapLat.text.isEmpty ? "" : _mapLat.text.trim(),
-        'mapLng': _mapLng.text.isEmpty ? "" : _mapLng.text.trim(),
+        'mapLat': _mapLat != null ? _mapLat!.toString() : '',
+        'mapLng': _mapLng != null ? _mapLng!.toString() : '',
         'imageUrl': _imageUrl,
         'imagePublicId': _imagePublicId,
-        'status': 'publish',
+        'status': _status,
       };
       if (widget.itemToEdit != null) {
         await CarsApi.update(widget.itemToEdit!['id'], body);
@@ -1881,6 +2259,13 @@ class _AddCarFormState extends State<_AddCarForm> {
       _slug.clear();
       _price.clear();
       _salePrice.clear();
+      _passenger.text = '4';
+      _baggage.text = '2';
+      _door.text = '4';
+      _gearShift = 'Auto';
+      _status = 'publish';
+      _mapLat = null;
+      _mapLng = null;
       _imageUrl = null;
       _imagePublicId = null;
       widget.onCreated();
@@ -1904,43 +2289,302 @@ class _AddCarFormState extends State<_AddCarForm> {
     if (mounted) setState(() => _loading = false);
   }
 
+  Widget _publishSidebar() {
+    return _formCard(
+      'Publish',
+      [
+        RadioListTile<String>(
+          title: const Text('Publish'),
+          value: 'publish',
+          groupValue: _status,
+          onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'publish'),
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        RadioListTile<String>(
+          title: const Text('Draft'),
+          value: 'draft',
+          groupValue: _status,
+          onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'draft'),
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF1976D2),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            onPressed: _loading ? null : _submit,
+            icon: _loading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.save_outlined, size: 20),
+            label: Text(widget.itemToEdit != null ? 'Save changes' : 'Add car'),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    const pageBg = Color(0xFFF0F2F5);
+    final mapInitial = (_mapLat != null && _mapLng != null) ? LatLng(_mapLat!, _mapLng!) : null;
+
+    Widget mainColumn() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()), onChanged: (_) => _generateSlug()),
-          const SizedBox(height: 16),
-          TextField(controller: _slug, decoration: const InputDecoration(labelText: 'Slug', border: OutlineInputBorder())),
-          const SizedBox(height: 16),
-          TextField(controller: _price, decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder()), keyboardType: TextInputType.number),
-          const SizedBox(height: 16),
-          TextField(controller: _salePrice, decoration: const InputDecoration(labelText: 'Sale Price (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
-          const SizedBox(height: 16),
-          TextField(controller: _passenger, decoration: const InputDecoration(labelText: 'Passenger', border: OutlineInputBorder()), keyboardType: TextInputType.number),
-          const SizedBox(height: 16),
-          TextField(controller: _gearShift, decoration: const InputDecoration(labelText: 'Gear Shift', border: OutlineInputBorder())),
-          const SizedBox(height: 16),
-          TextField(controller: _baggage, decoration: const InputDecoration(labelText: 'Baggage', border: OutlineInputBorder()), keyboardType: TextInputType.number),
-          const SizedBox(height: 16),
-          TextField(controller: _door, decoration: const InputDecoration(labelText: 'Door', border: OutlineInputBorder()), keyboardType: TextInputType.number),
-          const SizedBox(height: 16),
-          TextField(controller: _mapLat, decoration: const InputDecoration(labelText: 'Map Latitude (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
-          const SizedBox(height: 16),
-          TextField(controller: _mapLng, decoration: const InputDecoration(labelText: 'Map Longitude (optional)', border: OutlineInputBorder()), keyboardType: TextInputType.number),
-          const SizedBox(height: 16),
-          const Text('Car Image', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          ImageUploadWidget(
-            initialImageUrl: _imageUrl,
-            initialImagePublicId: _imagePublicId,
-            onImageSelected: _onImageSelected,
+          _formCard(
+            'Car content',
+            [
+              TextField(
+                controller: _title,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  hintText: 'Title',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) {
+                  if (widget.itemToEdit == null) _generateSlug();
+                },
+              ),
+            ],
           ),
-          const SizedBox(height: 24),
-          ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(widget.itemToEdit != null ? 'Update Car' : 'Add Car')),
+          _formCard(
+            'Pricing',
+            [
+              LayoutBuilder(
+                builder: (context, c) {
+                  final row = c.maxWidth >= 480;
+                  final priceField = TextField(
+                    controller: _price,
+                    decoration: const InputDecoration(
+                      labelText: 'Price',
+                      hintText: 'Car Price',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  );
+                  final saleField = TextField(
+                    controller: _salePrice,
+                    decoration: const InputDecoration(
+                      labelText: 'Sale Price',
+                      hintText: 'Car Sale Price',
+                      border: OutlineInputBorder(),
+                      helperText: 'If the regular price is less than the discount, it will show the regular price',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  );
+                  if (row) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: priceField),
+                        const SizedBox(width: 16),
+                        Expanded(child: saleField),
+                      ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      priceField,
+                      const SizedBox(height: 16),
+                      saleField,
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+          _formCard(
+            'Extra Info',
+            [
+              LayoutBuilder(
+                builder: (context, c) {
+                  Widget cell(TextEditingController ctrl, String label, String hint) {
+                    return TextField(
+                      controller: ctrl,
+                      decoration: InputDecoration(
+                        labelText: label,
+                        hintText: hint,
+                        border: const OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    );
+                  }
+
+                  final w = c.maxWidth;
+                  if (w >= 720) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: cell(_passenger, 'Passenger', 'Example: 3')),
+                        const SizedBox(width: 12),
+                        Expanded(child: cell(_baggage, 'Baggage', 'Example: 5')),
+                        const SizedBox(width: 12),
+                        Expanded(child: cell(_door, 'Door', 'Example: 4')),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _gearShift,
+                            decoration: const InputDecoration(
+                              labelText: 'Gear Shift',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: _gearOptions
+                                .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                                .toList(),
+                            onChanged: _loading ? null : (v) => setState(() => _gearShift = v ?? 'Auto'),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  if (w >= 400) {
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: cell(_passenger, 'Passenger', 'Example: 3')),
+                            const SizedBox(width: 12),
+                            Expanded(child: cell(_baggage, 'Baggage', 'Example: 5')),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(child: cell(_door, 'Door', 'Example: 4')),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: _gearShift,
+                                decoration: const InputDecoration(
+                                  labelText: 'Gear Shift',
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: _gearOptions
+                                    .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                                    .toList(),
+                                onChanged: _loading ? null : (v) => setState(() => _gearShift = v ?? 'Auto'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      cell(_passenger, 'Passenger', 'Example: 3'),
+                      const SizedBox(height: 12),
+                      cell(_baggage, 'Baggage', 'Example: 5'),
+                      const SizedBox(height: 12),
+                      cell(_door, 'Door', 'Example: 4'),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: _gearShift,
+                        decoration: const InputDecoration(
+                          labelText: 'Gear Shift',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _gearOptions
+                            .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                            .toList(),
+                        onChanged: _loading ? null : (v) => setState(() => _gearShift = v ?? 'Auto'),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+          _formCard(
+            'Locations',
+            [
+              Text(
+                'Tap the map to set latitude and longitude (coordinates are saved automatically).',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 12),
+              CarLocationMapPicker(
+                key: ValueKey(
+                  '${widget.itemToEdit?['id'] ?? 'new'}_${mapInitial?.latitude}_${mapInitial?.longitude}',
+                ),
+                initial: mapInitial,
+                height: 260,
+                onPick: (p) => setState(() {
+                  _mapLat = p.latitude;
+                  _mapLng = p.longitude;
+                }),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '© OpenStreetMap contributors',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+          _formCard(
+            'Feature image',
+            [
+              ImageUploadWidget(
+                initialImageUrl: _imageUrl,
+                initialImagePublicId: _imagePublicId,
+                onImageSelected: _onImageSelected,
+              ),
+            ],
+          ),
         ],
+      );
+    }
+
+    return ColoredBox(
+      color: pageBg,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 900;
+          if (wide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 0, 24),
+                    child: mainColumn(),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 8, 24),
+                    child: _publishSidebar(),
+                  ),
+                ),
+              ],
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                mainColumn(),
+                _publishSidebar(),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

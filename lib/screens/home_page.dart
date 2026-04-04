@@ -62,19 +62,33 @@ class _TravelHomePageState extends State<TravelHomePage> {
   DateTime? _lastWsMessageAt;
   bool _notificationsConnecting = false;
   int _wsReconnectAttempts = 0;
-  DateTimeRange _selectedDateRange = DateTimeRange(
+  DateTimeRange _filterDateRange = DateTimeRange(
     start: DateTime.now().add(const Duration(days: 1)),
     end: DateTime.now().add(const Duration(days: 5)),
   );
 
+  late final TextEditingController _locationQueryController;
+  int _filterGuests = 2;
+  final Set<String> _starFilters = {};
+  final Set<String> _reviewFilters = {};
+  final Set<String> _propertyFilters = {};
+  final Map<String, double> _avgRatingByKey = {};
+
   @override
   void initState() {
     super.initState();
+    _locationQueryController = TextEditingController()
+      ..addListener(_onSearchFiltersChanged);
     _loadData();
+  }
+
+  void _onSearchFiltersChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _locationQueryController.dispose();
     _disconnectNotifications();
     _notificationsPollTimer?.cancel();
     super.dispose();
@@ -105,6 +119,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     });
     await _loadRentals();
     await _syncNotifications();
+    await _refreshAggregateRatings();
   }
 
   Future<void> _loadRentals() async {
@@ -349,6 +364,212 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
   String _ratingsKey(String moduleType, int moduleId) => '$moduleType:$moduleId';
 
+  void _updateAvgRatingFromList(String moduleType, int moduleId, List<dynamic> ratings) {
+    final key = _ratingsKey(moduleType, moduleId);
+    if (ratings.isEmpty) {
+      _avgRatingByKey.remove(key);
+      return;
+    }
+    final sum = ratings.fold<double>(
+      0,
+      (a, r) => a + (double.tryParse((r is Map ? r['stars'] : null)?.toString() ?? '0') ?? 0),
+    );
+    _avgRatingByKey[key] = sum / ratings.length;
+  }
+
+  Future<void> _refreshAggregateRatings() async {
+    try {
+      final all = await RatingsApi.list();
+      if (!mounted) return;
+      final sums = <String, double>{};
+      final counts = <String, int>{};
+      for (final r in all) {
+        if (r is! Map) continue;
+        final mt = r['moduleType']?.toString();
+        final mid = int.tryParse(r['moduleId']?.toString() ?? '');
+        if (mt == null || mid == null) continue;
+        final stars = double.tryParse(r['stars']?.toString() ?? '') ?? 0;
+        final k = _ratingsKey(mt, mid);
+        sums[k] = (sums[k] ?? 0) + stars;
+        counts[k] = (counts[k] ?? 0) + 1;
+      }
+      setState(() {
+        _avgRatingByKey.clear();
+        sums.forEach((k, sum) {
+          final c = counts[k] ?? 1;
+          _avgRatingByKey[k] = sum / c;
+        });
+      });
+    } catch (_) {}
+  }
+
+  double? _itemPrice(Map<String, dynamic> item) {
+    final sale = double.tryParse(item['salePrice']?.toString() ?? '');
+    final reg = double.tryParse(item['price']?.toString() ?? '');
+    if (sale != null && sale > 0) return sale;
+    if (reg != null && reg > 0) return reg;
+    if (sale != null) return sale;
+    return reg;
+  }
+
+  double? _avgRating(String moduleType, int id) => _avgRatingByKey[_ratingsKey(moduleType, id)];
+
+  DateTime? _tryParseDateField(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    final s = v.toString().trim();
+    if (s.isEmpty) return null;
+    try {
+      return DateTime.parse(s);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _passesPrice(Map<String, dynamic> item) {
+    final p = _itemPrice(item);
+    if (p == null) return true;
+    return p >= _priceRange.start && p <= _priceRange.end;
+  }
+
+  bool _passesLocation(Map<String, dynamic> item, {required bool isTour}) {
+    final q = _locationQueryController.text.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    final title = (item['title'] ?? '').toString().toLowerCase();
+    final addr = (item['realTourAddress'] ?? '').toString().toLowerCase();
+    if (title.contains(q) || addr.contains(q)) return true;
+    if (!isTour) return false;
+    final lid = item['locationId']?.toString();
+    if (lid == null) return false;
+    for (final loc in _locations) {
+      if (loc is Map) {
+        if (loc['id']?.toString() == lid) {
+          final name = (loc['name'] ?? '').toString().toLowerCase();
+          if (name.contains(q)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  bool _passesGuests(Map<String, dynamic> item, {required bool isTour}) {
+    if (isTour) return true;
+    final cap = int.tryParse(item['passenger']?.toString() ?? '') ?? 0;
+    if (cap <= 0) return true;
+    return cap >= _filterGuests;
+  }
+
+  bool _passesDateRange(Map<String, dynamic> item) {
+    final from = _tryParseDateField(
+      item['availableFrom'] ?? item['available_from'] ?? item['startDate'] ?? item['start_date'],
+    );
+    final to = _tryParseDateField(
+      item['availableTo'] ?? item['available_to'] ?? item['endDate'] ?? item['end_date'],
+    );
+    if (from == null && to == null) return true;
+    final rs = _filterDateRange.start;
+    final re = _filterDateRange.end;
+    final effFrom = from ?? rs.subtract(const Duration(days: 5000));
+    final effTo = to ?? re.add(const Duration(days: 5000));
+    return !effTo.isBefore(rs) && !effFrom.isAfter(re);
+  }
+
+  bool _passesStarFilters(String moduleType, int id) {
+    if (_starFilters.isEmpty) return true;
+    final avg = _avgRating(moduleType, id);
+    if (avg == null) return false;
+    for (final s in _starFilters) {
+      if (s == '5' && avg >= 4.5) return true;
+      if (s == '4' && avg >= 3.5 && avg < 4.5) return true;
+      if (s == '3' && avg >= 2.5 && avg < 3.5) return true;
+    }
+    return false;
+  }
+
+  bool _passesReviewFilters(String moduleType, int id) {
+    if (_reviewFilters.isEmpty) return true;
+    final avg = _avgRating(moduleType, id);
+    if (avg == null) return false;
+    for (final r in _reviewFilters) {
+      if (r == '9' && avg >= 4.5) return true;
+      if (r == '8' && avg >= 4.0) return true;
+      if (r == '7' && avg >= 3.5) return true;
+    }
+    return false;
+  }
+
+  /// Tours: maps to `availability` (always / fixed / open_hours). Cars: by passenger capacity bands.
+  bool _passesPropertyFilters(Map<String, dynamic> item, {required bool isTour}) {
+    if (_propertyFilters.isEmpty) return true;
+    for (final p in _propertyFilters) {
+      if (isTour) {
+        final a = item['availability']?.toString();
+        if (p == 'Hotels' && a == 'always') return true;
+        if (p == 'Apartments' && a == 'fixed') return true;
+        if (p == 'Hostels' && a == 'open_hours') return true;
+      } else {
+        final pass = int.tryParse(item['passenger']?.toString() ?? '') ?? 0;
+        if (p == 'Apartments' && pass >= 1 && pass <= 4) return true;
+        if (p == 'Hostels' && pass >= 5 && pass <= 7) return true;
+        if (p == 'Hotels' && pass >= 8) return true;
+      }
+    }
+    return false;
+  }
+
+  List<dynamic> get _filteredTours {
+    return _tours.where((raw) {
+      final t = raw as Map<String, dynamic>;
+      final id = t['id'] is int ? t['id'] as int : int.tryParse(t['id']?.toString() ?? '') ?? 0;
+      if (!_passesPrice(t)) return false;
+      if (!_passesLocation(t, isTour: true)) return false;
+      if (!_passesDateRange(t)) return false;
+      if (!_passesStarFilters('tour', id)) return false;
+      if (!_passesReviewFilters('tour', id)) return false;
+      if (!_passesPropertyFilters(t, isTour: true)) return false;
+      return true;
+    }).toList();
+  }
+
+  List<dynamic> get _filteredCars {
+    return _cars.where((raw) {
+      final c = raw as Map<String, dynamic>;
+      final id = c['id'] is int ? c['id'] as int : int.tryParse(c['id']?.toString() ?? '') ?? 0;
+      if (!_passesPrice(c)) return false;
+      if (!_passesLocation(c, isTour: false)) return false;
+      if (!_passesGuests(c, isTour: false)) return false;
+      if (!_passesDateRange(c)) return false;
+      if (!_passesStarFilters('car', id)) return false;
+      if (!_passesReviewFilters('car', id)) return false;
+      if (!_passesPropertyFilters(c, isTour: false)) return false;
+      return true;
+    }).toList();
+  }
+
+  String _formatDateRangeLabel() {
+    final fmt = DateFormat('MMM d, yyyy');
+    return '${fmt.format(_filterDateRange.start)} – ${fmt.format(_filterDateRange.end)}';
+  }
+
+  Future<void> _pickFilterDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+      initialDateRange: _filterDateRange,
+    );
+    if (picked != null && mounted) {
+      setState(() => _filterDateRange = picked);
+    }
+  }
+
+  void _goToSearchTab(int tabIndex) {
+    setState(() {
+      _searchTabIndex = tabIndex;
+      _current = tabIndex == 0 ? _NavItem.tours : _NavItem.cars;
+    });
+  }
+
   Future<List<dynamic>> _loadRatingsFor(String moduleType, int moduleId) async {
     final key = _ratingsKey(moduleType, moduleId);
     if (mounted) {
@@ -362,6 +583,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
         setState(() {
           _ratingsByKey[key] = ratings;
           _ratingsLoadingByKey[key] = false;
+          _updateAvgRatingFromList(moduleType, moduleId, ratings);
         });
       }
       return ratings;
@@ -370,6 +592,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
         setState(() {
           _ratingsByKey[key] = [];
           _ratingsLoadingByKey[key] = false;
+          _updateAvgRatingFromList(moduleType, moduleId, []);
         });
       }
       return [];
@@ -1173,17 +1396,17 @@ SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duratio
         ];
       case _NavItem.tours:
         return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours', items: _tours, isTour: true)),
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours', items: _filteredTours, isTour: true)),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.hotels:
         return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours', items: _tours, isTour: true)),
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours', items: _filteredTours, isTour: true)),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.cars:
         return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for car', itemLabel: 'cars', items: _cars, isTour: false)),
+          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for car', itemLabel: 'cars', items: _filteredCars, isTour: false)),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.news:
@@ -1512,7 +1735,10 @@ await showDialog(
             _NavLink(
               label: 'Tours',
               isActive: _current == _NavItem.tours,
-              onTap: () => setState(() => _current = _NavItem.tours),
+              onTap: () => setState(() {
+                _current = _NavItem.tours;
+                _searchTabIndex = 0;
+              }),
             ),
             // _NavLink(
             //   label: 'Hotel',
@@ -1522,7 +1748,10 @@ await showDialog(
             _NavLink(
               label: 'Cars',
               isActive: _current == _NavItem.cars,
-              onTap: () => setState(() => _current = _NavItem.cars),
+              onTap: () => setState(() {
+                _current = _NavItem.cars;
+                _searchTabIndex = 1;
+              }),
             ),
             _NavLink(
               label: 'News',
@@ -1597,6 +1826,54 @@ await showDialog(
   }
 
   Widget _buildSearchWidget() {
+    Widget dateRangeField({double? width}) {
+      return SizedBox(
+        width: width,
+        child: InkWell(
+          onTap: _pickFilterDateRange,
+          borderRadius: BorderRadius.circular(8),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              hintText: 'Check-in – Check-out',
+              suffixIcon: const Icon(Icons.calendar_today, size: 18),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            ),
+            child: Text(
+              _formatDateRangeLabel(),
+              style: TextStyle(color: Colors.grey[800], fontSize: 14),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget guestsField({double? width}) {
+      return SizedBox(
+        width: width,
+        child: DropdownButtonFormField<int>(
+          value: _filterGuests.clamp(1, 8),
+          decoration: InputDecoration(
+            hintText: 'Guests',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          ),
+          items: List.generate(
+            8,
+            (i) {
+              final n = i + 1;
+              return DropdownMenuItem(value: n, child: Text('$n Guest${n == 1 ? '' : 's'}'));
+            },
+          ),
+          onChanged: (v) {
+            if (v != null) setState(() => _filterGuests = v);
+          },
+        ),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 900;
@@ -1641,6 +1918,7 @@ await showDialog(
                   children: [
                     Expanded(
                       child: TextField(
+                        controller: _locationQueryController,
                         decoration: InputDecoration(
                           hintText: 'Where are you going?',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -1649,48 +1927,12 @@ await showDialog(
                       ),
                     ),
                     const SizedBox(width: 12),
-                    SizedBox(
-                      width: 160,
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText: 'Check In',
-                          suffixIcon: const Icon(Icons.calendar_today, size: 18),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        ),
-                      ),
-                    ),
+                    Expanded(flex: 2, child: dateRangeField()),
                     const SizedBox(width: 12),
-                    SizedBox(
-                      width: 160,
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText: 'Check Out',
-                          suffixIcon: const Icon(Icons.calendar_today, size: 18),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 120,
-                      child: DropdownButtonFormField<String>(
-                        value: '2',
-                        decoration: InputDecoration(
-                          hintText: 'Guest',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: '2', child: Text('2 Guest')),
-                        ],
-                        onChanged: (_) {},
-                      ),
-                    ),
+                    guestsField(width: 140),
                     const SizedBox(width: 12),
                     ElevatedButton.icon(
-                      onPressed: () {},
+                      onPressed: () => _goToSearchTab(_searchTabIndex),
                       icon: const Icon(Icons.search, size: 20),
                       label: const Text('Search'),
                       style: ElevatedButton.styleFrom(
@@ -1704,8 +1946,10 @@ await showDialog(
                 )
               else
                 Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TextField(
+                      controller: _locationQueryController,
                       decoration: InputDecoration(
                         hintText: 'Where are you going?',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -1713,51 +1957,14 @@ await showDialog(
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            decoration: InputDecoration(
-                              hintText: 'Check In',
-                              suffixIcon: const Icon(Icons.calendar_today, size: 18),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            decoration: InputDecoration(
-                              hintText: 'Check Out',
-                              suffixIcon: const Icon(Icons.calendar_today, size: 18),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    dateRangeField(),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: '2',
-                            decoration: InputDecoration(
-                              hintText: 'Guest',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                            ),
-                            items: const [
-                              DropdownMenuItem(value: '2', child: Text('2 Guest')),
-                            ],
-                            onChanged: (_) {},
-                          ),
-                        ),
+                        Expanded(child: guestsField()),
                         const SizedBox(width: 12),
                         ElevatedButton.icon(
-                          onPressed: () {},
+                          onPressed: () => _goToSearchTab(_searchTabIndex),
                           icon: const Icon(Icons.search, size: 20),
                           label: const Text('Search'),
                           style: ElevatedButton.styleFrom(
@@ -2127,77 +2334,87 @@ await showDialog(
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth > 900;
-              final fields = [
-                Expanded(
-                  flex: 3,
-                  child: TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Location',
-                      hintText: 'Where are you going?',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
+              final locationField = TextField(
+                controller: _locationQueryController,
+                decoration: InputDecoration(
+                  labelText: 'Location',
+                  hintText: 'Where are you going?',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+              );
+              final dateField = InkWell(
+                onTap: _pickFilterDateRange,
+                borderRadius: BorderRadius.circular(4),
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Check-in – Check-out',
+                    suffixIcon: const Icon(Icons.calendar_today, size: 18),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  ),
+                  child: Text(
+                    _formatDateRangeLabel(),
+                    style: TextStyle(color: Colors.grey[800], fontSize: 14),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Check-in – Check-out',
-                      hintText: 'DD/MM/YYYY – DD/MM/YYYY',
-                      suffixIcon: const Icon(Icons.calendar_today, size: 18),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
+              );
+              final guestsField = DropdownButtonFormField<int>(
+                value: _filterGuests.clamp(1, 8),
+                decoration: InputDecoration(
+                  labelText: 'Guests',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: DropdownButtonFormField<String>(
-                    value: '1 Adult · 0 Child',
-                    decoration: InputDecoration(
-                      labelText: 'Guests',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: '1 Adult · 0 Child', child: Text('1 Adult · 0 Child')),
-                      DropdownMenuItem(value: '2 Adults · 0 Child', child: Text('2 Adults · 0 Child')),
-                    ],
-                    onChanged: (_) {},
-                  ),
+                items: List.generate(
+                  8,
+                  (i) {
+                    final n = i + 1;
+                    return DropdownMenuItem(value: n, child: Text('$n Guest${n == 1 ? '' : 's'}'));
+                  },
                 ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _primaryBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                    ),
-                    child: const Text('Search'),
+                onChanged: (v) {
+                  if (v != null) setState(() => _filterGuests = v);
+                },
+              );
+              final searchBtn = SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => setState(() {}),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primaryBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
                   ),
+                  child: const Text('Search'),
                 ),
-              ];
+              );
 
               if (isWide) {
-                return Row(children: fields);
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(flex: 3, child: locationField),
+                    const SizedBox(width: 12),
+                    Expanded(flex: 2, child: dateField),
+                    const SizedBox(width: 12),
+                    Expanded(flex: 2, child: guestsField),
+                    const SizedBox(width: 12),
+                    searchBtn,
+                  ],
+                );
               }
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  fields[0],
+                  locationField,
                   const SizedBox(height: 12),
-                  fields[2],
+                  dateField,
                   const SizedBox(height: 12),
-                  fields[4],
+                  guestsField,
                   const SizedBox(height: 12),
-                  Align(alignment: Alignment.centerRight, child: fields[6]),
+                  Align(alignment: Alignment.centerRight, child: searchBtn),
                 ],
               );
             },
@@ -2209,7 +2426,7 @@ await showDialog(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(width: 260, child: _buildHotelFilterCard()),
+              SizedBox(width: 260, child: _buildHotelFilterCard(isTour: isTour)),
               const SizedBox(width: 24),
               Expanded(child: _buildResultList(itemLabel: itemLabel, items: items, isTour: isTour)),
             ],
@@ -2219,7 +2436,16 @@ await showDialog(
     );
   }
 
-  Widget _buildHotelFilterCard() {
+  Widget _filterCheckboxRow(String label, bool value, ValueChanged<bool?> onChanged) {
+    return Row(
+      children: [
+        Checkbox(value: value, onChanged: onChanged, activeColor: _primaryBlue),
+        Flexible(child: Text(label, style: const TextStyle(fontSize: 13))),
+      ],
+    );
+  }
+
+  Widget _buildHotelFilterCard({required bool isTour}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -2237,10 +2463,12 @@ await showDialog(
           const Text('Filter Price', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           RangeSlider(
-            values: _priceRange,
+            values: RangeValues(
+              _priceRange.start.clamp(0, 2000),
+              _priceRange.end.clamp(0, 2000),
+            ),
             min: 0,
-            max: 500,
-            divisions: 10,
+            max: 2000,
             labels: RangeLabels('\$${_priceRange.start.round()}', '\$${_priceRange.end.round()}'),
             activeColor: _primaryBlue,
             onChanged: (values) {
@@ -2250,34 +2478,103 @@ await showDialog(
           const SizedBox(height: 4),
           Text('Price: \$${_priceRange.start.round()} - \$${_priceRange.end.round()}', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
           const Divider(height: 32),
-          const Text('Hotel Star', style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text('Star level', style: TextStyle(fontWeight: FontWeight.w600)),
+          Text('From average review (1–5)', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
           const SizedBox(height: 8),
-          _staticCheckbox('5 star'),
-          _staticCheckbox('4 star'),
-          _staticCheckbox('3 star'),
+          _filterCheckboxRow('5 star', _starFilters.contains('5'), (v) {
+            setState(() {
+              if (v == true) {
+                _starFilters.add('5');
+              } else {
+                _starFilters.remove('5');
+              }
+            });
+          }),
+          _filterCheckboxRow('4 star', _starFilters.contains('4'), (v) {
+            setState(() {
+              if (v == true) {
+                _starFilters.add('4');
+              } else {
+                _starFilters.remove('4');
+              }
+            });
+          }),
+          _filterCheckboxRow('3 star', _starFilters.contains('3'), (v) {
+            setState(() {
+              if (v == true) {
+                _starFilters.add('3');
+              } else {
+                _starFilters.remove('3');
+              }
+            });
+          }),
           const Divider(height: 32),
           const Text('Review Score', style: TextStyle(fontWeight: FontWeight.w600)),
+          Text('Match typical 10-point bands (mapped from 5★ reviews)', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
           const SizedBox(height: 8),
-          _staticCheckbox('Wonderful 9+'),
-          _staticCheckbox('Very good 8+'),
-          _staticCheckbox('Good 7+'),
+          _filterCheckboxRow('Wonderful 9+', _reviewFilters.contains('9'), (v) {
+            setState(() {
+              if (v == true) {
+                _reviewFilters.add('9');
+              } else {
+                _reviewFilters.remove('9');
+              }
+            });
+          }),
+          _filterCheckboxRow('Very good 8+', _reviewFilters.contains('8'), (v) {
+            setState(() {
+              if (v == true) {
+                _reviewFilters.add('8');
+              } else {
+                _reviewFilters.remove('8');
+              }
+            });
+          }),
+          _filterCheckboxRow('Good 7+', _reviewFilters.contains('7'), (v) {
+            setState(() {
+              if (v == true) {
+                _reviewFilters.add('7');
+              } else {
+                _reviewFilters.remove('7');
+              }
+            });
+          }),
           const Divider(height: 32),
           const Text('Property type', style: TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            isTour ? 'Tours: fixed dates, open hours, or always on' : 'Cars: small, medium, or large capacity',
+            style: TextStyle(color: Colors.grey[600], fontSize: 11),
+          ),
           const SizedBox(height: 8),
-          _staticCheckbox('Apartments'),
-          _staticCheckbox('Hostels'),
-          _staticCheckbox('Hotels'),
+          _filterCheckboxRow('Apartments', _propertyFilters.contains('Apartments'), (v) {
+            setState(() {
+              if (v == true) {
+                _propertyFilters.add('Apartments');
+              } else {
+                _propertyFilters.remove('Apartments');
+              }
+            });
+          }),
+          _filterCheckboxRow('Hostels', _propertyFilters.contains('Hostels'), (v) {
+            setState(() {
+              if (v == true) {
+                _propertyFilters.add('Hostels');
+              } else {
+                _propertyFilters.remove('Hostels');
+              }
+            });
+          }),
+          _filterCheckboxRow('Hotels', _propertyFilters.contains('Hotels'), (v) {
+            setState(() {
+              if (v == true) {
+                _propertyFilters.add('Hotels');
+              } else {
+                _propertyFilters.remove('Hotels');
+              }
+            });
+          }),
         ],
       ),
-    );
-  }
-
-  Widget _staticCheckbox(String label) {
-    return Row(
-      children: [
-        Checkbox(value: false, onChanged: null),
-        Flexible(child: Text(label, style: const TextStyle(fontSize: 13))),
-      ],
     );
   }
 

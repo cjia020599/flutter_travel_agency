@@ -423,7 +423,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       case AdminSection.carsAll:
         return 'All Cars';
       case AdminSection.carsAdd:
-        return 'Add Car';
+        return 'Add new car';
       case AdminSection.chatbot:
         return 'Chatbot Q&A';
       case AdminSection.reports:
@@ -642,7 +642,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
             ],
             _sideItem(
               Icons.directions_car_outlined,
-              'Cars',
+              'Car Rental',
               () => setState(() => _adminCarsExpanded = !_adminCarsExpanded),
               isActive: _adminCarsExpanded,
             ),
@@ -656,7 +656,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
               ),
               _sideItem(
                 Icons.add_box_outlined,
-                'Add Car',
+                'Add new car',
                 () => _openAdminSection(AdminSection.carsAdd),
                 isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.carsAdd,
                 isSubItem: true,
