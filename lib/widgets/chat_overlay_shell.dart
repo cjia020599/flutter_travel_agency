@@ -18,6 +18,7 @@ class _ChatOverlayShellState extends State<ChatOverlayShell> with SingleTickerPr
   final List<_ChatMessage> _chatMessages = [];
   final TextEditingController _chatInputController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
+  final ChatbotContext _chatContext = ChatbotContext();
   late final AnimationController _chatController;
   late final Animation<double> _chatCurve;
 
@@ -93,7 +94,7 @@ class _ChatOverlayShellState extends State<ChatOverlayShell> with SingleTickerPr
     _scrollChatToEnd();
 
     try {
-      final response = await ChatbotApi.ask(question);
+      final response = await ChatbotApi.ask(question, context: _chatContext);
       final answer = response.answer.trim().isEmpty ? 'I could not find an answer for that yet.' : response.answer;
       if (!mounted) return;
       setState(() {
