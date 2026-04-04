@@ -56,6 +56,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
   bool _notificationsLoading = false;
   WebSocketChannel? _notificationsChannel;
   StreamSubscription? _notificationsSub;
+  Timer? _notificationsPollTimer;
+  DateTime? _lastWsMessageAt;
+  bool _notificationsConnecting = false;
   int _wsReconnectAttempts = 0;
   DateTimeRange _selectedDateRange = DateTimeRange(
     start: DateTime.now().add(const Duration(days: 1)),
@@ -71,6 +74,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
   @override
   void dispose() {
     _disconnectNotifications();
+    _notificationsPollTimer?.cancel();
     super.dispose();
   }
 
@@ -113,6 +117,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
   Future<void> _syncNotifications() async {
     if (!_isLoggedIn) {
       _disconnectNotifications();
+      _notificationsPollTimer?.cancel();
       if (mounted) {
         setState(() {
           _notifications = [];
@@ -123,6 +128,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     }
 
     await _fetchNotifications();
+    _startNotificationsPolling();
     await _connectNotifications();
   }
 
@@ -149,21 +155,53 @@ class _TravelHomePageState extends State<TravelHomePage> {
     }
   }
 
-  Future<void> _connectNotifications() async {
-    if (_notificationsChannel != null) return;
-    final token = await ApiClient.instance.getToken();
-    if (token == null || token.isEmpty) return;
+  void _startNotificationsPolling() {
+    _notificationsPollTimer?.cancel();
+    if (!_isLoggedIn || !mounted) return;
+    _notificationsPollTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
+      if (!mounted || !_isLoggedIn) return;
+      // If WS is quiet, poll to keep UI fresh.
+      final lastWs = _lastWsMessageAt;
+      final tooQuiet = lastWs == null || DateTime.now().difference(lastWs) > const Duration(seconds: 30);
+      if (tooQuiet) {
+        await _fetchNotifications();
+      }
+    });
+  }
 
-    final wsBase = baseUrl.startsWith('https://')
-        ? baseUrl.replaceFirst('https://', 'wss://')
-        : baseUrl.replaceFirst('http://', 'ws://');
-    final wsUri = Uri.parse('$wsBase/ws/notifications').replace(
-      queryParameters: {'token': token},
-    );
+  Future<void> _connectNotifications() async {
+    if (_notificationsChannel != null || _notificationsConnecting) return;
+    _notificationsConnecting = true;
+
+    final token = await ApiClient.instance.getToken();
+    if (token == null || token.isEmpty) {
+      _notificationsConnecting = false;
+      return;
+    }
+
+    final baseUri = Uri.parse(baseUrl);
+    final wsScheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
+    final wsUri = baseUri.hasPort
+        ? Uri(
+            scheme: wsScheme,
+            userInfo: baseUri.userInfo,
+            host: baseUri.host,
+            port: baseUri.port,
+            path: '/ws/notifications',
+            queryParameters: {'token': token},
+          )
+        : Uri(
+            scheme: wsScheme,
+            userInfo: baseUri.userInfo,
+            host: baseUri.host,
+            path: '/ws/notifications',
+            queryParameters: {'token': token},
+          );
 
     _notificationsChannel = WebSocketChannel.connect(wsUri);
     _notificationsSub = _notificationsChannel!.stream.listen(
       (message) {
+        _lastWsMessageAt = DateTime.now();
         try {
           final data = jsonDecode(message.toString());
           if (data is Map<String, dynamic>) {
@@ -176,6 +214,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
         }
       },
       onError: (_) {
+        _disconnectNotifications();
         _scheduleNotificationsReconnect();
       },
       onDone: () {
@@ -184,6 +223,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
       },
     );
     _wsReconnectAttempts = 0;
+    _notificationsConnecting = false;
   }
 
   void _disconnectNotifications() {
@@ -2401,3 +2441,4 @@ class _NavLink extends StatelessWidget {
     );
   }
 }
+
