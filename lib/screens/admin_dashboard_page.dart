@@ -37,13 +37,24 @@ enum _ChatbotFilter {
 }
 
 class AdminDashboardPage extends StatefulWidget {
-  const AdminDashboardPage({super.key});
+  const AdminDashboardPage({
+    super.key,
+    this.showSidebar = true,
+    this.showHeader = true,
+    this.showBackButton = true,
+    this.initialSection,
+  });
+
+  final bool showSidebar;
+  final bool showHeader;
+  final bool showBackButton;
+  final AdminSection? initialSection;
 
   @override
-  State<AdminDashboardPage> createState() => _AdminDashboardPageState();
+  State<AdminDashboardPage> createState() => AdminDashboardPageState();
 }
 
-class _AdminDashboardPageState extends State<AdminDashboardPage> {
+class AdminDashboardPageState extends State<AdminDashboardPage> {
   AdminSection _current = AdminSection.dashboard;
   bool _toursExpanded = true;
   bool _carsExpanded = false;
@@ -67,6 +78,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialSection != null) {
+      _current = widget.initialSection!;
+      _expandForSection(_current);
+    }
     _init();
   }
 
@@ -110,14 +125,44 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final body = widget.showSidebar
+        ? Row(
+            children: [
+              _buildSidebar(),
+              Expanded(child: _buildContent()),
+            ],
+          )
+        : _buildContent();
     return Scaffold(
-      body: Row(
-        children: [
-          _buildSidebar(),
-          Expanded(child: _buildContent()),
-        ],
-      ),
+      body: body,
     );
+  }
+
+  void setSection(AdminSection section) {
+    setState(() {
+      _current = section;
+      _expandForSection(section);
+    });
+    _loadForSection(section);
+  }
+
+  void _expandForSection(AdminSection section) {
+    if (section == AdminSection.toursAll || section == AdminSection.toursAdd) {
+      _toursExpanded = true;
+    }
+    if (section == AdminSection.carsAll || section == AdminSection.carsAdd) {
+      _carsExpanded = true;
+    }
+  }
+
+  void _loadForSection(AdminSection section) {
+    if (section == AdminSection.users) {
+      _loadUsers();
+    } else if (section == AdminSection.reports) {
+      _loadReports();
+    } else if (section == AdminSection.chatbot) {
+      _loadChatQuestions();
+    }
   }
 
   Widget _buildSidebar() {
@@ -320,7 +365,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildHeader(),
+        if (widget.showHeader) _buildHeader(),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
@@ -342,10 +387,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+          if (widget.showBackButton)
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).pop(),
+            )
+          else
+            const SizedBox(width: 40),
           const SizedBox(width: 8),
           Text(
             _sectionTitle(),

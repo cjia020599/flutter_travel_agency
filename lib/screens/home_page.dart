@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../api/api_client.dart';
 import '../api/tours_api.dart';
@@ -46,6 +47,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
   bool _isLoggedIn = false;
   bool _isAdmin = false;
+  String? _userDisplayName;
   List<dynamic> _tours = [];
   List<dynamic> _cars = [];
   List<dynamic> _locations = [];
@@ -80,6 +82,14 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
   Future<void> _loadData() async {
     final loggedIn = await ApiClient.instance.isLoggedIn;
+    Map<String, dynamic>? profile;
+    if (loggedIn) {
+      try {
+        profile = await UserApi.getProfile();
+      } catch (_) {
+        profile = null;
+      }
+    }
     final isAdmin = await UserApi.isAdmin();
     final tours = await ToursApi.list();
     final cars = await CarsApi.list();
@@ -91,6 +101,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
       _tours = tours is List ? tours : [];
       _cars = cars is List ? cars : [];
       _locations = locations is List ? locations : [];
+      _userDisplayName = _displayNameFromProfile(profile);
     });
     await _loadRentals();
     await _syncNotifications();
@@ -113,6 +124,17 @@ class _TravelHomePageState extends State<TravelHomePage> {
   }
 
   int get _unreadNotificationsCount => _notifications.where((n) => !n.isRead).length;
+
+  String _displayNameFromProfile(Map<String, dynamic>? profile) {
+    final raw = profile?['firstName'] ??
+        profile?['name'] ??
+        profile?['userName'] ??
+        profile?['username'] ??
+        profile?['email'];
+    final value = raw?.toString().trim();
+    if (value == null || value.isEmpty) return 'User';
+    return value;
+  }
 
   Future<void> _syncNotifications() async {
     if (!_isLoggedIn) {
@@ -277,67 +299,51 @@ class _TravelHomePageState extends State<TravelHomePage> {
       return;
     }
 
-    await showDialog(
+    await showGeneralDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.notifications),
-            const SizedBox(width: 8),
-            const Text('Notifications'),
-            const Spacer(),
-            if (_notificationsLoading)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-          ],
-        ),
-        content: SizedBox(
-          width: 520,
-          height: 480,
-          child: _notifications.isEmpty
-              ? Center(child: Text(_notificationsLoading ? 'Loading...' : 'No notifications yet.'))
-              : ListView.separated(
-                  itemCount: _notifications.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final n = _notifications[index];
-                    final time = DateFormat('MMM dd, yyyy  HH:mm').format(n.createdAt.toLocal());
-                    return Material(
-                      color: n.isRead ? Colors.transparent : const Color(0xFFFFF7ED),
-                      child: ListTile(
-                        leading: Icon(n.isRead ? Icons.notifications_none : Icons.notifications_active, color: _navBlue),
-                        title: Text(n.title, style: TextStyle(fontWeight: n.isRead ? FontWeight.w500 : FontWeight.w700)),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            Text(n.message),
-                            const SizedBox(height: 6),
-                            Text(time, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                          ],
-                        ),
-                        trailing: n.isRead
-                            ? null
-                            : TextButton(
-                                onPressed: () => _markNotificationRead(n),
-                                child: const Text('Mark read'),
-                              ),
-                        onTap: () => _markNotificationRead(n),
-                      ),
-                    );
-                  },
+      barrierLabel: 'Notifications',
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.08),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        final size = MediaQuery.of(context).size;
+        final panelWidth = size.width < 520 ? size.width - 32 : 360.0;
+        final panelHeight = size.height < 720 ? size.height * 0.55 : 480.0;
+        final rightOffset = size.width < 520 ? 16.0 : 48.0;
+        const topOffset = 56.0;
+
+        return SafeArea(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(color: Colors.transparent),
                 ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+              ),
+              Positioned(
+                top: topOffset,
+                right: rightOffset,
+                child: _buildNotificationsPanel(
+                  width: panelWidth,
+                  height: panelHeight,
+                  onClose: () => Navigator.pop(context),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.97, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
     );
   }
 
@@ -1256,36 +1262,24 @@ SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duratio
         color: _topBarGrey,
         padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 10),
         child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 800;
+          builder: (context, _) {
             return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.phone, size: 16, color: Colors.grey[300]),
-                    const SizedBox(width: 8),
-                    Text('+1 (800) 283 0000', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
-                    const SizedBox(width: 24),
-                    Icon(Icons.email_outlined, size: 16, color: Colors.grey[300]),
-                    const SizedBox(width: 8),
-                    Text('info@domain.com', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
-                  ],
-                ),
-                Row(
-                  children: [
-                    if (_isAdmin)
-                      TextButton(
-                        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminDashboardPage())),
-                        child: Text('Admin', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
-                      ),
                     if (_isLoggedIn) ...[
+                      _buildNotificationBell(),
+                      const SizedBox(width: 6),
                       TextButton(
                         onPressed: () async {
                           await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UserProfilePage()));
                           _loadData();
                         },
-                        child: Text('My Profile', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                        child: Text(
+                          'Hi ${_userDisplayName ?? 'User'}',
+                          style: TextStyle(color: Colors.grey[300], fontSize: 13),
+                        ),
                       ),
                       TextButton(
                         onPressed: () async {
@@ -1386,6 +1380,121 @@ await showDialog(
     );
   }
 
+  Widget _buildNotificationsPanel({
+    required double width,
+    required double height,
+    required VoidCallback onClose,
+  }) {
+    const panelRadius = 16.0;
+    return Material(
+      color: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: width, maxHeight: height),
+        child: Material(
+          elevation: 16,
+          borderRadius: BorderRadius.circular(panelRadius),
+          color: _navBlue,
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: const BoxDecoration(color: _navBlue),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.notifications, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Notifications',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        if (_notificationsLoading)
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                          ),
+                        IconButton(
+                          onPressed: onClose,
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          splashRadius: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    top: -6,
+                    right: 18,
+                    child: Transform.rotate(
+                      angle: math.pi / 4,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: const BoxDecoration(color: _navBlue),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(panelRadius)),
+                  child: Container(
+                    color: const Color(0xFFF8FAFC),
+                    child: _notifications.isEmpty
+                        ? Center(child: Text(_notificationsLoading ? 'Loading...' : 'No notifications yet.'))
+                        : ListView.separated(
+                            itemCount: _notifications.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final n = _notifications[index];
+                              final time = DateFormat('MMM dd, yyyy  HH:mm').format(n.createdAt.toLocal());
+                              return Material(
+                                color: n.isRead ? Colors.transparent : const Color(0xFFFFF7ED),
+                                child: ListTile(
+                                  leading: Icon(
+                                    n.isRead ? Icons.notifications_none : Icons.notifications_active,
+                                    color: _navBlue,
+                                  ),
+                                  title: Text(
+                                    n.title,
+                                    style: TextStyle(fontWeight: n.isRead ? FontWeight.w500 : FontWeight.w700),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const SizedBox(height: 4),
+                                      Text(n.message),
+                                      const SizedBox(height: 6),
+                                      Text(time, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                                    ],
+                                  ),
+                                  trailing: n.isRead
+                                      ? null
+                                      : TextButton(
+                                          onPressed: () => _markNotificationRead(n),
+                                          child: const Text('Mark read'),
+                                        ),
+                                  onTap: () => _markNotificationRead(n),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNavBar() {
     return SliverToBoxAdapter(
       child: Container(
@@ -1426,7 +1535,6 @@ await showDialog(
               onTap: () => setState(() => _current = _NavItem.contact),
             ),
             const Spacer(),
-            if (_isLoggedIn) _buildNotificationBell(),
             // IconButton(icon: const Icon(Icons.search, color: Colors.white), onPressed: () {}),
           ],
         ),

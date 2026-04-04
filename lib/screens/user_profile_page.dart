@@ -15,6 +15,8 @@ const _navBlue = Color(0xFF1E3A5F);
 const _primaryBlue = Color(0xFF2563EB);
 const _sidebarBg = Color(0xFF1E3A5F);
 
+enum _ProfileSection { profile, admin }
+
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
 
@@ -23,6 +25,7 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
+  final GlobalKey<AdminDashboardPageState> _adminKey = GlobalKey<AdminDashboardPageState>();
   Map<String, dynamic>? _profile;
   bool _loading = true;
   bool _isAdmin = false;
@@ -44,6 +47,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String? _country;
   late List<CarRental> _rentals = [];
   late List<TourBooking> _tourBookings = [];
+  _ProfileSection _activeSection = _ProfileSection.profile;
+  AdminSection _adminSection = AdminSection.users;
+  bool _adminToursExpanded = true;
+  bool _adminCarsExpanded = false;
 
   @override
   void initState() {
@@ -108,9 +115,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
     try {
       final results = await Future.wait([UserApi.getProfile(), UserApi.isAdmin()]);
       if (!mounted) return;
-      _profile = results[0] as Map<String, dynamic>;
+      final rawProfile = results[0] as Map<String, dynamic>;
+      final resolvedProfile = _coerceProfile(rawProfile) ?? rawProfile;
+      if (resolvedProfile.isNotEmpty && _looksLikeProfile(resolvedProfile)) {
+        _profile = resolvedProfile;
+        _fillFromProfile(resolvedProfile);
+      }
       _isAdmin = results[1] as bool;
-      _fillFromProfile(_profile!);
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
         await AuthApi.logout();
@@ -132,22 +143,37 @@ class _UserProfilePageState extends State<UserProfilePage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _error = null);
     try {
-      await UserApi.updateProfile({
+      final payload = {
         'businessName': _businessName.text.trim(),
         'userName': _username.text.trim(),
+        'username': _username.text.trim(),
         'email': _email.text.trim(),
         'firstName': _firstName.text.trim(),
         'lastName': _lastName.text.trim(),
         'phoneNumber': _phone.text.trim(),
+        'phone': _phone.text.trim(),
         'birthday': _birthday.text.trim(),
         'bio': _about.text.trim(),
+        'about': _about.text.trim(),
+        'aboutYourself': _about.text.trim(),
         'address': _address1.text.trim(),
+        'address1': _address1.text.trim(),
         'address2': _address2.text.trim(),
         'city': _city.text.trim(),
         'state': _state.text.trim(),
         'country': _country ?? '',
         'zipCode': _zipCode.text.trim(),
-      });
+        'zip': _zipCode.text.trim(),
+      };
+      final updated = await UserApi.updateProfile(payload);
+      if (!mounted) return;
+      final resolved = _coerceProfile(updated);
+      if (resolved != null && resolved.isNotEmpty && _looksLikeProfile(resolved)) {
+        _profile = resolved;
+        _fillFromProfile(resolved);
+      } else {
+        await _loadProfile();
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated')));
     } on ApiException catch (e) {
@@ -155,6 +181,22 @@ class _UserProfilePageState extends State<UserProfilePage> {
     } catch (e) {
       setState(() => _error = e.toString());
     }
+  }
+
+  Map<String, dynamic>? _coerceProfile(Map<String, dynamic> raw) {
+    if (raw.isEmpty) return null;
+    final data = raw['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return data.cast<String, dynamic>();
+    return raw;
+  }
+
+  bool _looksLikeProfile(Map<String, dynamic> profile) {
+    return profile.containsKey('email') ||
+        profile.containsKey('firstName') ||
+        profile.containsKey('userName') ||
+        profile.containsKey('username') ||
+        profile.containsKey('businessName');
   }
 
   Future<void> _loadBookings() async {
@@ -204,7 +246,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}'),
+                        Text(
+                          '${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}',
+                        ),
                         Text('Car Rental', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                       ],
                     ),
@@ -262,7 +306,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}'),
+                        Text(
+                          '${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}',
+                        ),
                         Text('Tour Booking', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                       ],
                     ),
@@ -327,6 +373,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
+  void _openAdminSection(AdminSection section) {
+    setState(() {
+      _activeSection = _ProfileSection.admin;
+      _adminSection = section;
+    });
+    _adminKey.currentState?.setSection(section);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -334,105 +388,162 @@ class _UserProfilePageState extends State<UserProfilePage> {
         children: [
           _buildSidebar(),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('Settings', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _navBlue)),
-                              Row(
-                                children: [
-                                  if (_isAdmin)
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 12),
-                                      child: ElevatedButton.icon(
-                                        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminDashboardPage())),
-                                        icon: const Icon(Icons.admin_panel_settings),
-                                        label: const Text('Admin Dashboard'),
-                                        style: ElevatedButton.styleFrom(backgroundColor: _sidebarBg, foregroundColor: Colors.white),
-                                      ),
-                                    ),
-                                  TextButton.icon(
-                                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TravelHomePage())),
-                                    icon: const Icon(Icons.home),
-                                    label: const Text('Back to Home'),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          if (_error != null) ...[
-                            const SizedBox(height: 16),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                              child: Text(_error!, style: TextStyle(color: Colors.red.shade800)),
-                            ),
-                          ],
-                          const SizedBox(height: 24),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: _section(
-                                  'Personal Information',
-                                  [
-                                    _field(_businessName, 'Business name', Icons.business),
-                                    _field(_username, 'User name *', Icons.person),
-                                    _field(_email, 'E-mail', Icons.email),
-                                    _field(_firstName, 'First name', Icons.person_outline),
-                                    _field(_lastName, 'Last name', Icons.person_outline),
-                                    _field(_phone, 'Phone Number', Icons.phone),
-                                    _field(_birthday, 'Birthday', Icons.calendar_today),
-                                    TextFormField(
-                                      controller: _about,
-                                      maxLines: 4,
-                                      decoration: const InputDecoration(labelText: 'About Yourself', border: OutlineInputBorder(), alignLabelWithHint: true),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-                              Expanded(
-                                child: _section(
-                                  'Location Information',
-                                  [
-                                    _field(_address1, 'Address Line 1', Icons.location_on),
-                                    _field(_address2, 'Address Line 2', Icons.location_on),
-                                    _field(_city, 'City', Icons.location_city),
-                                    _field(_state, 'State', Icons.flag),
-                                    DropdownButtonFormField<String>(
-                                      value: _country,
-                                      decoration: const InputDecoration(labelText: 'Country', border: OutlineInputBorder()),
-                                      items: ['Philippines', 'United States', 'United Kingdom', 'Japan', 'France'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                                      onChanged: (v) => setState(() => _country = v),
-                                    ),
-                                    _field(_zipCode, 'Zip Code', Icons.pin_drop),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: _save,
-                            style: ElevatedButton.styleFrom(backgroundColor: _primaryBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14)),
-                            child: const Text('Save Changes'),
-                          ),
-                        ],
-                      ),
-                    ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildTopBar(),
+                Expanded(
+                  child: IndexedStack(
+                    index: _activeSection == _ProfileSection.admin ? 1 : 0,
+                    children: [
+                      _buildProfileContent(),
+                      _buildAdminContent(),
+                    ],
                   ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  String _pageTitle() {
+    if (_activeSection == _ProfileSection.profile) return 'Settings';
+    switch (_adminSection) {
+      case AdminSection.dashboard:
+        return 'Dashboard';
+      case AdminSection.users:
+        return 'Users';
+      case AdminSection.toursAll:
+        return 'All Tours';
+      case AdminSection.toursAdd:
+        return 'Add Tour';
+      case AdminSection.carsAll:
+        return 'All Cars';
+      case AdminSection.carsAdd:
+        return 'Add Car';
+      case AdminSection.chatbot:
+        return 'Chatbot Q&A';
+      case AdminSection.reports:
+        return 'Reports';
+      case AdminSection.settings:
+        return 'Settings';
+    }
+  }
+
+  Widget _buildTopBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      color: Colors.white,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(_pageTitle(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TravelHomePage())),
+            icon: const Icon(Icons.home),
+            label: const Text('Back to Home'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileContent() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+                child: Text(_error!, style: TextStyle(color: Colors.red.shade800)),
+              ),
+            ],
+            const SizedBox(height: 24),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _section(
+                    'Personal Information',
+                    [
+                      _field(_businessName, 'Business name', Icons.business),
+                      _field(_username, 'User name *', Icons.person),
+                      _field(_email, 'E-mail', Icons.email),
+                      _field(_firstName, 'First name', Icons.person_outline),
+                      _field(_lastName, 'Last name', Icons.person_outline),
+                      _field(_phone, 'Phone Number', Icons.phone),
+                      _field(_birthday, 'Birthday', Icons.calendar_today),
+                      TextFormField(
+                        controller: _about,
+                        maxLines: 4,
+                        decoration: const InputDecoration(labelText: 'About Yourself', border: OutlineInputBorder(), alignLabelWithHint: true),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: _section(
+                    'Location Information',
+                    [
+                      _field(_address1, 'Address Line 1', Icons.location_on),
+                      _field(_address2, 'Address Line 2', Icons.location_on),
+                      _field(_city, 'City', Icons.location_city),
+                      _field(_state, 'State', Icons.flag),
+                      DropdownButtonFormField<String>(
+                        value: _country,
+                        decoration: const InputDecoration(labelText: 'Country', border: OutlineInputBorder()),
+                        items: ['Philippines', 'United States', 'United Kingdom', 'Japan', 'France']
+                            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                            .toList(),
+                        onChanged: (v) => setState(() => _country = v),
+                      ),
+                      _field(_zipCode, 'Zip Code', Icons.pin_drop),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryBlue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              ),
+              child: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminContent() {
+    if (!_isAdmin) {
+      return const Center(child: Text('Admin access required'));
+    }
+
+    return AdminDashboardPage(
+      key: _adminKey,
+      showSidebar: false,
+      showBackButton: false,
+      showHeader: false,
+      initialSection: _adminSection,
     );
   }
 
@@ -468,13 +579,22 @@ class _UserProfilePageState extends State<UserProfilePage> {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                CircleAvatar(backgroundColor: Colors.white24, child: Text((_profile?['firstName'] ?? 'U')[0].toUpperCase(), style: const TextStyle(color: Colors.white))),
+                CircleAvatar(
+                  backgroundColor: Colors.white24,
+                  child: Text(
+                    (_profile?['firstName'] ?? 'U')[0].toUpperCase(),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(_str(_profile?['businessName'] ?? _profile?['firstName'] ?? 'User'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                      Text(
+                        _str(_profile?['businessName'] ?? _profile?['firstName'] ?? 'User'),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
                       Text(_str(_profile?['role'] ?? 'Member'), style: TextStyle(color: Colors.white70, fontSize: 12)),
                     ],
                   ),
@@ -482,9 +602,85 @@ class _UserProfilePageState extends State<UserProfilePage> {
               ],
             ),
           ),
-          _sideItem(Icons.dashboard, 'Dashboard', () => Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const TravelHomePage()), (r) => false)),
-          _sideItem(Icons.person, 'My Profile', () {}),
+          _sideItem(
+            Icons.person,
+            'My Profile',
+            () => setState(() => _activeSection = _ProfileSection.profile),
+            isActive: _activeSection == _ProfileSection.profile,
+          ),
           _sideItem(Icons.history, 'Booking History', _showBookingsHistory),
+          if (_isAdmin) ...[
+            const SizedBox(height: 12),
+            _sideHeader('Admin'),
+            _sideItem(
+              Icons.people_outline,
+              'Users',
+              () => _openAdminSection(AdminSection.users),
+              isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.users,
+            ),
+            _sideItem(
+              Icons.tour,
+              'Tours',
+              () => setState(() => _adminToursExpanded = !_adminToursExpanded),
+              isActive: _adminToursExpanded,
+            ),
+            if (_adminToursExpanded) ...[
+              _sideItem(
+                Icons.list_alt,
+                'All Tours',
+                () => _openAdminSection(AdminSection.toursAll),
+                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.toursAll,
+                isSubItem: true,
+              ),
+              _sideItem(
+                Icons.add_box_outlined,
+                'Add Tour',
+                () => _openAdminSection(AdminSection.toursAdd),
+                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.toursAdd,
+                isSubItem: true,
+              ),
+            ],
+            _sideItem(
+              Icons.directions_car_outlined,
+              'Cars',
+              () => setState(() => _adminCarsExpanded = !_adminCarsExpanded),
+              isActive: _adminCarsExpanded,
+            ),
+            if (_adminCarsExpanded) ...[
+              _sideItem(
+                Icons.list_alt,
+                'All Cars',
+                () => _openAdminSection(AdminSection.carsAll),
+                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.carsAll,
+                isSubItem: true,
+              ),
+              _sideItem(
+                Icons.add_box_outlined,
+                'Add Car',
+                () => _openAdminSection(AdminSection.carsAdd),
+                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.carsAdd,
+                isSubItem: true,
+              ),
+            ],
+            _sideItem(
+              Icons.chat_bubble_outline,
+              'Chatbot Q&A',
+              () => _openAdminSection(AdminSection.chatbot),
+              isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.chatbot,
+            ),
+            _sideItem(
+              Icons.assessment_outlined,
+              'Reports',
+              () => _openAdminSection(AdminSection.reports),
+              isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.reports,
+            ),
+            _sideItem(
+              Icons.settings_outlined,
+              'Settings',
+              () => _openAdminSection(AdminSection.settings),
+              isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.settings,
+            ),
+          ],
           const Spacer(),
           _sideItem(Icons.logout, 'Log Out', _logout),
         ],
@@ -492,10 +688,29 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  Widget _sideItem(IconData icon, String label, VoidCallback onTap) {
+  Widget _sideHeader(String label) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 6),
+      child: Text(
+        label,
+        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+      ),
+    );
+  }
+
+  Widget _sideItem(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    bool isActive = false,
+    bool isSubItem = false,
+  }) {
     return ListTile(
-      leading: Icon(icon, color: Colors.white, size: 20),
-      title: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
+      leading: Icon(icon, color: Colors.white, size: isSubItem ? 18 : 20),
+      title: Text(label, style: TextStyle(color: Colors.white, fontSize: isSubItem ? 13 : 14)),
+      tileColor: isActive ? Colors.white.withOpacity(0.12) : Colors.transparent,
+      dense: isSubItem,
+      contentPadding: EdgeInsets.only(left: isSubItem ? 40 : 16, right: 16),
       onTap: onTap,
     );
   }
