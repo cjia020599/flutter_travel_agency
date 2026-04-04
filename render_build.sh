@@ -11,5 +11,4 @@ fi
 export PATH="$PWD/flutter/bin:$PATH"
 
 # 3. Build the web app
-flutter pub get
 flutter build web --release
