@@ -175,7 +175,7 @@ class _ChatOverlayShellState extends State<ChatOverlayShell> with SingleTickerPr
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
-                            'Travel Assistant',
+                            'Your Travelista Buddy',
                             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                           ),
                         ),
