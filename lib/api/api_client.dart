@@ -104,6 +104,16 @@ class ApiClient {
     return _handleResponse(res);
   }
 
+  Future<Map<String, dynamic>> patch(String path, Map<String, dynamic> body, {bool auth = false}) async {
+    await _ensureInitialized();
+    final res = await http.patch(
+      Uri.parse('$baseUrl$path'),
+      headers: _headers(auth: auth),
+      body: jsonEncode(body),
+    );
+    return _handleResponse(res);
+  }
+
   Future<void> delete(String path, {bool auth = false}) async {
     await _ensureInitialized();
     final res = await http.delete(

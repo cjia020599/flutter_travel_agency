@@ -37,6 +37,7 @@ dependencies:
   http: ^1.2.0
   dio: ^5.4.0
   shared_preferences: ^2.2.2
+  web_socket_channel: ^3.0.1
   file_picker: ^6.1.1
   http_parser: ^4.1.0
   image_picker: ^1.0.4

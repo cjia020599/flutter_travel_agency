@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/api_client.dart';
 import '../api/tours_api.dart';
@@ -13,7 +15,10 @@ import '../models/car_rental.dart';
 import '../api/car_rentals_api.dart';
 import '../api/tour_bookings_api.dart';
 import '../api/ratings_api.dart';
+import '../api/notifications_api.dart';
 import 'package:intl/intl.dart';
+import '../models/notification_item.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 // Design colors
 const _navBlue = Color(0xFF1E3A5F);
@@ -47,6 +52,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
   List<CarRental> _rentals = [];
   final Map<String, List<dynamic>> _ratingsByKey = {};
   final Map<String, bool> _ratingsLoadingByKey = {};
+  List<NotificationItem> _notifications = [];
+  bool _notificationsLoading = false;
+  WebSocketChannel? _notificationsChannel;
+  StreamSubscription? _notificationsSub;
+  int _wsReconnectAttempts = 0;
   DateTimeRange _selectedDateRange = DateTimeRange(
     start: DateTime.now().add(const Duration(days: 1)),
     end: DateTime.now().add(const Duration(days: 5)),
@@ -56,6 +66,12 @@ class _TravelHomePageState extends State<TravelHomePage> {
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _disconnectNotifications();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -73,6 +89,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
       _locations = locations is List ? locations : [];
     });
     await _loadRentals();
+    await _syncNotifications();
   }
 
   Future<void> _loadRentals() async {
@@ -89,6 +106,199 @@ class _TravelHomePageState extends State<TravelHomePage> {
         SnackBar(content: Text('Failed to load rentals: $e')),
       );
     }
+  }
+
+  int get _unreadNotificationsCount => _notifications.where((n) => !n.isRead).length;
+
+  Future<void> _syncNotifications() async {
+    if (!_isLoggedIn) {
+      _disconnectNotifications();
+      if (mounted) {
+        setState(() {
+          _notifications = [];
+          _notificationsLoading = false;
+        });
+      }
+      return;
+    }
+
+    await _fetchNotifications();
+    await _connectNotifications();
+  }
+
+  Future<void> _fetchNotifications() async {
+    if (mounted) {
+      setState(() => _notificationsLoading = true);
+    }
+    try {
+      final items = await NotificationsApi.list(page: 1, limit: 50, unreadOnly: false);
+      items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (mounted) {
+        setState(() {
+          _notifications = items;
+          _notificationsLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _notificationsLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load notifications: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _connectNotifications() async {
+    if (_notificationsChannel != null) return;
+    final token = await ApiClient.instance.getToken();
+    if (token == null || token.isEmpty) return;
+
+    final wsBase = baseUrl.startsWith('https://')
+        ? baseUrl.replaceFirst('https://', 'wss://')
+        : baseUrl.replaceFirst('http://', 'ws://');
+    final wsUri = Uri.parse('$wsBase/ws/notifications').replace(
+      queryParameters: {'token': token},
+    );
+
+    _notificationsChannel = WebSocketChannel.connect(wsUri);
+    _notificationsSub = _notificationsChannel!.stream.listen(
+      (message) {
+        try {
+          final data = jsonDecode(message.toString());
+          if (data is Map<String, dynamic>) {
+            _handleIncomingNotification(NotificationItem.fromJson(data));
+          } else if (data is Map) {
+            _handleIncomingNotification(NotificationItem.fromJson(Map<String, dynamic>.from(data)));
+          }
+        } catch (_) {
+          // ignore malformed messages
+        }
+      },
+      onError: (_) {
+        _scheduleNotificationsReconnect();
+      },
+      onDone: () {
+        _disconnectNotifications();
+        _scheduleNotificationsReconnect();
+      },
+    );
+    _wsReconnectAttempts = 0;
+  }
+
+  void _disconnectNotifications() {
+    _notificationsSub?.cancel();
+    _notificationsSub = null;
+    _notificationsChannel?.sink.close();
+    _notificationsChannel = null;
+  }
+
+  void _scheduleNotificationsReconnect() {
+    if (!_isLoggedIn || !mounted) return;
+    _wsReconnectAttempts = (_wsReconnectAttempts + 1).clamp(1, 8);
+    final delaySeconds = 2 * _wsReconnectAttempts;
+    Future.delayed(Duration(seconds: delaySeconds), () {
+      if (!mounted || !_isLoggedIn || _notificationsChannel != null) return;
+      _connectNotifications();
+    });
+  }
+
+  void _handleIncomingNotification(NotificationItem item) {
+    if (!mounted) return;
+    setState(() {
+      _notifications.removeWhere((n) => n.id == item.id);
+      _notifications.insert(0, item);
+    });
+  }
+
+  Future<void> _markNotificationRead(NotificationItem item) async {
+    if (item.isRead) return;
+    try {
+      final updated = await NotificationsApi.markRead(item.id);
+      if (mounted) {
+        setState(() {
+          _notifications = _notifications
+              .map((n) => n.id == item.id ? updated : n)
+              .toList();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to mark read: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openNotificationsDialog() async {
+    if (!_isLoggedIn) {
+      await _promptLoginIfNeeded();
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.notifications),
+            const SizedBox(width: 8),
+            const Text('Notifications'),
+            const Spacer(),
+            if (_notificationsLoading)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          height: 480,
+          child: _notifications.isEmpty
+              ? Center(child: Text(_notificationsLoading ? 'Loading...' : 'No notifications yet.'))
+              : ListView.separated(
+                  itemCount: _notifications.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final n = _notifications[index];
+                    final time = DateFormat('MMM dd, yyyy  HH:mm').format(n.createdAt.toLocal());
+                    return Material(
+                      color: n.isRead ? Colors.transparent : const Color(0xFFFFF7ED),
+                      child: ListTile(
+                        leading: Icon(n.isRead ? Icons.notifications_none : Icons.notifications_active, color: _navBlue),
+                        title: Text(n.title, style: TextStyle(fontWeight: n.isRead ? FontWeight.w500 : FontWeight.w700)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text(n.message),
+                            const SizedBox(height: 6),
+                            Text(time, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                          ],
+                        ),
+                        trailing: n.isRead
+                            ? null
+                            : TextButton(
+                                onPressed: () => _markNotificationRead(n),
+                                child: const Text('Mark read'),
+                              ),
+                        onTap: () => _markNotificationRead(n),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _ratingsKey(String moduleType, int moduleId) => '$moduleType:$moduleId';
@@ -1113,6 +1323,36 @@ await showDialog(
     );
   }
 
+  Widget _buildNotificationBell() {
+    final unread = _unreadNotificationsCount;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+          onPressed: _openNotificationsDialog,
+          tooltip: 'Notifications',
+        ),
+        if (unread > 0)
+          Positioned(
+            right: 2,
+            top: 2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: _saleRed,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                unread > 99 ? '99+' : unread.toString(),
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildNavBar() {
     return SliverToBoxAdapter(
       child: Container(
@@ -1153,21 +1393,7 @@ await showDialog(
               onTap: () => setState(() => _current = _NavItem.contact),
             ),
             const Spacer(),
-            // Stack(
-            //   clipBehavior: Clip.none,
-            //   children: [
-            //     IconButton(icon: const Icon(Icons.notification_important_outlined, color: Colors.white), onPressed: () {}),
-            //     Positioned(
-            //       right: 4,
-            //       top: 4,
-            //       child: Container(
-            //         padding: const EdgeInsets.all(4),
-            //         decoration: const BoxDecoration(color: _saleRed, shape: BoxShape.circle),
-            //         child: const Text('0', style: TextStyle(color: Colors.white, fontSize: 10)),
-            //       ),
-            //     ),
-            //   ],
-            // ),
+            if (_isLoggedIn) _buildNotificationBell(),
             // IconButton(icon: const Icon(Icons.search, color: Colors.white), onPressed: () {}),
           ],
         ),
