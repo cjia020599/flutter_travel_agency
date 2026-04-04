@@ -11,4 +11,4 @@ fi
 export PATH="$PWD/flutter/bin:$PATH"
 
 # 3. Build the web app
-flutter build web --release
+flutter build web --release --web-renderer canvaskit
