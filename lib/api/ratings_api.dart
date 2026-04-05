@@ -19,9 +19,11 @@ class RatingsApi {
       query.add('userId=$userId');
     }
 
-    final path = query.isEmpty
-        ? '/api/ratings'
-        : '/api/ratings?${query.join('&')}';
+    final path = (moduleType != null && moduleType.isNotEmpty && moduleId != null)
+        ? '/api/ratings/$moduleType/$moduleId'
+        : query.isEmpty
+            ? '/api/ratings'
+            : '/api/ratings?${query.join('&')}';
 
     final res = await _client.get(path);
 
