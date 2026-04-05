@@ -789,53 +789,114 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
               )),
             ]);
           }).toList(),
+
         ),
       ],
     );
   }
 
-  void _showEditTourDialog(Map<String, dynamic> tour) {
+Future<void> _showEditTourDialog(Map<String, dynamic> tour) async {
+    final id = tour['id'];
+    if (id == null) return;
+
+    // Show loading
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Tour'),
-        content: SizedBox(
-          width: 920,
-          height: 720,
-          child: SingleChildScrollView(
-            child: _AddTourForm(
-              onCreated: () {
-                Navigator.of(context).pop();
-                _loadData();
-              },
-              itemToEdit: tour,
-            ),
-          ),
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Loading tour details...'),
+          ],
         ),
       ),
     );
+
+    try {
+      final freshTour = await ToursApi.get(id);
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Edit Tour'),
+          content: SizedBox(
+            width: 920,
+            height: 720,
+            child: SingleChildScrollView(
+              child: _AddTourForm(
+                onCreated: () async {
+                  Navigator.of(context).pop();
+                  await _loadData();
+                },
+                itemToEdit: freshTour,
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load tour: $e')),
+      );
+    }
   }
 
-  void _showEditCarDialog(Map<String, dynamic> car) {
+Future<void> _showEditCarDialog(Map<String, dynamic> car) async {
+    final id = car['id'];
+    if (id == null) return;
+
+    // Show loading
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Car'),
-        content: SizedBox(
-          width: 720,
-          height: 640,
-          child: SingleChildScrollView(
-            child: _AddCarForm(
-              onCreated: () {
-                Navigator.of(context).pop();
-                _loadData();
-              },
-              itemToEdit: car,
-            ),
-          ),
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Loading car details...'),
+          ],
         ),
       ),
     );
+
+    try {
+      final freshCar = await CarsApi.get(id);
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Edit Car'),
+          content: SizedBox(
+            width: 720,
+            height: 640,
+            child: SingleChildScrollView(
+              child: _AddCarForm(
+                onCreated: () async {
+                  Navigator.of(context).pop();
+                  await _loadData();
+                },
+                itemToEdit: freshCar,
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load car: $e')),
+      );
+    }
   }
 
   Future<void> _deleteTour(int id) async {
@@ -1678,6 +1739,7 @@ class _AddTourForm extends StatefulWidget {
 }
 
 class _AddTourFormState extends State<_AddTourForm> {
+  final _formKey = GlobalKey<FormState>();
   static const _availabilityOptions = <MapEntry<String, String>>[
     MapEntry('always', 'Always available'),
     MapEntry('fixed', 'Fixed dates'),
@@ -1799,6 +1861,10 @@ class _AddTourFormState extends State<_AddTourForm> {
   }
 
   Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _loading = false);
+      return;
+    }
     if (_slug.text.trim().isEmpty && _title.text.trim().isNotEmpty) {
       _generateSlug();
     }
@@ -1806,15 +1872,18 @@ class _AddTourFormState extends State<_AddTourForm> {
     try {
       final body = <String, dynamic>{
         'title': _title.text.trim(),
+        'name': _title.text.trim(),
         'slug': _slug.text.trim(),
         'price': _price.text.isEmpty ? '0' : _price.text.trim(),
         'salePrice': _salePrice.text.isEmpty ? '' : _salePrice.text.trim(),
         'realTourAddress': _realTourAddress.text.trim(),
+        'address': _realTourAddress.text.trim(),
         'mapLat': _mapLat != null ? _mapLat!.toString() : '',
         'mapLng': _mapLng != null ? _mapLng!.toString() : '',
         'imageUrl': _imageUrl,
         'imagePublicId': _imagePublicId,
         'status': _status,
+        'published': _status == 'publish',
         'availability': _availability,
         'isFeatured': _isFeatured,
       };
@@ -1965,20 +2034,23 @@ class _AddTourFormState extends State<_AddTourForm> {
             onChanged: _loading ? null : (v) => setState(() => _locationId = v),
           );
 
-    Widget mainColumn() {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+  Widget mainColumn() {
+      return Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           _formCard(
             'Tour content',
             [
-              TextField(
+              TextFormField(
                 controller: _title,
                 decoration: const InputDecoration(
-                  labelText: 'Title',
+                  labelText: 'Title *',
                   hintText: 'Title',
                   border: OutlineInputBorder(),
                 ),
+                validator: (v) => (v?.trim().isEmpty ?? true) ? 'Title is required' : null,
                 onChanged: (_) {
                   if (widget.itemToEdit == null) _generateSlug();
                 },
@@ -1991,14 +2063,19 @@ class _AddTourFormState extends State<_AddTourForm> {
               LayoutBuilder(
                 builder: (context, c) {
                   final row = c.maxWidth >= 480;
-                  final priceField = TextField(
+final priceField = TextFormField(
                     controller: _price,
                     decoration: const InputDecoration(
-                      labelText: 'Price',
+                      labelText: 'Price *',
                       hintText: 'Tour Price',
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      if (v?.trim().isEmpty ?? true) return 'Price is required';
+                      if (double.tryParse(v!.trim()) == null) return 'Enter valid number';
+                      return null;
+                    },
                   );
                   final saleField = TextField(
                     controller: _salePrice,
@@ -2081,7 +2158,7 @@ class _AddTourFormState extends State<_AddTourForm> {
             ],
           ),
         ],
-      );
+      ));
     }
 
     return ColoredBox(
@@ -2137,6 +2214,7 @@ class _AddCarForm extends StatefulWidget {
 }
 
 class _AddCarFormState extends State<_AddCarForm> {
+  final _formKey = GlobalKey<FormState>();
   static const _gearOptions = ['Auto', 'Manual', 'CVT'];
 
   final _title = TextEditingController();
@@ -2228,6 +2306,10 @@ class _AddCarFormState extends State<_AddCarForm> {
   }
 
   Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _loading = false);
+      return;
+    }
     if (_slug.text.trim().isEmpty && _title.text.trim().isNotEmpty) {
       _generateSlug();
     }
@@ -2235,6 +2317,7 @@ class _AddCarFormState extends State<_AddCarForm> {
     try {
       final body = {
         'title': _title.text.trim(),
+        'name': _title.text.trim(),
         'slug': _slug.text.trim(),
         'price': _price.text.isEmpty ? "0" : _price.text.trim(),
         'salePrice': _salePrice.text.isEmpty ? "" : _salePrice.text.trim(),
@@ -2247,6 +2330,7 @@ class _AddCarFormState extends State<_AddCarForm> {
         'imageUrl': _imageUrl,
         'imagePublicId': _imagePublicId,
         'status': _status,
+        'published': _status == 'publish',
       };
       if (widget.itemToEdit != null) {
         await CarsApi.update(widget.itemToEdit!['id'], body);
@@ -2333,45 +2417,53 @@ class _AddCarFormState extends State<_AddCarForm> {
     );
   }
 
-  @override
+@override
   Widget build(BuildContext context) {
     const pageBg = Color(0xFFF0F2F5);
     final mapInitial = (_mapLat != null && _mapLng != null) ? LatLng(_mapLat!, _mapLng!) : null;
 
     Widget mainColumn() {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _formCard(
-            'Car content',
-            [
-              TextField(
-                controller: _title,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  hintText: 'Title',
-                  border: OutlineInputBorder(),
+      return Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _formCard(
+              'Car content',
+              [
+                TextFormField(
+                  controller: _title,
+                  decoration: const InputDecoration(
+                    labelText: 'Title *',
+                    hintText: 'Title',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v?.trim().isEmpty ?? true) ? 'Title is required' : null,
+                  onChanged: (_) {
+                    if (widget.itemToEdit == null) _generateSlug();
+                  },
                 ),
-                onChanged: (_) {
-                  if (widget.itemToEdit == null) _generateSlug();
-                },
-              ),
-            ],
-          ),
+              ],
+            ),
           _formCard(
             'Pricing',
             [
               LayoutBuilder(
                 builder: (context, c) {
                   final row = c.maxWidth >= 480;
-                  final priceField = TextField(
+                  final priceField = TextFormField(
                     controller: _price,
                     decoration: const InputDecoration(
-                      labelText: 'Price',
+                      labelText: 'Price *',
                       hintText: 'Car Price',
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      if (v?.trim().isEmpty ?? true) return 'Price is required';
+                      if (double.tryParse(v!.trim()) == null) return 'Enter valid number';
+                      return null;
+                    },
                   );
                   final saleField = TextField(
                     controller: _salePrice,
@@ -2545,7 +2637,7 @@ class _AddCarFormState extends State<_AddCarForm> {
             ],
           ),
         ],
-      );
+      ));
     }
 
     return ColoredBox(
