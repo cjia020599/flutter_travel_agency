@@ -20,4 +20,4 @@ flutter pub get
 
 # 5. Build the Web App
 # We use 'canvaskit' for your Map features
-flutter build web --release --web-renderer canvaskit
+flutter build web --release --dart-define=FLUTTER_WEB_CANVASKIT_URL=https://unpkg.com/canvaskit-wasm@0.37.1/bin/
