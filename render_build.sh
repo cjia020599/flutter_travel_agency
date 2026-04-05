@@ -1,23 +1,27 @@
 #!/usr/bin/env bash
 set -o errexit
 
-# 1. Clone Flutter stable
+# 1. Clone Flutter stable if not already there
 if [ ! -d "flutter" ]; then
   git clone https://github.com/flutter/flutter.git -b stable
 fi
 
-# 2. Set Path
+# 2. Add to PATH
 export PATH="$PWD/flutter/bin:$PATH"
 
-# 3. Force Flutter to initialize and enable web
-# This is the missing piece that makes --web-renderer valid
+# 3. Initialize the Flutter Tool
+# We disable analytics to speed up the build and enable web
+flutter config --no-analytics
 flutter config --enable-web
-flutter doctor -v
 
-# 4. Get dependencies
+# 4. CRITICAL: Pre-download Web artifacts
+# This ensures the tool recognizes web-specific flags
+flutter precache --web
+
+# 5. Get project dependencies
 flutter pub get
 
-# 5. Build the web app
-# I've removed the extra '-' in your screenshot it looked like --web-renderer
-# but the command below is the standard format.
-flutter build web --release --web-renderer canvaskit
+# 6. Build for Web
+# If this still fails, we can try removing --web-renderer canvaskit 
+# and just use 'flutter build web --release' to see if it passes.
+flutter build web --release
