@@ -1,33 +1,26 @@
 #!/usr/bin/env bash
 set -o errexit
 
-# 1. Update Flutter if it exists, otherwise clone it
-if [ -d "flutter" ]; then
-  echo "Old Flutter found. Updating to the latest stable..."
-  cd flutter
-  git fetch --all
-  git checkout stable
-  git reset --hard origin/stable
-  cd ..
-else
-  echo "Cloning fresh Flutter stable..."
-  git clone https://github.com/flutter/flutter.git -b stable
-fi
+# 1. Start fresh - delete old flutter folder if it exists
+rm -rf flutter
 
-# 2. Set Path
+# 2. Clone fresh stable (shallow clone for speed)
+git clone https://github.com/flutter/flutter.git -b stable --depth 1
+
+# 3. Set the Path
 export PATH="$PWD/flutter/bin:$PATH"
 
-# 3. Setup
-flutter config --no-analytics
+# 4. UNLOCK WEB FEATURES (This stops Status 64)
+# We must do these in this EXACT order
 flutter config --enable-web
+flutter precache --web
 
-# 4. Deep Clean (Crucial for moving past the version error)
-# This forces the project to re-check the SDK requirements
-flutter clean
+# 5. Get dependencies for your Travel Agency app
+# We'll remove the lock file to avoid Windows vs Linux conflicts
 rm -f pubspec.lock
 flutter pub get
 
-# 5. Build
-# We skip the --no-wasm flag since it was causing issues
-# and let the latest stable handle the renderer.
+# 6. The Build
+# If this still gives Error 64, remove "--web-renderer canvaskit"
+# and just use "flutter build web --release" to get it live first.
 flutter build web --release --web-renderer canvaskit
