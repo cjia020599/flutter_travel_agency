@@ -8,40 +8,70 @@ class RatingsApi {
     int? moduleId,
     int? userId,
   }) async {
-    final query = <String>[];
-    if (moduleType != null && moduleType.isNotEmpty) {
-      query.add('moduleType=$moduleType');
-    }
-    if (moduleId != null) {
-      query.add('moduleId=$moduleId');
-    }
-    if (userId != null) {
-      query.add('userId=$userId');
-    }
-
-    final path = (moduleType != null && moduleType.isNotEmpty && moduleId != null)
-        ? '/api/ratings/$moduleType/$moduleId'
-        : query.isEmpty
-            ? '/api/ratings'
-            : '/api/ratings?${query.join('&')}';
-
-    final res = await _client.get(path);
-
-    final data = res['data'] ?? res['ratings'];
-    if (data is List) return data;
-
-    // Handle backend shapes like:
-    // { success: true, rating: [...] } or { success: true, rows: [...] }
-    final altList = res['rating'] ?? res['rows'] ?? res['items'] ?? res['results'];
-    if (altList is List) return altList;
-
-    // Handle nested payload in case backend wraps as object
-    // e.g. { data: { ratings: [...] } }
-    if (data is Map) {
-      final nested = data['ratings'] ?? data['rating'] ?? data['rows'] ?? data['items'] ?? data['results'];
-      if (nested is List) return nested;
+    String path;
+    
+    // If both moduleType and moduleId are provided, use path-based endpoint
+    if (moduleType != null && moduleType.isNotEmpty && moduleId != null) {
+      path = '/api/ratings/$moduleType/$moduleId';
+    } else {
+      // Otherwise use query parameters
+      final query = <String>[];
+      if (moduleType != null && moduleType.isNotEmpty) {
+        query.add('moduleType=$moduleType');
+      }
+      if (moduleId != null) {
+        query.add('moduleId=$moduleId');
+      }
+      if (userId != null) {
+        query.add('userId=$userId');
+      }
+      final queryString = query.isNotEmpty ? '?${query.join('&')}' : '';
+      path = '/api/ratings$queryString';
     }
 
+    print('DEBUG: RatingsApi.list() called with moduleType=$moduleType, moduleId=$moduleId');
+    print('DEBUG: Path used: $path');
+    
+    final res = await _client.get(path, auth: true);
+    
+    print('DEBUG: GET $path returned. Response type: ${res.runtimeType}');
+    print('DEBUG: Full response: $res');
+
+    // The API should return a list directly or wrapped in a data field
+    if (res is List) {
+      print('DEBUG: Response is already a list with ${(res as List).length} items');
+      return res as List<dynamic>;
+    }
+
+    if (res is Map<String, dynamic>) {
+      // Try different possible field names
+      if (res['data'] is List) {
+        print('DEBUG: Found ratings at "data" key with ${(res['data'] as List).length} items');
+        return res['data'] as List<dynamic>;
+      }
+      if (res['ratings'] is List) {
+        print('DEBUG: Found ratings at "ratings" key with ${(res['ratings'] as List).length} items');
+        return res['ratings'] as List<dynamic>;
+      }
+      if (res['rating'] is List) {
+        print('DEBUG: Found ratings at "rating" key with ${(res['rating'] as List).length} items');
+        return res['rating'] as List<dynamic>;
+      }
+      if (res['rows'] is List) {
+        print('DEBUG: Found ratings at "rows" key with ${(res['rows'] as List).length} items');
+        return res['rows'] as List<dynamic>;
+      }
+      if (res['items'] is List) {
+        print('DEBUG: Found ratings at "items" key with ${(res['items'] as List).length} items');
+        return res['items'] as List<dynamic>;
+      }
+      if (res['results'] is List) {
+        print('DEBUG: Found ratings at "results" key with ${(res['results'] as List).length} items');
+        return res['results'] as List<dynamic>;
+      }
+    }
+
+    print('DEBUG: No ratings found, returning empty list. Response was: $res');
     return [];
   }
 

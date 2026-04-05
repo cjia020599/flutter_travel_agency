@@ -430,6 +430,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
         return 'Reports';
       case AdminSection.settings:
         return 'Settings';
+      case AdminSection.ratings:
+        return 'Ratings';
     }
   }
 

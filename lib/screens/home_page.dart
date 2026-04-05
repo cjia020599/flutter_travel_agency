@@ -714,6 +714,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     }
     try {
       final ratings = await RatingsApi.list(moduleType: moduleType, moduleId: moduleId);
+      print('DEBUG _loadRatingsFor($moduleType, $moduleId): Got ${ratings.length} ratings');
       if (mounted) {
         setState(() {
           _ratingsByKey[key] = ratings;
@@ -723,6 +724,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
       }
       return ratings;
     } catch (e) {
+      print('DEBUG _loadRatingsFor error: $e');
       if (mounted) {
         setState(() {
           _ratingsByKey[key] = [];
@@ -838,12 +840,13 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
     try {
       if (existing == null) {
-        await RatingsApi.create(
+        final createRes = await RatingsApi.create(
           moduleType: moduleType,
           moduleId: moduleId,
           stars: stars,
           comment: commentController.text.trim(),
         );
+        print('DEBUG: Rating created successfully: $createRes');
       } else {
         final ratingId = int.tryParse(existing['id'].toString());
         if (ratingId == null) {
@@ -856,13 +859,18 @@ class _TravelHomePageState extends State<TravelHomePage> {
         );
       }
 
-      await _loadRatingsFor(moduleType, moduleId);
+      print('DEBUG: About to call _loadRatingsFor($moduleType, $moduleId)');
+      final loadedRatings = await _loadRatingsFor(moduleType, moduleId);
+      print('DEBUG: _loadRatingsFor returned ${loadedRatings.length} ratings');
+      print('DEBUG: Loaded ratings: $loadedRatings');
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(existing == null ? 'Rating added' : 'Rating updated')),
         );
       }
     } catch (e) {
+      print('DEBUG: Error in _upsertRating: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Rating save failed: $e')),

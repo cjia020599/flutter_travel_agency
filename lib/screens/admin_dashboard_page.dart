@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_travel_agency/api/chatbot_api.dart';
 
 import '../api/tours_api.dart';
 import '../api/cars_api.dart';
@@ -6,7 +7,7 @@ import '../api/lookups_api.dart';
 import '../api/admin_api.dart';
 import '../api/user_api.dart';
 import '../api/api_client.dart';
-import '../api/chatbot_api.dart';
+import '../api/ratings_api.dart';
 import '../widgets/image_upload_widget.dart';
 import '../widgets/car_location_map_picker.dart';
 import 'package:latlong2/latlong.dart';
@@ -29,6 +30,7 @@ enum AdminSection {
   toursAdd,
   carsAll,
   carsAdd,
+  ratings,
   chatbot,
   reports,
   settings,
@@ -77,6 +79,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   String? _chatError;
   String _chatSearchQuery = '';
   _ChatbotFilter _chatFilter = _ChatbotFilter.all;
+  List<dynamic> _ratings = [];
+  bool _loadingRatings = false;
 
   @override
   void initState() {
@@ -165,6 +169,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       _loadReports();
     } else if (section == AdminSection.chatbot) {
       _loadChatQuestions();
+    } else if (section == AdminSection.ratings) {
+      _loadRatings();
     }
   }
 
@@ -229,6 +235,15 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             ],
           ),
           const SizedBox(height: 8),
+          _sideItem(
+            icon: Icons.star_outline,
+            label: 'Ratings',
+            isActive: _current == AdminSection.ratings,
+            onTap: () {
+              setState(() => _current = AdminSection.ratings);
+              _loadRatings();
+            },
+          ),
           _sideItem(
             icon: Icons.assessment_outlined,
             label: 'Reports',
@@ -421,6 +436,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         return 'All Cars';
       case AdminSection.carsAdd:
         return 'Add new car';
+      case AdminSection.ratings:
+        return 'Ratings';
       case AdminSection.chatbot:
         return 'Chatbot Q&A';
       case AdminSection.reports:
@@ -467,6 +484,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         return _buildCarsList();
       case AdminSection.carsAdd:
         return _buildCarForm();
+      case AdminSection.ratings:
+        return _buildRatingsList();
       case AdminSection.chatbot:
         return _buildChatbotManager();
       case AdminSection.reports:
@@ -681,6 +700,69 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     icon: const Icon(Icons.delete),
                     onPressed: isSelf ? null : () => _deleteUser(id),
                     tooltip: isSelf ? 'Cannot delete yourself' : 'Delete User',
+                  ),
+                ],
+              )),
+            ]);
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRatingsList() {
+    if (_loadingRatings) return const Center(child: CircularProgressIndicator());
+    if (_ratings.isEmpty) return const Center(child: Text('No ratings yet.'));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DataTable(
+          columns: const [
+            DataColumn(label: Text('ID')),
+            DataColumn(label: Text('Module')),
+            DataColumn(label: Text('Module ID')),
+            DataColumn(label: Text('User')),
+            DataColumn(label: Text('Stars')),
+            DataColumn(label: Text('Comment')),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: _ratings.map<DataRow>((r) {
+            final m = r as Map<String, dynamic>;
+            final id = m['id']?.toString() ?? '';
+            final moduleType = m['moduleType']?.toString() ?? '';
+            final moduleId = m['moduleId']?.toString() ?? '';
+            final stars = m['stars']?.toString() ?? '';
+            final comment = m['comment']?.toString() ?? '';
+
+            // Extract user name
+            String userName = '';
+            final user = m['user'];
+            if (user is Map<String, dynamic>) {
+              userName = user['name']?.toString() ?? user['username']?.toString() ?? user['email']?.toString() ?? '';
+            } else {
+              userName = m['userName']?.toString() ?? m['username']?.toString() ?? '';
+            }
+            if (userName.isEmpty) userName = 'Unknown';
+
+            return DataRow(cells: [
+              DataCell(Text(id)),
+              DataCell(Text(moduleType)),
+              DataCell(Text(moduleId)),
+              DataCell(Text(userName)),
+              DataCell(Text(stars)),
+              DataCell(Text(comment.isEmpty ? 'No comment' : comment)),
+              DataCell(Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _showEditRatingDialog(m),
+                    tooltip: 'Edit Rating',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () => _deleteRating(id),
+                    tooltip: 'Delete Rating',
                   ),
                 ],
               )),
@@ -1558,6 +1640,33 @@ Future<void> _loadUsers() async {
     }
   }
 
+  Future<void> _loadRatings() async {
+    if (_loadingRatings) return;
+    setState(() {
+      _loadingRatings = true;
+    });
+
+    try {
+      final ratings = await RatingsApi.list();
+      if (!mounted) return;
+      setState(() {
+        _ratings = ratings;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load ratings: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingRatings = false;
+        });
+      }
+    }
+  }
+
   Future<void> _deleteUser(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1590,6 +1699,38 @@ Future<void> _loadUsers() async {
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('Error deleting user: $e')));
+    }
+  }
+
+  Future<void> _deleteRating(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Rating'),
+        content: const Text('Are you sure you want to delete this rating?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await RatingsApi.delete(int.parse(id));
+      _loadRatings();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating deleted')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting rating: $e')));
     }
   }
 
@@ -1693,6 +1834,75 @@ Future<void> _loadUsers() async {
                 } catch (e) {
                   if (!mounted) return;
                   messenger.showSnackBar(SnackBar(content: Text('Error updating user: $e')));
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showEditRatingDialog(Map<String, dynamic> rating) {
+    final starsController = TextEditingController(text: rating['stars']?.toString() ?? '5');
+    final commentController = TextEditingController(text: rating['comment']?.toString() ?? '');
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        final dialogNavigator = Navigator.of(context);
+        final messenger = ScaffoldMessenger.of(context);
+
+        return AlertDialog(
+          title: const Text('Edit Rating'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: starsController,
+                  decoration: const InputDecoration(
+                    labelText: 'Stars (1-5)',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: commentController,
+                  decoration: const InputDecoration(
+                    labelText: 'Comment (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => dialogNavigator.pop(), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final stars = int.tryParse(starsController.text.trim());
+                if (stars == null || stars < 1 || stars > 5) {
+                  messenger.showSnackBar(const SnackBar(content: Text('Stars must be an integer from 1 to 5')));
+                  return;
+                }
+
+                try {
+                  await RatingsApi.update(
+                    int.parse(rating['id'].toString()),
+                    stars: stars,
+                    comment: commentController.text.trim(),
+                  );
+                  if (!mounted) return;
+                  dialogNavigator.pop();
+                  _loadRatings();
+                  messenger.showSnackBar(const SnackBar(content: Text('Rating updated')));
+                } catch (e) {
+                  if (!mounted) return;
+                  messenger.showSnackBar(SnackBar(content: Text('Error updating rating: $e')));
                 }
               },
               child: const Text('Save'),
