@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -o errexit
 
-# 1. Clone Flutter if it doesn't exist
+# 1. Clone Flutter stable
 if [ ! -d "flutter" ]; then
   git clone https://github.com/flutter/flutter.git -b stable
 fi
 
-# 2. Add Flutter to PATH
+# 2. Set Path
 export PATH="$PWD/flutter/bin:$PATH"
 
-# 3. Pre-cache artifacts (Crucial for CI/CD like Render)
-flutter config --no-analytics
-flutter precache --web
+# 3. Force Flutter to initialize and enable web
+# This is the missing piece that makes --web-renderer valid
+flutter config --enable-web
+flutter doctor -v
 
-# 4. Clean and Get Dependencies
-# This fixes many "Status 64" errors caused by stale build caches
-flutter clean
+# 4. Get dependencies
 flutter pub get
 
-# 5. Build for Web
-# We use --web-renderer canvaskit because it's more stable for Map packages
+# 5. Build the web app
+# I've removed the extra '-' in your screenshot it looked like --web-renderer
+# but the command below is the standard format.
 flutter build web --release --web-renderer canvaskit
