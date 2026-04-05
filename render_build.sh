@@ -1,27 +1,23 @@
 #!/usr/bin/env bash
+# Exit on error
 set -o errexit
 
-# 1. Clone Flutter stable if not already there
+# 1. Download Flutter stable
 if [ ! -d "flutter" ]; then
   git clone https://github.com/flutter/flutter.git -b stable
 fi
 
-# 2. Add to PATH
+# 2. Add Flutter to the PATH
 export PATH="$PWD/flutter/bin:$PATH"
 
-# 3. Initialize the Flutter Tool
-# We disable analytics to speed up the build and enable web
-flutter config --no-analytics
-flutter config --enable-web
-
-# 4. CRITICAL: Pre-download Web artifacts
-# This ensures the tool recognizes web-specific flags
+# 3. Initialize Flutter for Web (IMPORTANT: This prevents Status 64)
+flutter config --enable-web --no-analytics
 flutter precache --web
 
-# 5. Get project dependencies
+# 4. Resolve dependencies
+# We run 'pub get' after 'precache' to make sure the packages see the web SDK
 flutter pub get
 
-# 6. Build for Web
-# If this still fails, we can try removing --web-renderer canvaskit 
-# and just use 'flutter build web --release' to see if it passes.
-flutter build web --release
+# 5. Build the Web App
+# We use 'canvaskit' for your Map features
+flutter build web --release --web-renderer canvaskit
