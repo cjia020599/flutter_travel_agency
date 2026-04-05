@@ -21,4 +21,4 @@ flutter pub get
 
 # 5. The Build (The Fix is here)
 # We add --no-wasm to stop the 'wasm dry run' crash
-flutter build web --release --no-wasm
+flutter build web --release
