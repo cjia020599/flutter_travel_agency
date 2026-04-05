@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../api/api_client.dart';
 import '../api/tours_api.dart';
 import '../api/cars_api.dart';
@@ -29,7 +30,10 @@ const _accentOrange = Color(0xFFEAB308);
 const _saleRed = Color(0xFFDC2626);
 const _hotPurple = Color(0xFF7C3AED);
 
-enum _NavItem { home, tours, hotels, cars, news, contact }
+/// Philippine peso for prices shown on the home experience.
+const String _peso = '\u20B1';
+
+enum _NavItem { home, tours, cars }
 
 class TravelHomePage extends StatefulWidget {
   const TravelHomePage({super.key});
@@ -68,16 +72,19 @@ class _TravelHomePageState extends State<TravelHomePage> {
   );
 
   late final TextEditingController _locationQueryController;
-  int _filterGuests = 2;
+  late final TextEditingController _filterGuestsController;
   final Set<String> _starFilters = {};
   final Set<String> _reviewFilters = {};
   final Set<String> _propertyFilters = {};
   final Map<String, double> _avgRatingByKey = {};
+  final Map<String, int> _ratingCountByKey = {};
 
   @override
   void initState() {
     super.initState();
     _locationQueryController = TextEditingController()
+      ..addListener(_onSearchFiltersChanged);
+    _filterGuestsController = TextEditingController(text: '2')
       ..addListener(_onSearchFiltersChanged);
     _loadData();
   }
@@ -89,6 +96,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
   @override
   void dispose() {
     _locationQueryController.dispose();
+    _filterGuestsController.dispose();
     _disconnectNotifications();
     _notificationsPollTimer?.cancel();
     super.dispose();
@@ -368,6 +376,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final key = _ratingsKey(moduleType, moduleId);
     if (ratings.isEmpty) {
       _avgRatingByKey.remove(key);
+      _ratingCountByKey.remove(key);
       return;
     }
     final sum = ratings.fold<double>(
@@ -375,6 +384,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
       (a, r) => a + (double.tryParse((r is Map ? r['stars'] : null)?.toString() ?? '0') ?? 0),
     );
     _avgRatingByKey[key] = sum / ratings.length;
+    _ratingCountByKey[key] = ratings.length;
   }
 
   Future<void> _refreshAggregateRatings() async {
@@ -395,9 +405,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
       }
       setState(() {
         _avgRatingByKey.clear();
+        _ratingCountByKey.clear();
         sums.forEach((k, sum) {
           final c = counts[k] ?? 1;
           _avgRatingByKey[k] = sum / c;
+          _ratingCountByKey[k] = c;
         });
       });
     } catch (_) {}
@@ -413,6 +425,24 @@ class _TravelHomePageState extends State<TravelHomePage> {
   }
 
   double? _avgRating(String moduleType, int id) => _avgRatingByKey[_ratingsKey(moduleType, id)];
+
+  int? _ratingCount(String moduleType, int id) => _ratingCountByKey[_ratingsKey(moduleType, id)];
+
+  int get _effectiveGuestCount {
+    final raw = _filterGuestsController.text.trim();
+    if (raw.isEmpty) return 1;
+    final n = int.tryParse(raw);
+    if (n == null || n < 1) return 1;
+    return n;
+  }
+
+  bool _itemIsFeatured(Map<String, dynamic> m) =>
+      m['isFeatured'] == true || m['featured'] == true;
+
+  String _priceLabel(dynamic price, {required bool perPerson}) {
+    if (price == null) return '';
+    return '$_peso$price${perPerson ? ' / person' : ' / day'}';
+  }
 
   DateTime? _tryParseDateField(dynamic v) {
     if (v == null) return null;
@@ -456,7 +486,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
     if (isTour) return true;
     final cap = int.tryParse(item['passenger']?.toString() ?? '') ?? 0;
     if (cap <= 0) return true;
-    return cap >= _filterGuests;
+    return cap >= _effectiveGuestCount;
   }
 
   bool _passesDateRange(Map<String, dynamic> item) {
@@ -546,21 +576,114 @@ class _TravelHomePageState extends State<TravelHomePage> {
     }).toList();
   }
 
-  String _formatDateRangeLabel() {
-    final fmt = DateFormat('MMM d, yyyy');
-    return '${fmt.format(_filterDateRange.start)} – ${fmt.format(_filterDateRange.end)}';
-  }
-
-  Future<void> _pickFilterDateRange() async {
-    final picked = await showDateRangePicker(
+  Future<void> _pickFilterStartDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
       context: context,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 730)),
-      initialDateRange: _filterDateRange,
+      initialDate: _filterDateRange.start.isBefore(today) ? today : _filterDateRange.start,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 730)),
     );
     if (picked != null && mounted) {
-      setState(() => _filterDateRange = picked);
+      setState(() {
+        var end = _filterDateRange.end;
+        if (!end.isAfter(picked)) {
+          end = picked.add(const Duration(days: 1));
+        }
+        _filterDateRange = DateTimeRange(start: picked, end: end);
+      });
     }
+  }
+
+  Future<void> _pickFilterEndDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = _filterDateRange.start.isBefore(today) ? today : _filterDateRange.start;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _filterDateRange.end.isBefore(start) ? start.add(const Duration(days: 1)) : _filterDateRange.end,
+      firstDate: start,
+      lastDate: today.add(const Duration(days: 730)),
+    );
+    if (picked != null && mounted) {
+      setState(() => _filterDateRange = DateTimeRange(start: start, end: picked));
+    }
+  }
+
+  Widget _filterStartDateField({
+    double borderRadius = 8,
+    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    String label = 'Start date',
+  }) {
+    final fmt = DateFormat('MMM d, yyyy');
+    return InkWell(
+      onTap: _pickFilterStartDate,
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          suffixIcon: const Icon(Icons.calendar_today, size: 18),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          contentPadding: contentPadding,
+        ),
+        child: Text(
+          fmt.format(_filterDateRange.start),
+          style: TextStyle(color: Colors.grey[800], fontSize: 14),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _filterEndDateField({
+    double borderRadius = 8,
+    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    String label = 'End date',
+  }) {
+    final fmt = DateFormat('MMM d, yyyy');
+    return InkWell(
+      onTap: _pickFilterEndDate,
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          suffixIcon: const Icon(Icons.calendar_today, size: 18),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          contentPadding: contentPadding,
+        ),
+        child: Text(
+          fmt.format(_filterDateRange.end),
+          style: TextStyle(color: Colors.grey[800], fontSize: 14),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _filterGuestsTextField({
+    double? width,
+    double borderRadius = 8,
+    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    String? labelText,
+  }) {
+    return SizedBox(
+      width: width,
+      child: TextField(
+        controller: _filterGuestsController,
+        decoration: InputDecoration(
+          labelText: labelText ?? 'Guests',
+          hintText: 'Guests',
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          contentPadding: contentPadding,
+        ),
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        onChanged: (_) => setState(() {}),
+      ),
+    );
   }
 
   void _goToSearchTab(int tabIndex) {
@@ -568,6 +691,18 @@ class _TravelHomePageState extends State<TravelHomePage> {
       _searchTabIndex = tabIndex;
       _current = tabIndex == 0 ? _NavItem.tours : _NavItem.cars;
     });
+  }
+
+  String _itemImageUrl(Map<String, dynamic> item) {
+    final u = item['imageUrl']?.toString().trim();
+    if (u != null && u.isNotEmpty) return u;
+    return 'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600';
+  }
+
+  int _itemId(Map<String, dynamic> item) {
+    final id = item['id'];
+    if (id is int) return id;
+    return int.tryParse(id?.toString() ?? '') ?? 0;
   }
 
   Future<List<dynamic>> _loadRatingsFor(String moduleType, int moduleId) async {
@@ -896,7 +1031,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
   }
 
   Future<void> _showCarDetailsDialog(Map<String, dynamic> car) async {
-    final carId = car['id'] as int? ?? 0;
+    final carId = _itemId(car);
     if (carId == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid car ID')),
@@ -906,10 +1041,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
     final title = car['title']?.toString() ?? 'Car';
     final price = car['salePrice'] ?? car['price'];
-    final priceStr = price != null ? '\$${price.toString()} / day' : '';
-    final imageUrl = car['imageUrl'] ?? '';
+    final priceStr = price != null ? '${_peso}${price.toString()} / day' : '';
+    final imageUrl = _itemImageUrl(car);
     final passengers = car['passenger']?.toString() ?? '-';
     final gear = car['gearShift']?.toString() ?? '-';
+    final carDesc = car['description']?.toString().trim();
 
     final startController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 1))));
     final endController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 5))));
@@ -965,6 +1101,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
                           _infoRow(Icons.people, 'Passengers', passengers),
                           const SizedBox(height: 8),
                           _infoRow(Icons.speed, 'Gear Shift', gear),
+                          if (carDesc != null && carDesc.isNotEmpty) ...[
+                            const Divider(height: 24),
+                            Text(carDesc, style: TextStyle(color: Colors.grey[700], fontSize: 14)),
+                          ],
                         ],
                       ),
                     ),
@@ -1177,7 +1317,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
   }
 
   Future<void> _showTourDetailsDialog(Map<String, dynamic> tour) async {
-    final tourId = tour['id'] as int? ?? 0;
+    final tourId = _itemId(tour);
     if (tourId == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid tour ID')),
@@ -1187,8 +1327,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
     final title = tour['title']?.toString() ?? 'Tour';
     final price = tour['salePrice'] ?? tour['price'];
-    final priceStr = price != null ? '\$${price.toString()} / person' : '';
-    final imageUrl = tour['imageUrl'] ?? '';
+    final priceStr = price != null ? '${_peso}${price.toString()} / person' : '';
+    final imageUrl = _itemImageUrl(tour);
+    final tourDesc = tour['description']?.toString().trim();
 
     final startController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 1))));
     final endController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 5))));
@@ -1231,6 +1372,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
                     priceStr,
                     style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _primaryBlue),
                   ),
+                  if (tourDesc != null && tourDesc.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(tourDesc, style: TextStyle(color: Colors.grey[700], fontSize: 14)),
+                  ],
                   const SizedBox(height: 16),
                   Text('Tour Dates:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                   const SizedBox(height: 8),
@@ -1382,16 +1527,12 @@ SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duratio
         return [
           SliverToBoxAdapter(child: _buildHero()),
           SliverToBoxAdapter(child: _buildCategories()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Trending Places', "The world's best luxury travel tours.")),
-          SliverToBoxAdapter(child: _buildTrendingPlaces()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Top Destinations', 'Explore our destinations.')),
-          SliverToBoxAdapter(child: _buildTopDestinations()),
+          SliverToBoxAdapter(child: _buildSectionTitle('Featured', 'Hand-picked tours and cars.')),
+          SliverToBoxAdapter(child: _buildFeaturedPackages()),
           SliverToBoxAdapter(child: _buildSectionTitle('Our Tour Packages', 'Browse available tours.')),
           SliverToBoxAdapter(child: _buildTourPackages()),
           SliverToBoxAdapter(child: _buildSectionTitle('Our Cars', 'Browse available cars.')),
           SliverToBoxAdapter(child: _buildCarPackages()),
-          SliverToBoxAdapter(child: _buildKnowYourCityBanner()),
-          SliverToBoxAdapter(child: _buildNewsletter()),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.tours:
@@ -1399,81 +1540,9 @@ SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duratio
           SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours', items: _filteredTours, isTour: true)),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
-      case _NavItem.hotels:
-        return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours', items: _filteredTours, isTour: true)),
-          SliverToBoxAdapter(child: _buildFooter()),
-        ];
       case _NavItem.cars:
         return [
           SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for car', itemLabel: 'cars', items: _filteredCars, isTour: false)),
-          SliverToBoxAdapter(child: _buildFooter()),
-        ];
-      case _NavItem.news:
-        return [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(48, 40, 48, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('News', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: _navBlue)),
-                  const SizedBox(height: 8),
-                  Text('Latest stories and travel advice.', style: TextStyle(color: Colors.grey[600])),
-                  const SizedBox(height: 24),
-                  Center(child: Text('No news available.', style: TextStyle(color: Colors.grey[600]))),
-                ],
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(child: _buildFooter()),
-        ];
-      case _NavItem.contact:
-        return [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(48, 80, 48, 80),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Contact us', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: _navBlue)),
-                  const SizedBox(height: 8),
-                  Text('We would love to hear from you.', style: TextStyle(color: Colors.grey[600])),
-                  const SizedBox(height: 32),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            TextField(decoration: InputDecoration(labelText: 'Your name', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
-                            const SizedBox(height: 16),
-                            TextField(decoration: InputDecoration(labelText: 'Email', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
-                            const SizedBox(height: 16),
-                            TextField(
-                              maxLines: 4,
-                              decoration: InputDecoration(labelText: 'Message', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: () {},
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _primaryBlue,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                              ),
-                              child: const Text('Send message'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 48),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
     }
@@ -1740,11 +1809,6 @@ await showDialog(
                 _searchTabIndex = 0;
               }),
             ),
-            // _NavLink(
-            //   label: 'Hotel',
-            //   isActive: _current == _NavItem.hotels,
-            //   onTap: () => setState(() => _current = _NavItem.hotels),
-            // ),
             _NavLink(
               label: 'Cars',
               isActive: _current == _NavItem.cars,
@@ -1752,16 +1816,6 @@ await showDialog(
                 _current = _NavItem.cars;
                 _searchTabIndex = 1;
               }),
-            ),
-            _NavLink(
-              label: 'News',
-              isActive: _current == _NavItem.news,
-              onTap: () => setState(() => _current = _NavItem.news),
-            ),
-            _NavLink(
-              label: 'Contact',
-              isActive: _current == _NavItem.contact,
-              onTap: () => setState(() => _current = _NavItem.contact),
             ),
             const Spacer(),
             // IconButton(icon: const Icon(Icons.search, color: Colors.white), onPressed: () {}),
@@ -1826,54 +1880,6 @@ await showDialog(
   }
 
   Widget _buildSearchWidget() {
-    Widget dateRangeField({double? width}) {
-      return SizedBox(
-        width: width,
-        child: InkWell(
-          onTap: _pickFilterDateRange,
-          borderRadius: BorderRadius.circular(8),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              hintText: 'Check-in – Check-out',
-              suffixIcon: const Icon(Icons.calendar_today, size: 18),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            ),
-            child: Text(
-              _formatDateRangeLabel(),
-              style: TextStyle(color: Colors.grey[800], fontSize: 14),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-      );
-    }
-
-    Widget guestsField({double? width}) {
-      return SizedBox(
-        width: width,
-        child: DropdownButtonFormField<int>(
-          value: _filterGuests.clamp(1, 8),
-          decoration: InputDecoration(
-            hintText: 'Guests',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          ),
-          items: List.generate(
-            8,
-            (i) {
-              final n = i + 1;
-              return DropdownMenuItem(value: n, child: Text('$n Guest${n == 1 ? '' : 's'}'));
-            },
-          ),
-          onChanged: (v) {
-            if (v != null) setState(() => _filterGuests = v);
-          },
-        ),
-      );
-    }
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 900;
@@ -1927,9 +1933,18 @@ await showDialog(
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(flex: 2, child: dateRangeField()),
+                    Expanded(
+                      flex: 2,
+                      child: Row(
+                        children: [
+                          Expanded(child: _filterStartDateField()),
+                          const SizedBox(width: 8),
+                          Expanded(child: _filterEndDateField()),
+                        ],
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    guestsField(width: 140),
+                    _filterGuestsTextField(width: 120),
                     const SizedBox(width: 12),
                     ElevatedButton.icon(
                       onPressed: () => _goToSearchTab(_searchTabIndex),
@@ -1957,11 +1972,17 @@ await showDialog(
                       ),
                     ),
                     const SizedBox(height: 12),
-                    dateRangeField(),
+                    Row(
+                      children: [
+                        Expanded(child: _filterStartDateField()),
+                        const SizedBox(width: 8),
+                        Expanded(child: _filterEndDateField()),
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: guestsField()),
+                        Expanded(child: _filterGuestsTextField()),
                         const SizedBox(width: 12),
                         ElevatedButton.icon(
                           onPressed: () => _goToSearchTab(_searchTabIndex),
@@ -2000,32 +2021,75 @@ await showDialog(
   }
 
   Widget _buildCategories() {
-    final items = [
-      (_navBlue, 'NEW', 'Creative Hotels', 'Our Hotels are all about the experience.', Icons.hotel),
-      (Colors.grey[700]!, 'SALE', 'Best Travel', 'Our trips are all about the experience.', Icons.travel_explore),
-      (_navBlue, null, 'Holiday Planning', 'Our Cars are all about the experience.', Icons.flight),
-      (Colors.orange[700]!, null, 'Amazing Cars', 'Our Cars are all about the experience.', Icons.directions_car),
-    ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(48,40,48,20),
-      child: Row(
-        children: items.map((e) {
-          final (color, tag, title, desc, icon) = e;
-          return Expanded(
-            child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-              child: Stack(
-                children: [
-                  // if (tag != null) Positioned(top: 0, left: 0, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: _saleRed, borderRadius: BorderRadius.circular(4)), child: Text(tag, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))),
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)), const SizedBox(height: 8), Text(desc, style: TextStyle(color: Colors.white70, fontSize: 13)), const SizedBox(height: 16), Icon(icon, color: Colors.white54, size: 40)]),
-                  Positioned(bottom: 0, right: 0, child: Icon(Icons.arrow_forward, color: Colors.white54)),
-                ],
+    Widget card({
+      required Color color,
+      required String title,
+      required String desc,
+      required IconData icon,
+      required VoidCallback onTap,
+      required EdgeInsets margin,
+    }) {
+      return Expanded(
+        child: Padding(
+          padding: margin,
+          child: Material(
+            color: color,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Stack(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                        const SizedBox(height: 8),
+                        Text(desc, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                        const SizedBox(height: 16),
+                        Icon(icon, color: Colors.white54, size: 40),
+                      ],
+                    ),
+                    const Positioned(bottom: 0, right: 0, child: Icon(Icons.arrow_forward, color: Colors.white54)),
+                  ],
+                ),
               ),
             ),
-          );
-        }).toList(),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(48, 40, 48, 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          card(
+            color: _navBlue,
+            title: 'Tours',
+            desc: 'Browse guided trips and tour packages.',
+            icon: Icons.travel_explore,
+            margin: const EdgeInsets.only(right: 8),
+            onTap: () => setState(() {
+              _current = _NavItem.tours;
+              _searchTabIndex = 0;
+            }),
+          ),
+          card(
+            color: Colors.orange[700]!,
+            title: 'Cars',
+            desc: 'Find a rental car for your journey.',
+            icon: Icons.directions_car,
+            margin: const EdgeInsets.only(left: 8),
+            onTap: () => setState(() {
+              _current = _NavItem.cars;
+              _searchTabIndex = 1;
+            }),
+          ),
+        ],
       ),
     );
   }
@@ -2044,8 +2108,8 @@ await showDialog(
           final t = _tours[i] as Map<String, dynamic>;
           final title = t['title']?.toString() ?? 'Tour';
           final price = t['salePrice'] ?? t['price'];
-          final priceStr = price != null ? '\$$price / person' : '';
-          final featured = t['isFeatured'] == true;
+          final priceStr = _priceLabel(price, perPerson: true);
+          final featured = _itemIsFeatured(t);
           return Container(
             width: 280,
             margin: const EdgeInsets.only(right: 20),
@@ -2115,8 +2179,46 @@ await showDialog(
     );
   }
 
-  Widget _buildCard({String? saleTag, String title = 'Travel with us', String desc = 'Lorem ipsum dolor sit amet.', String price = '\$150 / person', double stars = 4.5, String? buttonLabel}) {
-    return Container(
+  Widget _buildCard({
+    String? saleTag,
+    String title = 'Travel with us',
+    String desc = 'Lorem ipsum dolor sit amet.',
+    String price = '${_peso}150 / person',
+    String? moduleType,
+    int? moduleId,
+    String? buttonLabel,
+    String? imageUrl,
+    VoidCallback? onTap,
+  }) {
+    final img = imageUrl?.trim();
+    final resolvedImage = (img != null && img.isNotEmpty)
+        ? img
+        : 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400';
+    final Widget ratingSummary;
+    if (moduleType == null || moduleId == null) {
+      ratingSummary = Text('No ratings yet', style: TextStyle(color: Colors.grey[600], fontSize: 13));
+    } else {
+      final avg = _avgRating(moduleType!, moduleId!);
+      final cnt = _ratingCount(moduleType!, moduleId!);
+      if (avg == null || cnt == null || cnt == 0) {
+        ratingSummary = Text('No ratings yet', style: TextStyle(color: Colors.grey[600], fontSize: 13));
+      } else {
+        ratingSummary = Row(
+          children: [
+            Icon(Icons.star, size: 16, color: Colors.amber[700]),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                '${avg.toStringAsFixed(1)} / 5 ($cnt)',
+                style: const TextStyle(fontSize: 13),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      }
+    }
+    final card = Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black, blurRadius: 10, offset: const Offset(0, 2))]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2125,7 +2227,12 @@ await showDialog(
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                child: Container(height: 160, width: double.infinity, color: Colors.grey[300], child: Image.network('https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400', fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox())),
+                child: Container(
+                  height: 160,
+                  width: double.infinity,
+                  color: Colors.grey[300],
+                  child: Image.network(resolvedImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox()),
+                ),
               ),
               if (saleTag != null) Positioned(top: 12, left: 12, child: _tag(saleTag, saleTag == 'HOT' ? _hotPurple : _saleRed)),
               Positioned(bottom: 12, right: 12, child: CircleAvatar(backgroundColor: _primaryBlue, child: const Icon(Icons.check, color: Colors.white, size: 20))),
@@ -2138,19 +2245,90 @@ await showDialog(
               const SizedBox(height: 6),
               Text(desc, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
               const SizedBox(height: 8),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Row(children: [Icon(Icons.star, size: 16, color: Colors.amber[700]), const SizedBox(width: 4), Text('$stars', style: const TextStyle(fontSize: 13)), const SizedBox(width: 12), Text(price, style: const TextStyle(fontWeight: FontWeight.bold))]),
-              ]),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: ratingSummary),
+                  const SizedBox(width: 8),
+                  Text(price, style: const TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
               if (buttonLabel != null) ...[
-                const SizedBox(height: 12), 
+                const SizedBox(height: 12),
                 SizedBox(
-                  width: double.infinity, 
+                  width: double.infinity,
                   child: OutlinedButton(
-                    onPressed: () {}, 
-                    child: Text(buttonLabel)))],
+                    onPressed: onTap ?? () {},
+                    child: Text(buttonLabel!),
+                  ),
+                ),
+              ],
             ]),
           ),
         ],
+      ),
+    );
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: card,
+        ),
+      );
+    }
+    return card;
+  }
+
+  Widget _buildFeaturedPackages() {
+    final entries = <({bool isTour, Map<String, dynamic> m})>[];
+    for (final t in _tours) {
+      final m = t as Map<String, dynamic>;
+      if (_itemIsFeatured(m)) entries.add((isTour: true, m: m));
+    }
+    for (final c in _cars) {
+      final m = c as Map<String, dynamic>;
+      if (_itemIsFeatured(m)) entries.add((isTour: false, m: m));
+    }
+    if (entries.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(48, 0, 48, 24),
+        child: Text(
+          'No featured tours or cars yet.',
+          style: TextStyle(color: Colors.grey[600], fontSize: 14),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 48),
+      child: GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 3,
+        mainAxisSpacing: 24,
+        crossAxisSpacing: 24,
+        childAspectRatio: 1.3,
+        children: entries.map<Widget>((e) {
+          final title = e.m['title']?.toString() ?? (e.isTour ? 'Tour' : 'Car');
+          final price = e.m['salePrice'] ?? e.m['price'];
+          final priceStr = _priceLabel(price, perPerson: e.isTour);
+          final descExtra = e.m['description']?.toString().trim();
+          final typeLine = e.isTour ? 'Tour package' : '${e.m['passenger'] ?? '-'} passengers · ${e.m['gearShift'] ?? '-'}';
+          final desc = (descExtra != null && descExtra.isNotEmpty) ? (e.isTour ? descExtra : '$typeLine\n$descExtra') : typeLine;
+          final id = e.m['id'] is int ? e.m['id'] as int : int.tryParse(e.m['id']?.toString() ?? '') ?? 0;
+          return _buildCard(
+            saleTag: 'FEATURED',
+            title: title,
+            price: priceStr.isEmpty ? '—' : priceStr,
+            desc: desc,
+            moduleType: e.isTour ? 'tour' : 'car',
+            moduleId: id,
+            buttonLabel: 'View Details',
+            imageUrl: _itemImageUrl(e.m),
+            onTap: () => e.isTour ? _showTourDetailsDialog(e.m) : _showCarDetailsDialog(e.m),
+          );
+        }).toList(),
       ),
     );
   }
@@ -2170,8 +2348,19 @@ await showDialog(
           final m = t as Map<String, dynamic>;
           final title = m['title']?.toString() ?? 'Tour';
           final price = m['salePrice'] ?? m['price'];
-          final priceStr = price != null ? '\$$price / person' : '';
-          return _buildCard(title: title, price: priceStr, buttonLabel: 'View Details');
+          final priceStr = _priceLabel(price, perPerson: true);
+          final desc = m['description']?.toString().trim();
+          final id = m['id'] is int ? m['id'] as int : int.tryParse(m['id']?.toString() ?? '') ?? 0;
+          return _buildCard(
+            title: title,
+            price: priceStr.isEmpty ? '—' : priceStr,
+            desc: (desc != null && desc.isNotEmpty) ? desc : 'Tour package',
+            moduleType: 'tour',
+            moduleId: id,
+            buttonLabel: 'View Details',
+            imageUrl: _itemImageUrl(m),
+            onTap: () => _showTourDetailsDialog(m),
+          );
         }).toList(),
       ),
     );
@@ -2192,8 +2381,21 @@ await showDialog(
           final m = c as Map<String, dynamic>;
           final title = m['title']?.toString() ?? 'Car';
           final price = m['salePrice'] ?? m['price'];
-          final priceStr = price != null ? '\$$price / day' : '';
-          return _buildCard(title: title, price: priceStr, desc: '${m['passenger'] ?? '-'} passengers · ${m['gearShift'] ?? '-'}', buttonLabel: 'View Details');
+          final priceStr = _priceLabel(price, perPerson: false);
+          final descExtra = m['description']?.toString().trim();
+          final line = '${m['passenger'] ?? '-'} passengers · ${m['gearShift'] ?? '-'}';
+          final desc = (descExtra != null && descExtra.isNotEmpty) ? '$line\n$descExtra' : line;
+          final id = m['id'] is int ? m['id'] as int : int.tryParse(m['id']?.toString() ?? '') ?? 0;
+          return _buildCard(
+            title: title,
+            price: priceStr.isEmpty ? '—' : priceStr,
+            desc: desc,
+            moduleType: 'car',
+            moduleId: id,
+            buttonLabel: 'View Details',
+            imageUrl: _itemImageUrl(m),
+            onTap: () => _showCarDetailsDialog(m),
+          );
         }).toList(),
       ),
     );
@@ -2210,7 +2412,7 @@ await showDialog(
         crossAxisSpacing: 24,
         childAspectRatio: 1,
         children: List.generate(8, (i) {
-          return _buildCard(title: '${7 - (i % 3)} Days In Switzerland', price: '\$70 / person', buttonLabel: null);
+          return _buildCard(title: '${7 - (i % 3)} Days In Switzerland', price: '${_peso}70 / person', buttonLabel: null);
         }),
       ),
     );
@@ -2227,7 +2429,7 @@ await showDialog(
         crossAxisSpacing: 24,
         childAspectRatio: 1.4,
         children: List.generate(6, (i) {
-          return _buildCard(saleTag: 'HOT', title: 'Amazing Event in Paris', desc: 'Lorem ipsum dolor sit amet.', price: '\$120', buttonLabel: null);
+          return _buildCard(saleTag: 'HOT', title: 'Amazing Event in Paris', desc: 'Lorem ipsum dolor sit amet.', price: _peso + '120', buttonLabel: null);
         }),
       ),
     );
@@ -2343,39 +2545,27 @@ await showDialog(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
               );
-              final dateField = InkWell(
-                onTap: _pickFilterDateRange,
-                borderRadius: BorderRadius.circular(4),
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                    labelText: 'Check-in – Check-out',
-                    suffixIcon: const Icon(Icons.calendar_today, size: 18),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              final dateFieldsRow = Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: _filterStartDateField(
+                      borderRadius: 4,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
                   ),
-                  child: Text(
-                    _formatDateRangeLabel(),
-                    style: TextStyle(color: Colors.grey[800], fontSize: 14),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _filterEndDateField(
+                      borderRadius: 4,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
                   ),
-                ),
+                ],
               );
-              final guestsField = DropdownButtonFormField<int>(
-                value: _filterGuests.clamp(1, 8),
-                decoration: InputDecoration(
-                  labelText: 'Guests',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
-                items: List.generate(
-                  8,
-                  (i) {
-                    final n = i + 1;
-                    return DropdownMenuItem(value: n, child: Text('$n Guest${n == 1 ? '' : 's'}'));
-                  },
-                ),
-                onChanged: (v) {
-                  if (v != null) setState(() => _filterGuests = v);
-                },
+              final guestsField = _filterGuestsTextField(
+                borderRadius: 4,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               );
               final searchBtn = SizedBox(
                 height: 48,
@@ -2396,7 +2586,7 @@ await showDialog(
                   children: [
                     Expanded(flex: 3, child: locationField),
                     const SizedBox(width: 12),
-                    Expanded(flex: 2, child: dateField),
+                    Expanded(flex: 2, child: dateFieldsRow),
                     const SizedBox(width: 12),
                     Expanded(flex: 2, child: guestsField),
                     const SizedBox(width: 12),
@@ -2410,7 +2600,7 @@ await showDialog(
                 children: [
                   locationField,
                   const SizedBox(height: 12),
-                  dateField,
+                  dateFieldsRow,
                   const SizedBox(height: 12),
                   guestsField,
                   const SizedBox(height: 12),
@@ -2469,14 +2659,14 @@ await showDialog(
             ),
             min: 0,
             max: 2000,
-            labels: RangeLabels('\$${_priceRange.start.round()}', '\$${_priceRange.end.round()}'),
+            labels: RangeLabels('$_peso${_priceRange.start.round()}', '$_peso${_priceRange.end.round()}'),
             activeColor: _primaryBlue,
             onChanged: (values) {
               setState(() => _priceRange = values);
             },
           ),
           const SizedBox(height: 4),
-          Text('Price: \$${_priceRange.start.round()} - \$${_priceRange.end.round()}', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+          Text('Price: $_peso${_priceRange.start.round()} - $_peso${_priceRange.end.round()}', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
           const Divider(height: 32),
           const Text('Star level', style: TextStyle(fontWeight: FontWeight.w600)),
           Text('From average review (1–5)', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
@@ -2613,8 +2803,15 @@ await showDialog(
   Widget _buildResultCard(Map<String, dynamic> item, bool isTour) {
     final title = item['title']?.toString() ?? 'Item';
     final price = item['salePrice'] ?? item['price'];
-    final priceStr = price != null ? '\$$price${isTour ? ' / person' : ' / day'}' : '';
-    final featured = item['isFeatured'] == true;
+    final priceStr = _priceLabel(price, perPerson: isTour);
+    final featured = _itemIsFeatured(item);
+    final id = item['id'] is int ? item['id'] as int : int.tryParse(item['id']?.toString() ?? '') ?? 0;
+    final mt = isTour ? 'tour' : 'car';
+    final avg = _avgRating(mt, id);
+    final cnt = _ratingCount(mt, id);
+    final ratingLine = (avg != null && cnt != null && cnt > 0)
+        ? '${avg.toStringAsFixed(1)} / 5 ($cnt)'
+        : 'No ratings yet';
 
     return Container(
       decoration: BoxDecoration(
@@ -2635,7 +2832,7 @@ await showDialog(
                   height: 140,
                   width: double.infinity,
                   child: Image.network(
-                    item['imageUrl'] ?? 'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?w=600',
+                    _itemImageUrl(item),
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(color: Colors.grey[300]),
                   ),
@@ -2664,8 +2861,13 @@ await showDialog(
                     Text('Tour', style: TextStyle(color: Colors.grey[600], fontSize: 12))
                   else
                     Text('${item['passenger'] ?? '-'} passengers · ${item['gearShift'] ?? '-'}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text(ratingLine, style: TextStyle(color: Colors.grey[600], fontSize: 11)),
                   const SizedBox(height: 8),
-                  Text('from $priceStr', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(
+                    priceStr.isEmpty ? '—' : 'from $priceStr',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                 ],
               ),
           ),
@@ -2751,31 +2953,11 @@ await showDialog(
                   children: [
                     _buildLogo(),
                     const SizedBox(height: 16),
-                    Text('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut elit tellus, luctus nec ullamcorper mattis.', style: TextStyle(color: Colors.grey[300], fontSize: 14)),
+                    Text('Tours and car rentals for your next trip.', style: TextStyle(color: Colors.grey[300], fontSize: 14)),
                     const SizedBox(height: 16),
                     Text('Copyright © 2026 Company Name, All Rights Reserved.', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
                   ],
                 ),
-              ),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Quick Links', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  _footerLink('About us'),
-                  _footerLink('Contact us'),
-                  _footerLink('Privacy Policy'),
-                  _footerLink('Terms & Conditions'),
-                ]),
-              ),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Categories', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  _footerLink('Adventure'),
-                  _footerLink('Culture'),
-                  _footerLink('Relaxation'),
-                  _footerLink('Family'),
-                ]),
               ),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -2788,24 +2970,11 @@ await showDialog(
               ),
             ],
           ),
-          const SizedBox(height: 32),
-          Row(
-            children: [
-              IconButton(icon: const Icon(Icons.facebook, color: Colors.white), onPressed: () {}),
-              IconButton(icon: const Icon(Icons.camera_alt, color: Colors.white), onPressed: () {}),
-              IconButton(icon: const Icon(Icons.camera, color: Colors.white), onPressed: () {}),
-              IconButton(icon: const Icon(Icons.play_circle_fill, color: Colors.white), onPressed: () {}),
-            ],
-          ),
           const SizedBox(height: 16),
           Container(height: 1, color: Colors.white12),
         ],
       ),
     );
-  }
-
-  Widget _footerLink(String label) {
-    return Padding(padding: const EdgeInsets.only(bottom: 8), child: TextButton(onPressed: () {}, style: TextButton.styleFrom(alignment: Alignment.centerLeft, padding: EdgeInsets.zero, minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap), child: Text(label, style: TextStyle(color: Colors.grey[300], fontSize: 14))));
   }
 }
 

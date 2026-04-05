@@ -710,7 +710,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             return DataRow(cells: [
               DataCell(Text('${m['id']}')),
               DataCell(Text(m['title']?.toString() ?? '')),
-              DataCell(Text('\$${m['salePrice'] ?? m['price'] ?? '-'}')),
+              DataCell(Text('\u20B1${m['salePrice'] ?? m['price'] ?? '-'}')),
               DataCell(Text(m['status']?.toString() ?? '')),
               DataCell(Row(
                 children: [
@@ -771,7 +771,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             return DataRow(cells: [
               DataCell(Text('${m['id']}')),
               DataCell(Text(m['title']?.toString() ?? '')),
-              DataCell(Text('\$${m['salePrice'] ?? m['price'] ?? '-'}')),
+              DataCell(Text('\u20B1${m['salePrice'] ?? m['price'] ?? '-'}')),
               DataCell(_carStatusChip(m['status']?.toString())),
               DataCell(Row(
                 children: [
@@ -1523,7 +1523,7 @@ List<({int id, String? title, String? price, String? status})> _extractTableRows
         rows.add((
           id: id is int ? id : (id?.hashCode ?? i),
           title: item['title'] ?? item['name'] ?? item['userName'] ?? '-',
-          price: '\$${item['price'] ?? item['salePrice'] ?? '-'}',
+          price: '\u20B1${item['price'] ?? item['salePrice'] ?? '-'}',
           status: item['status']?.toString() ?? '-',
         ));
       }
