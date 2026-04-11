@@ -79,6 +79,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   _ChatbotFilter _chatFilter = _ChatbotFilter.all;
   List<dynamic> _ratings = [];
   bool _loadingRatings = false;
+  String _toursSearchQuery = '';
+  String _carsSearchQuery = '';
   final GlobalKey<FormState> _settingsFormKey = GlobalKey<FormState>();
   final _adminFirstNameController = TextEditingController();
   final _adminLastNameController = TextEditingController();
@@ -120,6 +122,30 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     });
 
     await _loadData();
+  }
+
+  List<dynamic> _getFilteredTours() {
+    final query = _toursSearchQuery.toLowerCase().trim();
+    if (query.isEmpty) return _tours;
+    return _tours.where((tour) {
+      final m = tour as Map<String, dynamic>;
+      final title = (m['title'] ?? m['name'] ?? '').toString().toLowerCase();
+      final location = (m['realTourAddress'] ?? m['location'] ?? m['address'] ?? m['city'] ?? '').toString().toLowerCase();
+      final author = (m['author'] ?? m['userName'] ?? m['username'] ?? '').toString().toLowerCase();
+      return title.contains(query) || location.contains(query) || author.contains(query);
+    }).toList();
+  }
+
+  List<dynamic> _getFilteredCars() {
+    final query = _carsSearchQuery.toLowerCase().trim();
+    if (query.isEmpty) return _cars;
+    return _cars.where((car) {
+      final m = car as Map<String, dynamic>;
+      final title = (m['title'] ?? m['name'] ?? '').toString().toLowerCase();
+      final location = (m['realTourAddress'] ?? m['location'] ?? m['address'] ?? m['city'] ?? '').toString().toLowerCase();
+      final author = (m['author'] ?? m['userName'] ?? m['username'] ?? '').toString().toLowerCase();
+      return title.contains(query) || location.contains(query) || author.contains(query);
+    }).toList();
   }
 
   Future<void> _loadData() async {
@@ -847,53 +873,116 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Padding(
+        //   padding: const EdgeInsets.only(bottom: 24),
+        //   child: Row(
+        //     children: [
+        //       Container(
+        //         padding: const EdgeInsets.symmetric(
+        //           horizontal: 16,
+        //           vertical: 6,
+        //         ),
+        //         decoration: BoxDecoration(
+        //           color: Colors.grey[100],
+        //           borderRadius: BorderRadius.circular(8),
+        //           border: Border.all(color: const Color(0xFFE0E0E0)),
+        //         ),
+        //         child: DropdownButtonHideUnderline(
+        //           child: DropdownButton<String>(
+        //             value: 'Bulk Actions',
+        //             items: const [
+        //               DropdownMenuItem(
+        //                 value: 'Bulk Actions',
+        //                 child: Text('Bulk Actions'),
+        //               ),
+        //             ],
+        //             onChanged: (_) {},
+        //           ),
+        //         ),
+        //       ),
+        //       const SizedBox(width: 12),
+        //       SizedBox(
+        //         height: 44,
+        //         child: ElevatedButton(
+        //           onPressed: () {},
+        //           style: ElevatedButton.styleFrom(
+        //             backgroundColor: const Color(0xFF06A5BF),
+        //             foregroundColor: Colors.white,
+        //             padding: const EdgeInsets.symmetric(horizontal: 24),
+        //           ),
+        //           child: const Text('Apply'),
+        //         ),
+        //       ),
+        //       const Spacer(),
+        //       SizedBox(
+        //         width: 250,
+        //         height: 44,
+        //         child: TextField(
+        //           decoration: InputDecoration(
+        //             hintText: 'Search by name',
+        //             border: OutlineInputBorder(
+        //               borderRadius: BorderRadius.circular(8),
+        //             ),
+        //             contentPadding: const EdgeInsets.symmetric(
+        //               horizontal: 16,
+        //               vertical: 12,
+        //             ),
+        //             suffixIcon: const Padding(
+        //               padding: EdgeInsets.all(8.0),
+        //               child: Icon(Icons.search, size: 20),
+        //             ),
+        //           ),
+        //         ),
+        //       ),
+        //       const SizedBox(width: 12),
+        //       SizedBox(
+        //         height: 44,
+        //         child: OutlinedButton(
+        //           onPressed: () {},
+        //           style: OutlinedButton.styleFrom(
+        //             padding: const EdgeInsets.symmetric(horizontal: 16),
+        //             side: const BorderSide(color: Color(0xFF5B667A)),
+        //           ),
+        //           child: const Text(
+        //             'Advanced',
+        //             style: TextStyle(color: Colors.black87),
+        //           ),
+        //         ),
+        //       ),
+        //       const SizedBox(width: 12),
+        //       SizedBox(
+        //         height: 44,
+        //         child: ElevatedButton(
+        //           onPressed: () {},
+        //           style: ElevatedButton.styleFrom(
+        //             backgroundColor: const Color(0xFF2563EB),
+        //             foregroundColor: Colors.white,
+        //             padding: const EdgeInsets.symmetric(horizontal: 24),
+        //           ),
+        //           child: const Text('Search'),
+        //         ),
+        //       ),
+        //     ],
+        //   ),
+        // ),
         Padding(
           padding: const EdgeInsets.only(bottom: 24),
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE0E0E0)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: 'Bulk Actions',
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Bulk Actions',
-                        child: Text('Bulk Actions'),
-                      ),
-                    ],
-                    onChanged: (_) {},
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                height: 44,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF06A5BF),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                  ),
-                  child: const Text('Apply'),
-                ),
-              ),
               const Spacer(),
               SizedBox(
-                width: 250,
-                height: 44,
+                width: 300,
                 child: TextField(
+                  onChanged: (value) => setState(() => _toursSearchQuery = value),
                   decoration: InputDecoration(
-                    hintText: 'Search by name',
+                    hintText: 'Search tours by name, location or author...',
+                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                    suffixIcon: _toursSearchQuery.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => setState(() => _toursSearchQuery = ''),
+                          ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -901,39 +990,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                       horizontal: 16,
                       vertical: 12,
                     ),
-                    suffixIcon: const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Icon(Icons.search, size: 20),
-                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                height: 44,
-                child: OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    side: const BorderSide(color: Color(0xFF5B667A)),
-                  ),
-                  child: const Text(
-                    'Advanced',
-                    style: TextStyle(color: Colors.black87),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                height: 44,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                  ),
-                  child: const Text('Search'),
                 ),
               ),
             ],
@@ -945,7 +1002,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Text(
-                'Found ${_tours.length} items',
+                'Found ${_getFilteredTours().length} items',
                 style: const TextStyle(
                   fontSize: 14,
                   color: Colors.grey,
@@ -1018,7 +1075,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   ),
                 ),
               ],
-              rows: _tours.map<DataRow>((t) {
+              rows: _getFilteredTours().map<DataRow>((t) {
                 final m = t as Map<String, dynamic>;
                 final title = m['title']?.toString() ?? 'Tour';
                 final isFeatured =
@@ -1217,53 +1274,116 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Padding(
+        //   padding: const EdgeInsets.only(bottom: 24),
+        //   child: Row(
+        //     children: [
+        //       Container(
+        //         padding: const EdgeInsets.symmetric(
+        //           horizontal: 16,
+        //           vertical: 6,
+        //         ),
+        //         decoration: BoxDecoration(
+        //           color: Colors.grey[100],
+        //           borderRadius: BorderRadius.circular(8),
+        //           border: Border.all(color: const Color(0xFFE0E0E0)),
+        //         ),
+        //         child: DropdownButtonHideUnderline(
+        //           child: DropdownButton<String>(
+        //             value: 'Bulk Actions',
+        //             items: const [
+        //               DropdownMenuItem(
+        //                 value: 'Bulk Actions',
+        //                 child: Text('Bulk Actions'),
+        //               ),
+        //             ],
+        //             onChanged: (_) {},
+        //           ),
+        //         ),
+        //       ),
+        //       const SizedBox(width: 12),
+        //       SizedBox(
+        //         height: 44,
+        //         child: ElevatedButton(
+        //           onPressed: () {},
+        //           style: ElevatedButton.styleFrom(
+        //             backgroundColor: const Color(0xFF06A5BF),
+        //             foregroundColor: Colors.white,
+        //             padding: const EdgeInsets.symmetric(horizontal: 24),
+        //           ),
+        //           child: const Text('Apply'),
+        //         ),
+        //       ),
+        //       const Spacer(),
+        //       SizedBox(
+        //         width: 250,
+        //         height: 44,
+        //         child: TextField(
+        //           decoration: InputDecoration(
+        //             hintText: 'Search by name',
+        //             border: OutlineInputBorder(
+        //               borderRadius: BorderRadius.circular(8),
+        //             ),
+        //             contentPadding: const EdgeInsets.symmetric(
+        //               horizontal: 16,
+        //               vertical: 12,
+        //             ),
+        //             suffixIcon: const Padding(
+        //               padding: EdgeInsets.all(8.0),
+        //               child: Icon(Icons.search, size: 20),
+        //             ),
+        //           ),
+        //         ),
+        //       ),
+        //       const SizedBox(width: 12),
+        //       SizedBox(
+        //         height: 44,
+        //         child: OutlinedButton(
+        //           onPressed: () {},
+        //           style: OutlinedButton.styleFrom(
+        //             padding: const EdgeInsets.symmetric(horizontal: 16),
+        //             side: const BorderSide(color: Color(0xFF5B667A)),
+        //           ),
+        //           child: const Text(
+        //             'Advanced',
+        //             style: TextStyle(color: Colors.black87),
+        //           ),
+        //         ),
+        //       ),
+        //       const SizedBox(width: 12),
+        //       SizedBox(
+        //         height: 44,
+        //         child: ElevatedButton(
+        //           onPressed: () {},
+        //           style: ElevatedButton.styleFrom(
+        //             backgroundColor: const Color(0xFF2563EB),
+        //             foregroundColor: Colors.white,
+        //             padding: const EdgeInsets.symmetric(horizontal: 24),
+        //           ),
+        //           child: const Text('Search'),
+        //         ),
+        //       ),
+        //     ],
+        //   ),
+        // ),
         Padding(
           padding: const EdgeInsets.only(bottom: 24),
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE0E0E0)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: 'Bulk Actions',
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Bulk Actions',
-                        child: Text('Bulk Actions'),
-                      ),
-                    ],
-                    onChanged: (_) {},
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                height: 44,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF06A5BF),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                  ),
-                  child: const Text('Apply'),
-                ),
-              ),
               const Spacer(),
               SizedBox(
-                width: 250,
-                height: 44,
+                width: 300,
                 child: TextField(
+                  onChanged: (value) => setState(() => _carsSearchQuery = value),
                   decoration: InputDecoration(
-                    hintText: 'Search by name',
+                    hintText: 'Search cars by name, location or author...',
+                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                    suffixIcon: _carsSearchQuery.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => setState(() => _carsSearchQuery = ''),
+                          ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -1271,39 +1391,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                       horizontal: 16,
                       vertical: 12,
                     ),
-                    suffixIcon: const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Icon(Icons.search, size: 20),
-                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                height: 44,
-                child: OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    side: const BorderSide(color: Color(0xFF5B667A)),
-                  ),
-                  child: const Text(
-                    'Advanced',
-                    style: TextStyle(color: Colors.black87),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                height: 44,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                  ),
-                  child: const Text('Search'),
                 ),
               ),
             ],
@@ -1315,7 +1403,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Text(
-                'Found ${_cars.length} items',
+                'Found ${_getFilteredCars().length} items',
                 style: const TextStyle(
                   fontSize: 14,
                   color: Colors.grey,
