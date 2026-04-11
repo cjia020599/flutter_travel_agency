@@ -73,8 +73,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
   late final TextEditingController _locationQueryController;
   late final TextEditingController _filterGuestsController;
   final Set<String> _starFilters = {};
-  final Set<String> _reviewFilters = {};
-  final Set<String> _propertyFilters = {};
+  final Set<String> _tourAvailabilityFilters = {};
+  final Set<String> _carCapacityFilters = {};
   final Map<String, double> _avgRatingByKey = {};
   final Map<String, int> _ratingCountByKey = {};
 
@@ -511,38 +511,27 @@ class _TravelHomePageState extends State<TravelHomePage> {
       if (s == '5' && avg >= 4.5) return true;
       if (s == '4' && avg >= 3.5 && avg < 4.5) return true;
       if (s == '3' && avg >= 2.5 && avg < 3.5) return true;
+      if (s == '2' && avg >= 1.5 && avg < 2.5) return true;
+      if (s == '1' && avg < 1.5) return true;
     }
     return false;
   }
 
-  bool _passesReviewFilters(String moduleType, int id) {
-    if (_reviewFilters.isEmpty) return true;
-    final avg = _avgRating(moduleType, id);
-    if (avg == null) return false;
-    for (final r in _reviewFilters) {
-      if (r == '9' && avg >= 4.5) return true;
-      if (r == '8' && avg >= 4.0) return true;
-      if (r == '7' && avg >= 3.5) return true;
-    }
-    return false;
-  }
-
-  /// Tours: maps to `availability` (always / fixed / open_hours). Cars: by passenger capacity bands.
   bool _passesPropertyFilters(Map<String, dynamic> item, {required bool isTour}) {
-    if (_propertyFilters.isEmpty) return true;
-    for (final p in _propertyFilters) {
-      if (isTour) {
-        final a = item['availability']?.toString();
-        if (p == 'Hotels' && a == 'always') return true;
-        if (p == 'Apartments' && a == 'fixed') return true;
-        if (p == 'Hostels' && a == 'open_hours') return true;
-      } else {
-        final pass = int.tryParse(item['passenger']?.toString() ?? '') ?? 0;
-        if (p == 'Apartments' && pass >= 1 && pass <= 4) return true;
-        if (p == 'Hostels' && pass >= 5 && pass <= 7) return true;
-        if (p == 'Hotels' && pass >= 8) return true;
-      }
+    if (isTour) {
+      if (_tourAvailabilityFilters.isEmpty) return true;
+      final a = item['availability']?.toString();
+      if (_tourAvailabilityFilters.contains('always') && a == 'always') return true;
+      if (_tourAvailabilityFilters.contains('fixed') && a == 'fixed') return true;
+      if (_tourAvailabilityFilters.contains('open_hours') && a == 'open_hours') return true;
+      return false;
     }
+
+    if (_carCapacityFilters.isEmpty) return true;
+    final pass = int.tryParse(item['passenger']?.toString() ?? '') ?? 0;
+    if (_carCapacityFilters.contains('small') && pass >= 1 && pass <= 4) return true;
+    if (_carCapacityFilters.contains('medium') && pass >= 5 && pass <= 7) return true;
+    if (_carCapacityFilters.contains('large') && pass >= 8) return true;
     return false;
   }
 
@@ -554,7 +543,6 @@ class _TravelHomePageState extends State<TravelHomePage> {
       if (!_passesLocation(t, isTour: true)) return false;
       if (!_passesDateRange(t)) return false;
       if (!_passesStarFilters('tour', id)) return false;
-      if (!_passesReviewFilters('tour', id)) return false;
       if (!_passesPropertyFilters(t, isTour: true)) return false;
       return true;
     }).toList();
@@ -569,7 +557,6 @@ class _TravelHomePageState extends State<TravelHomePage> {
       if (!_passesGuests(c, isTour: false)) return false;
       if (!_passesDateRange(c)) return false;
       if (!_passesStarFilters('car', id)) return false;
-      if (!_passesReviewFilters('car', id)) return false;
       if (!_passesPropertyFilters(c, isTour: false)) return false;
       return true;
     }).toList();
@@ -2675,8 +2662,8 @@ await showDialog(
           const SizedBox(height: 4),
           Text('Price: $_peso${_priceRange.start.round()} - $_peso${_priceRange.end.round()}', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
           const Divider(height: 32),
-          const Text('Star level', style: TextStyle(fontWeight: FontWeight.w600)),
-          Text('From average review (1–5)', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+          const Text('Star rating', style: TextStyle(fontWeight: FontWeight.w600)),
+          Text('Filter by average star rating (1–5)', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
           const SizedBox(height: 8),
           _filterCheckboxRow('5 star', _starFilters.contains('5'), (v) {
             setState(() {
@@ -2705,71 +2692,88 @@ await showDialog(
               }
             });
           }),
-          const Divider(height: 32),
-          const Text('Review Score', style: TextStyle(fontWeight: FontWeight.w600)),
-          Text('Match typical 10-point bands (mapped from 5★ reviews)', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-          const SizedBox(height: 8),
-          _filterCheckboxRow('Wonderful 9+', _reviewFilters.contains('9'), (v) {
+          _filterCheckboxRow('2 star', _starFilters.contains('2'), (v) {
             setState(() {
               if (v == true) {
-                _reviewFilters.add('9');
+                _starFilters.add('2');
               } else {
-                _reviewFilters.remove('9');
+                _starFilters.remove('2');
               }
             });
           }),
-          _filterCheckboxRow('Very good 8+', _reviewFilters.contains('8'), (v) {
+          _filterCheckboxRow('1 star', _starFilters.contains('1'), (v) {
             setState(() {
               if (v == true) {
-                _reviewFilters.add('8');
+                _starFilters.add('1');
               } else {
-                _reviewFilters.remove('8');
-              }
-            });
-          }),
-          _filterCheckboxRow('Good 7+', _reviewFilters.contains('7'), (v) {
-            setState(() {
-              if (v == true) {
-                _reviewFilters.add('7');
-              } else {
-                _reviewFilters.remove('7');
+                _starFilters.remove('1');
               }
             });
           }),
           const Divider(height: 32),
-          const Text('Property type', style: TextStyle(fontWeight: FontWeight.w600)),
-          Text(
-            isTour ? 'Tours: fixed dates, open hours, or always on' : 'Cars: small, medium, or large capacity',
-            style: TextStyle(color: Colors.grey[600], fontSize: 11),
-          ),
-          const SizedBox(height: 8),
-          _filterCheckboxRow('Apartments', _propertyFilters.contains('Apartments'), (v) {
-            setState(() {
-              if (v == true) {
-                _propertyFilters.add('Apartments');
-              } else {
-                _propertyFilters.remove('Apartments');
-              }
-            });
-          }),
-          _filterCheckboxRow('Hostels', _propertyFilters.contains('Hostels'), (v) {
-            setState(() {
-              if (v == true) {
-                _propertyFilters.add('Hostels');
-              } else {
-                _propertyFilters.remove('Hostels');
-              }
-            });
-          }),
-          _filterCheckboxRow('Hotels', _propertyFilters.contains('Hotels'), (v) {
-            setState(() {
-              if (v == true) {
-                _propertyFilters.add('Hotels');
-              } else {
-                _propertyFilters.remove('Hotels');
-              }
-            });
-          }),
+          if (isTour) ...[
+            const Text('Tour availability', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text('Filter tours by availability type', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+            const SizedBox(height: 8),
+            _filterCheckboxRow('Always open', _tourAvailabilityFilters.contains('always'), (v) {
+              setState(() {
+                if (v == true) {
+                  _tourAvailabilityFilters.add('always');
+                } else {
+                  _tourAvailabilityFilters.remove('always');
+                }
+              });
+            }),
+            _filterCheckboxRow('Fixed dates', _tourAvailabilityFilters.contains('fixed'), (v) {
+              setState(() {
+                if (v == true) {
+                  _tourAvailabilityFilters.add('fixed');
+                } else {
+                  _tourAvailabilityFilters.remove('fixed');
+                }
+              });
+            }),
+            _filterCheckboxRow('Open hours', _tourAvailabilityFilters.contains('open_hours'), (v) {
+              setState(() {
+                if (v == true) {
+                  _tourAvailabilityFilters.add('open_hours');
+                } else {
+                  _tourAvailabilityFilters.remove('open_hours');
+                }
+              });
+            }),
+          ] else ...[
+            const Text('Passenger capacity', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text('Filter cars by their passenger capacity', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+            const SizedBox(height: 8),
+            _filterCheckboxRow('Small (1-4)', _carCapacityFilters.contains('small'), (v) {
+              setState(() {
+                if (v == true) {
+                  _carCapacityFilters.add('small');
+                } else {
+                  _carCapacityFilters.remove('small');
+                }
+              });
+            }),
+            _filterCheckboxRow('Medium (5-7)', _carCapacityFilters.contains('medium'), (v) {
+              setState(() {
+                if (v == true) {
+                  _carCapacityFilters.add('medium');
+                } else {
+                  _carCapacityFilters.remove('medium');
+                }
+              });
+            }),
+            _filterCheckboxRow('Large (8+)', _carCapacityFilters.contains('large'), (v) {
+              setState(() {
+                if (v == true) {
+                  _carCapacityFilters.add('large');
+                } else {
+                  _carCapacityFilters.remove('large');
+                }
+              });
+            }),
+          ]
         ],
       ),
     );
