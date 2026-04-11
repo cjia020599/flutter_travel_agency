@@ -10,13 +10,13 @@ class ImageUploadWidget extends StatefulWidget {
   final double width;
 
   const ImageUploadWidget({
-    Key? key,
+    super.key,
     this.initialImageUrl,
     this.initialImagePublicId,
     required this.onImageSelected,
     this.height = 200,
     this.width = double.infinity,
-  }) : super(key: key);
+  });
 
   @override
   _ImageUploadWidgetState createState() => _ImageUploadWidgetState();

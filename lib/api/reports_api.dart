@@ -17,7 +17,7 @@ class ReportsApi {
 
   static Future<Map<String, dynamic>> bookings({bool auth = true}) async {
     final res = await _client.get('/api/reports/bookings', auth: auth);
-    return res is Map ? res : {};
+    return res;
   }
 
   static Future<List<dynamic>> locations({bool auth = true}) async {

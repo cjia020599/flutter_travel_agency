@@ -239,7 +239,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.directions_car, size: 60),
+                        errorBuilder: (_, _, _) => const Icon(Icons.directions_car, size: 60),
                       ),
                     ),
                     title: Text(booking.carTitle),
@@ -299,7 +299,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.card_travel, size: 60),
+                        errorBuilder: (_, _, _) => const Icon(Icons.card_travel, size: 60),
                       ),
                     ),
                     title: Text(booking.tourTitle),
@@ -506,7 +506,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       _field(_city, 'City', Icons.location_city),
                       _field(_state, 'State', Icons.flag),
                       DropdownButtonFormField<String>(
-                        value: _country,
+                        initialValue: _country,
                         decoration: const InputDecoration(labelText: 'Country', border: OutlineInputBorder()),
                         items: ['Philippines', 'United States', 'United Kingdom', 'Japan', 'France']
                             .map((c) => DropdownMenuItem(value: c, child: Text(c)))

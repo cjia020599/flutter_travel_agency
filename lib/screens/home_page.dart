@@ -9,7 +9,6 @@ import '../api/cars_api.dart';
 import '../api/lookups_api.dart';
 import '../api/auth_api.dart';
 import '../api/user_api.dart';
-import 'admin_dashboard_page.dart';
 import 'login_page.dart';
 import 'register_page.dart';
 import 'user_profile_page.dart';
@@ -120,9 +119,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
     setState(() {
       _isLoggedIn = loggedIn;
       _isAdmin = isAdmin;
-      _tours = tours is List ? tours : [];
-      _cars = cars is List ? cars : [];
-      _locations = locations is List ? locations : [];
+      _tours = tours;
+      _cars = cars;
+      _locations = locations;
       _userDisplayName = _displayNameFromProfile(profile);
     });
     await _loadRentals();
@@ -1049,7 +1048,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
     final title = car['title']?.toString() ?? 'Car';
     final price = car['salePrice'] ?? car['price'];
-    final priceStr = price != null ? '${_peso}${price.toString()} / day' : '';
+    final priceStr = price != null ? '$_peso${price.toString()} / day' : '';
     final imageUrl = _itemImageUrl(car);
     final passengers = car['passenger']?.toString() ?? '-';
     final gear = car['gearShift']?.toString() ?? '-';
@@ -1085,7 +1084,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       height: 180,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorBuilder: (_, _, _) => Container(
                         height: 180,
                         color: Colors.grey[300],
                         child: const Icon(Icons.directions_car, size: 80, color: Colors.grey),
@@ -1269,7 +1268,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       width: 60,
                       height: 60,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.directions_car, size: 60),
+                      errorBuilder: (_, _, _) => const Icon(Icons.directions_car, size: 60),
                     ),
                   ),
                   title: Text(rental.carTitle),
@@ -1335,7 +1334,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
     final title = tour['title']?.toString() ?? 'Tour';
     final price = tour['salePrice'] ?? tour['price'];
-    final priceStr = price != null ? '${_peso}${price.toString()} / person' : '';
+    final priceStr = price != null ? '$_peso${price.toString()} / person' : '';
     final imageUrl = _itemImageUrl(tour);
     final tourDesc = tour['description']?.toString().trim();
 
@@ -1368,7 +1367,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       height: 180,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorBuilder: (_, _, _) => Container(
                         height: 180,
                         color: Colors.grey[300],
                         child: const Icon(Icons.travel_explore, size: 80, color: Colors.grey),
@@ -1750,7 +1749,7 @@ await showDialog(
                         ? Center(child: Text(_notificationsLoading ? 'Loading...' : 'No notifications yet.'))
                         : ListView.separated(
                             itemCount: _notifications.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            separatorBuilder: (_, _) => const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final n = _notifications[index];
                               final time = DateFormat('MMM dd, yyyy  HH:mm').format(n.createdAt.toLocal());
@@ -1837,7 +1836,7 @@ await showDialog(
     return SizedBox(
       width: 125,
       height: 125,
-      child:  Center(child: ClipOval(child: Image.network('https://res.cloudinary.com/das4hjjvf/image/upload/v1773481328/logo_transparent_bg_dfoqlw.webp', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]))),
+      child:  Center(child: ClipOval(child: Image.network('https://res.cloudinary.com/das4hjjvf/image/upload/v1773481328/logo_transparent_bg_dfoqlw.webp', fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: Colors.grey[400]))),
                   ),
     );
   }
@@ -1861,7 +1860,7 @@ await showDialog(
           child: Image.network(
             'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200',
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const SizedBox(),
+            errorBuilder: (_, _, _) => const SizedBox(),
           ),
         ),
         Container(
@@ -2130,7 +2129,7 @@ await showDialog(
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(12)), child: Image.network('https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400]))),
+                      ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(12)), child: Image.network('https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400', fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: Colors.grey[400]))),
                       if (featured) Positioned(top: 12, left: 12, child: _tag('FEATURED', _saleRed)),
                       Positioned(bottom: 12, left: 12, right: 12, child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, shadows: [Shadow(color: Colors.black54, blurRadius: 4)]))),
                     ],
@@ -2175,7 +2174,7 @@ await showDialog(
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.network('https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400', fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[400])),
+                  Image.network('https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400', fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: Colors.grey[400])),
                   Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black54]))),
                   Positioned(bottom: 16, left: 16, right: 16, child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(name.toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)), Text('Explore', style: TextStyle(color: Colors.white70, fontSize: 12))]), const Icon(Icons.arrow_forward, color: Colors.white)])),
                 ],
@@ -2206,8 +2205,8 @@ await showDialog(
     if (moduleType == null || moduleId == null) {
       ratingSummary = Text('No ratings yet', style: TextStyle(color: Colors.grey[600], fontSize: 13));
     } else {
-      final avg = _avgRating(moduleType!, moduleId!);
-      final cnt = _ratingCount(moduleType!, moduleId!);
+      final avg = _avgRating(moduleType, moduleId);
+      final cnt = _ratingCount(moduleType, moduleId);
       if (avg == null || cnt == null || cnt == 0) {
         ratingSummary = Text('No ratings yet', style: TextStyle(color: Colors.grey[600], fontSize: 13));
       } else {
@@ -2239,7 +2238,7 @@ await showDialog(
                   height: 160,
                   width: double.infinity,
                   color: Colors.grey[300],
-                  child: Image.network(resolvedImage, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox()),
+                  child: Image.network(resolvedImage, fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox()),
                 ),
               ),
               if (saleTag != null) Positioned(top: 12, left: 12, child: _tag(saleTag, saleTag == 'HOT' ? _hotPurple : _saleRed)),
@@ -2267,7 +2266,7 @@ await showDialog(
                   width: double.infinity,
                   child: OutlinedButton(
                     onPressed: onTap ?? () {},
-                    child: Text(buttonLabel!),
+                    child: Text(buttonLabel),
                   ),
                 ),
               ],
@@ -2437,7 +2436,7 @@ await showDialog(
         crossAxisSpacing: 24,
         childAspectRatio: 1.4,
         children: List.generate(6, (i) {
-          return _buildCard(saleTag: 'HOT', title: 'Amazing Event in Paris', desc: 'Lorem ipsum dolor sit amet.', price: _peso + '120', buttonLabel: null);
+          return _buildCard(saleTag: 'HOT', title: 'Amazing Event in Paris', desc: 'Lorem ipsum dolor sit amet.', price: '${_peso}120', buttonLabel: null);
         }),
       ),
     );
@@ -2461,7 +2460,7 @@ await showDialog(
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: Container(height: 180, width: double.infinity, color: Colors.grey[300], child: Image.network('https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400', fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox())),
+                  child: Container(height: 180, width: double.infinity, color: Colors.grey[300], child: Image.network('https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400', fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox())),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -2496,7 +2495,7 @@ await showDialog(
               child: Image.network(
                 'https://images.unsplash.com/photo-1519710164239-da123dc03ef4?w=1200',
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: Colors.green[200]),
+                errorBuilder: (_, _, _) => Container(color: Colors.green[200]),
               ),
             ),
             Container(
@@ -2842,7 +2841,7 @@ await showDialog(
                   child: Image.network(
                     _itemImageUrl(item),
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(color: Colors.grey[300]),
+                    errorBuilder: (_, _, _) => Container(color: Colors.grey[300]),
                   ),
                 ),
               ),

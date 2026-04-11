@@ -72,7 +72,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   bool _loading = true;
   bool _loadingUsers = false;
   String? _usersError;
-  Map<String, dynamic?> _reportsData = {};
+  Map<String, dynamic> _reportsData = {};
   bool _loadingReports = false;
   List<dynamic> _chatQuestions = [];
   bool _loadingChatQuestions = false;
@@ -779,37 +779,225 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DataTable(
-          columns: const [
-            DataColumn(label: Text('ID')),
-            DataColumn(label: Text('Name')),
-            DataColumn(label: Text('Price')),
-            DataColumn(label: Text('Status')),
-            DataColumn(label: Text('Actions')),
-          ],
-          rows: _tours.map<DataRow>((t) {
-            final m = t as Map<String, dynamic>;
-            return DataRow(cells: [
-              DataCell(Text('${m['id']}')),
-              DataCell(Text(m['title']?.toString() ?? '')),
-              DataCell(Text('\u20B1${m['salePrice'] ?? m['price'] ?? '-'}')),
-              DataCell(Text(m['status']?.toString() ?? '')),
-              DataCell(Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () => _showEditTourDialog(m),
-                    tooltip: 'Edit Tour',
+        Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE0E0E0)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: 'Bulk Actions',
+                    items: const [DropdownMenuItem(value: 'Bulk Actions', child: Text('Bulk Actions'))],
+                    onChanged: (_) {},
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: () => _deleteTour(m['id']),
-                    tooltip: 'Delete Tour',
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF06A5BF),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                   ),
-                ],
-              )),
-            ]);
-          }).toList(),
+                  child: const Text('Apply'),
+                ),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 250,
+                height: 44,
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search by name',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    suffixIcon: const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(Icons.search, size: 20),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 44,
+                child: OutlinedButton(
+                  onPressed: () {},
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    side: const BorderSide(color: Color(0xFF5B667A)),
+                  ),
+                  child: const Text('Advanced', style: TextStyle(color: Colors.black87)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                  ),
+                  child: const Text('Search'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                'Found ${_tours.length} items',
+                style: const TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ),
+        Theme(
+          data: Theme.of(context).copyWith(
+            dataTableTheme: DataTableThemeData(
+              headingRowColor: MaterialStateProperty.all(const Color(0xFFFAFAFC)),
+              headingRowHeight: 56,
+              dataRowMinHeight: 56,
+              dataRowMaxHeight: 72,
+              dividerThickness: 1,
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFE0E0E0)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Location', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Author', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Reviews', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600))),
+              ],
+              rows: _tours.map<DataRow>((t) {
+                final m = t as Map<String, dynamic>;
+                final title = m['title']?.toString() ?? 'Tour';
+                final isFeatured = m['featured'] == true || m['isFeatured'] == true;
+                final location = (m['realTourAddress']?.toString().isNotEmpty == true
+                        ? m['realTourAddress']?.toString()
+                        : (m['location']?.toString().isNotEmpty == true
+                            ? m['location']?.toString()
+                            : (m['address']?.toString().isNotEmpty == true
+                                ? m['address']?.toString()
+                                : (m['city']?.toString().isNotEmpty == true
+                                    ? m['city']?.toString()
+                                    : 'N/A'))))
+                    ?? 'N/A';
+                final author = m['author']?.toString() ?? m['userName']?.toString() ?? m['username']?.toString() ?? 'Admin';
+                final status = m['status']?.toString().toLowerCase() ?? 'draft';
+                final createdAt = m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
+                final reviewCount = m['reviewCount'] ?? m['reviews'] ?? m['ratingCount'] ?? 0;
+
+                String dateStr = '';
+                try {
+                  final date = createdAt is String ? DateTime.parse(createdAt) : createdAt as DateTime;
+                  dateStr = DateFormat('MM/dd/yyyy').format(date);
+                } catch (_) {
+                  dateStr = 'N/A';
+                }
+
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            if (isFeatured)
+                              Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFBBF24),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'Featured',
+                                  style: TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            Flexible(
+                              child: Text(
+                                title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: Color(0xFF2563EB),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      Text(location, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                    ),
+                    DataCell(
+                      Text(author, style: const TextStyle(fontSize: 13)),
+                    ),
+                    DataCell(_carStatusChip(status)),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          reviewCount.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                    DataCell(Text(dateStr, style: const TextStyle(fontSize: 13, color: Colors.grey))),
+                    DataCell(
+                      ElevatedButton.icon(
+                        onPressed: () => _showEditTourDialog(m),
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: const Text('Edit'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
         ),
       ],
     );
@@ -837,41 +1025,265 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   Widget _buildCarsList() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_cars.isEmpty) return const Center(child: Text('No cars yet.'));
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DataTable(
-          columns: const [
-            DataColumn(label: Text('ID')),
-            DataColumn(label: Text('Name')),
-            DataColumn(label: Text('Price')),
-            DataColumn(label: Text('Status')),
-            DataColumn(label: Text('Actions')),
-          ],
-          rows: _cars.map<DataRow>((c) {
-            final m = c as Map<String, dynamic>;
-            return DataRow(cells: [
-              DataCell(Text('${m['id']}')),
-              DataCell(Text(m['title']?.toString() ?? '')),
-              DataCell(Text('\u20B1${m['salePrice'] ?? m['price'] ?? '-'}')),
-              DataCell(_carStatusChip(m['status']?.toString())),
-              DataCell(Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () => _showEditCarDialog(m),
-                    tooltip: 'Edit Car',
+        Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE0E0E0)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: 'Bulk Actions',
+                    items: const [DropdownMenuItem(value: 'Bulk Actions', child: Text('Bulk Actions'))],
+                    onChanged: (_) {},
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: () => _deleteCar(m['id']),
-                    tooltip: 'Delete Car',
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF06A5BF),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                   ),
-                ],
-              )),
-            ]);
-          }).toList(),
+                  child: const Text('Apply'),
+                ),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 250,
+                height: 44,
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search by name',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    suffixIcon: const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(Icons.search, size: 20),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 44,
+                child: OutlinedButton(
+                  onPressed: () {},
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    side: const BorderSide(color: Color(0xFF5B667A)),
+                  ),
+                  child: const Text('Advanced', style: TextStyle(color: Colors.black87)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                  ),
+                  child: const Text('Search'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                'Found ${_cars.length} items',
+                style: const TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ),
 
+        // Cars Table
+        Theme(
+          data: Theme.of(context).copyWith(
+            dataTableTheme: DataTableThemeData(
+              headingRowColor: WidgetStateProperty.all(const Color(0xFFFAFAFC)),
+              headingRowHeight: 56,
+              dataRowMinHeight: 56,
+              dataRowMaxHeight: 72,
+              dividerThickness: 1,
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFE0E0E0)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Location', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Author', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Reviews', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600))),
+              ],
+              rows: _cars.map<DataRow>((c) {
+                final m = c as Map<String, dynamic>;
+                final title = m['title']?.toString() ?? 'Car';
+                final isFeatured = m['featured'] == true || m['isFeatured'] == true;
+                // Try multiple location field names
+                final location = (m['realTourAddress']?.toString().isNotEmpty == true
+                    ? m['realTourAddress']?.toString()
+                    : (m['location']?.toString().isNotEmpty == true
+                        ? m['location']?.toString()
+                        : (m['address']?.toString().isNotEmpty == true
+                            ? m['address']?.toString()
+                            : (m['city']?.toString().isNotEmpty == true
+                                ? m['city']?.toString()
+                                : 'N/A')))) ?? 'N/A';
+                final author = m['author']?.toString() ?? m['userName']?.toString() ?? 'Admin';
+                final status = m['status']?.toString().toLowerCase() ?? 'draft';
+                final createdAt = m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
+
+                String dateStr = '';
+                try {
+                  final date = createdAt is String ? DateTime.parse(createdAt) : createdAt as DateTime;
+                  dateStr = DateFormat('MM/dd/yyyy').format(date);
+                } catch (_) {
+                  dateStr = 'N/A';
+                }
+
+                return DataRow(
+                  cells: [
+                    // Name with Featured badge
+                    DataCell(
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              children: [
+                                if (isFeatured)
+                                  Container(
+                                    margin: const EdgeInsets.only(right: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFBBF24),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'Featured',
+                                      style: TextStyle(
+                                        color: Colors.black87,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                Flexible(
+                                  child: Text(
+                                    title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                      color: Color(0xFF3B82F6),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    
+                    // Location
+                    DataCell(
+                      Text(
+                        location,
+                        style: const TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                    ),
+
+                    // Author
+                    DataCell(
+                      Text(
+                        author,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+
+                    // Status
+                    DataCell(
+                      _carStatusChip(status),
+                    ),
+
+                    // Reviews
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          '0',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Date
+                    DataCell(
+                      Text(
+                        dateStr,
+                        style: const TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                    ),
+
+                    // Edit button
+                    DataCell(
+                      ElevatedButton.icon(
+                        onPressed: () => _showEditCarDialog(m),
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: const Text('Edit'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
         ),
       ],
     );
@@ -1188,7 +1600,7 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
 
     final query = _chatSearchQuery.trim().toLowerCase();
     final filtered = _chatQuestions.where((item) {
-      final map = item is Map ? Map<String, dynamic>.from(item as Map) : <String, dynamic>{};
+      final map = item is Map ? Map<String, dynamic>.from(item) : <String, dynamic>{};
       final question = map['question']?.toString().toLowerCase() ?? '';
       final answer = map['answer']?.toString().toLowerCase() ?? '';
       if (_chatFilter == _ChatbotFilter.unanswered && answer.isNotEmpty) {
@@ -1244,7 +1656,7 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
             SizedBox(
               width: 200,
               child: DropdownButtonFormField<_ChatbotFilter>(
-                value: _chatFilter,
+                initialValue: _chatFilter,
                 decoration: const InputDecoration(
                   labelText: 'Filter',
                   border: OutlineInputBorder(),
@@ -1290,7 +1702,7 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
           )
         else
           ...filtered.map((item) {
-            final map = item is Map ? Map<String, dynamic>.from(item as Map) : <String, dynamic>{};
+            final map = item is Map ? Map<String, dynamic>.from(item) : <String, dynamic>{};
             final question = map['question']?.toString() ?? 'Untitled question';
             final answer = map['answer']?.toString() ?? '';
             return Card(
@@ -1497,7 +1909,7 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
   }
 }
 
-List<pw.Widget> _buildPdfStatCards(Map<String, dynamic?> data) {
+List<pw.Widget> _buildPdfStatCards(Map<String, dynamic> data) {
   final stats = {
     'Tours': data['tours'],
     'Cars': data['cars'],
@@ -1524,7 +1936,7 @@ List<pw.Widget> _buildPdfStatCards(Map<String, dynamic?> data) {
   }).toList();
 }
 
-List<pw.Widget> _buildPdfDataTables(Map<String, dynamic?> data) {
+List<pw.Widget> _buildPdfDataTables(Map<String, dynamic> data) {
   final sections = ['tours', 'cars', 'bookings', 'locations'];
   return sections.map((key) {
     final items = data[key];
@@ -1802,7 +2214,7 @@ Future<void> _loadUsers() async {
                 TextField(controller: email, decoration: const InputDecoration(labelText: 'Email')),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: role.isEmpty ? null : role,
+                  initialValue: role.isEmpty ? null : role,
                   decoration: const InputDecoration(labelText: 'Role'),
                   items: [
                     DropdownMenuItem(value: 'customer', child: const Text('Customer')),
@@ -2075,6 +2487,12 @@ class _AddTourFormState extends State<_AddTourForm> {
       setState(() => _loading = false);
       return;
     }
+    if (_mapLat == null || _mapLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a location on the map (latitude and longitude are required)')),
+      );
+      return;
+    }
     if (_slug.text.trim().isEmpty && _title.text.trim().isNotEmpty) {
       _generateSlug();
     }
@@ -2085,13 +2503,13 @@ class _AddTourFormState extends State<_AddTourForm> {
         'name': _title.text.trim(),
         'slug': _slug.text.trim(),
         'price': _price.text.isEmpty ? '0' : _price.text.trim(),
-        'salePrice': _salePrice.text.isEmpty ? '' : _salePrice.text.trim(),
+        'salePrice': _salePrice.text.isEmpty ? '0' : _salePrice.text.trim(),
         'realTourAddress': _realTourAddress.text.trim(),
         'address': _realTourAddress.text.trim(),
         'mapLat': _mapLat != null ? _mapLat!.toString() : '',
         'mapLng': _mapLng != null ? _mapLng!.toString() : '',
-        'imageUrl': _imageUrl,
-        'imagePublicId': _imagePublicId,
+        'imageUrl': _imageUrl ?? '',
+        'imagePublicId': _imagePublicId ?? '',
         'status': _status,
         'published': _status == 'publish',
         'availability': _availability,
@@ -2171,7 +2589,7 @@ class _AddTourFormState extends State<_AddTourForm> {
         Text('Availability', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: _availability,
+          initialValue: _availability,
           decoration: const InputDecoration(
             labelText: 'Availability',
             border: OutlineInputBorder(),
@@ -2235,7 +2653,7 @@ class _AddTourFormState extends State<_AddTourForm> {
             child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
           )
         : DropdownButtonFormField<String?>(
-            value: _locationId,
+            initialValue: _locationId,
             decoration: const InputDecoration(
               labelText: 'Location',
               border: OutlineInputBorder(),
@@ -2324,13 +2742,14 @@ final priceField = TextFormField(
             [
               locationDropdown,
               const SizedBox(height: 16),
-              TextField(
+              TextFormField(
                 controller: _realTourAddress,
                 decoration: const InputDecoration(
-                  labelText: 'Real tour address',
+                  labelText: 'Real tour address *',
                   hintText: 'Real tour address',
                   border: OutlineInputBorder(),
                 ),
+                validator: (v) => (v?.trim().isEmpty ?? true) ? 'Real tour address is required' : null,
                 maxLines: 2,
               ),
               const SizedBox(height: 16),
@@ -2431,9 +2850,9 @@ class _AddCarFormState extends State<_AddCarForm> {
   final _slug = TextEditingController();
   final _price = TextEditingController();
   final _salePrice = TextEditingController();
-  final _passenger = TextEditingController(text: '4');
-  final _baggage = TextEditingController(text: '2');
-  final _door = TextEditingController(text: '4');
+  final _passenger = TextEditingController(text: '0');
+  final _baggage = TextEditingController(text: '0');
+  final _door = TextEditingController(text: '0');
   String _gearShift = 'Auto';
   String _status = 'publish';
   double? _mapLat;
@@ -2451,11 +2870,11 @@ class _AddCarFormState extends State<_AddCarForm> {
       _slug.text = item['slug']?.toString() ?? '';
       _price.text = item['price']?.toString() ?? '';
       _salePrice.text = item['salePrice']?.toString() ?? '';
-      _passenger.text = item['passenger']?.toString() ?? '4';
+      _passenger.text = item['passenger']?.toString() ?? '0';
       final g = item['gearShift']?.toString() ?? 'Auto';
       _gearShift = _gearOptions.contains(g) ? g : 'Auto';
-      _baggage.text = item['baggage']?.toString() ?? '2';
-      _door.text = item['door']?.toString() ?? '4';
+      _baggage.text = item['baggage']?.toString() ?? '0';
+      _door.text = item['door']?.toString() ?? '0';
       _mapLat = double.tryParse(item['mapLat']?.toString() ?? '');
       _mapLng = double.tryParse(item['mapLng']?.toString() ?? '');
       final st = item['status']?.toString().toLowerCase() ?? 'publish';
@@ -2520,6 +2939,12 @@ class _AddCarFormState extends State<_AddCarForm> {
       setState(() => _loading = false);
       return;
     }
+    if (_mapLat == null || _mapLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a location on the map (latitude and longitude are required)')),
+      );
+      return;
+    }
     if (_slug.text.trim().isEmpty && _title.text.trim().isNotEmpty) {
       _generateSlug();
     }
@@ -2530,15 +2955,15 @@ class _AddCarFormState extends State<_AddCarForm> {
         'name': _title.text.trim(),
         'slug': _slug.text.trim(),
         'price': _price.text.isEmpty ? "0" : _price.text.trim(),
-        'salePrice': _salePrice.text.isEmpty ? "" : _salePrice.text.trim(),
-        'passenger': int.parse(_passenger.text.isEmpty ? "4" : _passenger.text.trim()),
+        'salePrice': _salePrice.text.isEmpty ? "0" : _salePrice.text.trim(),
+        'passenger': int.parse(_passenger.text.isEmpty ? "0" : _passenger.text.trim()),
         'gearShift': _gearShift,
-        'baggage': int.parse(_baggage.text.isEmpty ? "2" : _baggage.text.trim()),
-        'door': int.parse(_door.text.isEmpty ? "4" : _door.text.trim()),
+        'baggage': int.parse(_baggage.text.isEmpty ? "0" : _baggage.text.trim()),
+        'door': int.parse(_door.text.isEmpty ? "0" : _door.text.trim()),
         'mapLat': _mapLat != null ? _mapLat!.toString() : '',
         'mapLng': _mapLng != null ? _mapLng!.toString() : '',
-        'imageUrl': _imageUrl,
-        'imagePublicId': _imagePublicId,
+        'imageUrl': _imageUrl ?? '',
+        'imagePublicId': _imagePublicId ?? '',
         'status': _status,
         'published': _status == 'publish',
       };
@@ -2553,9 +2978,9 @@ class _AddCarFormState extends State<_AddCarForm> {
       _slug.clear();
       _price.clear();
       _salePrice.clear();
-      _passenger.text = '4';
-      _baggage.text = '2';
-      _door.text = '4';
+      _passenger.text = '0';
+      _baggage.text = '0';
+      _door.text = '0';
       _gearShift = 'Auto';
       _status = 'publish';
       _mapLat = null;
@@ -2713,14 +3138,19 @@ class _AddCarFormState extends State<_AddCarForm> {
               LayoutBuilder(
                 builder: (context, c) {
                   Widget cell(TextEditingController ctrl, String label, String hint) {
-                    return TextField(
+                    return TextFormField(
                       controller: ctrl,
                       decoration: InputDecoration(
-                        labelText: label,
+                        labelText: '$label *',
                         hintText: hint,
                         border: const OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
+                      validator: (v) {
+                        if (v?.trim().isEmpty ?? true) return '$label is required';
+                        if (int.tryParse(v!.trim()) == null) return 'Enter valid number';
+                        return null;
+                      },
                     );
                   }
 
@@ -2737,7 +3167,7 @@ class _AddCarFormState extends State<_AddCarForm> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _gearShift,
+                            initialValue: _gearShift,
                             decoration: const InputDecoration(
                               labelText: 'Gear Shift',
                               border: OutlineInputBorder(),
@@ -2768,7 +3198,7 @@ class _AddCarFormState extends State<_AddCarForm> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: _gearShift,
+                                initialValue: _gearShift,
                                 decoration: const InputDecoration(
                                   labelText: 'Gear Shift',
                                   border: OutlineInputBorder(),
@@ -2794,7 +3224,7 @@ class _AddCarFormState extends State<_AddCarForm> {
                       cell(_door, 'Door', 'Example: 4'),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
-                        value: _gearShift,
+                        initialValue: _gearShift,
                         decoration: const InputDecoration(
                           labelText: 'Gear Shift',
                           border: OutlineInputBorder(),

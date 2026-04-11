@@ -43,34 +43,32 @@ class RatingsApi {
       return res as List<dynamic>;
     }
 
-    if (res is Map<String, dynamic>) {
-      // Try different possible field names
-      if (res['data'] is List) {
-        print('DEBUG: Found ratings at "data" key with ${(res['data'] as List).length} items');
-        return res['data'] as List<dynamic>;
-      }
-      if (res['ratings'] is List) {
-        print('DEBUG: Found ratings at "ratings" key with ${(res['ratings'] as List).length} items');
-        return res['ratings'] as List<dynamic>;
-      }
-      if (res['rating'] is List) {
-        print('DEBUG: Found ratings at "rating" key with ${(res['rating'] as List).length} items');
-        return res['rating'] as List<dynamic>;
-      }
-      if (res['rows'] is List) {
-        print('DEBUG: Found ratings at "rows" key with ${(res['rows'] as List).length} items');
-        return res['rows'] as List<dynamic>;
-      }
-      if (res['items'] is List) {
-        print('DEBUG: Found ratings at "items" key with ${(res['items'] as List).length} items');
-        return res['items'] as List<dynamic>;
-      }
-      if (res['results'] is List) {
-        print('DEBUG: Found ratings at "results" key with ${(res['results'] as List).length} items');
-        return res['results'] as List<dynamic>;
-      }
+    // Try different possible field names
+    if (res['data'] is List) {
+      print('DEBUG: Found ratings at "data" key with ${(res['data'] as List).length} items');
+      return res['data'] as List<dynamic>;
     }
-
+    if (res['ratings'] is List) {
+      print('DEBUG: Found ratings at "ratings" key with ${(res['ratings'] as List).length} items');
+      return res['ratings'] as List<dynamic>;
+    }
+    if (res['rating'] is List) {
+      print('DEBUG: Found ratings at "rating" key with ${(res['rating'] as List).length} items');
+      return res['rating'] as List<dynamic>;
+    }
+    if (res['rows'] is List) {
+      print('DEBUG: Found ratings at "rows" key with ${(res['rows'] as List).length} items');
+      return res['rows'] as List<dynamic>;
+    }
+    if (res['items'] is List) {
+      print('DEBUG: Found ratings at "items" key with ${(res['items'] as List).length} items');
+      return res['items'] as List<dynamic>;
+    }
+    if (res['results'] is List) {
+      print('DEBUG: Found ratings at "results" key with ${(res['results'] as List).length} items');
+      return res['results'] as List<dynamic>;
+    }
+  
     print('DEBUG: No ratings found, returning empty list. Response was: $res');
     return [];
   }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../api/auth_api.dart';
 import '../api/api_client.dart';
 import 'register_page.dart';
-import 'home_page.dart';
 
 const _navBlue = Color(0xFF1E3A5F);
 const _primaryBlue = Color(0xFF2563EB);

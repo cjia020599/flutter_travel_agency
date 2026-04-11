@@ -293,8 +293,8 @@ class _ChatOverlayShellState extends State<ChatOverlayShell> with SingleTickerPr
           heroTag: 'chatFab',
           onPressed: _toggleChat,
           backgroundColor: _chatBlue,
-          child: Icon(_chatOpen ? Icons.close : Icons.chat_bubble_outline, color: Colors.white),
           tooltip: _chatOpen ? 'Close chat' : 'Chat with us',
+          child: Icon(_chatOpen ? Icons.close : Icons.chat_bubble_outline, color: Colors.white),
         ),
       ),
     );
