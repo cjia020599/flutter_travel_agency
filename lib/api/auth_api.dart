@@ -24,10 +24,12 @@ class AuthApi {
     required String role,
     String? businessName,
   }) async {
+    print('AuthApi.register called with: role=$role, email=$email');
     final body = {
       'firstName': firstName,
       'lastName': lastName,
-      'username': username,
+      'username': username,  // Backend requires exactly "username"
+      'userName': username,  // Send both to match all backend expectations
       'email': email,
       'password': password,
       'role': role,
@@ -35,7 +37,16 @@ class AuthApi {
     if (businessName != null && businessName.isNotEmpty) {
       body['businessName'] = businessName;
     }
-    await _client.post('/api/auth/register', body);
+    print('Sending POST to /api/auth/register with body: $body');
+    
+    final res = await _client.post('/api/auth/register', body).timeout(
+      const Duration(seconds: 30),
+      onTimeout: () {
+        print('Register API timeout after 30s');
+        throw Exception('Registration request timed out after 30 seconds');
+      },
+    );
+    print('Register API response: $res');
   }
 
   static Future<void> logout() async {

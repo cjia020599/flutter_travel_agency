@@ -38,12 +38,20 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    print('Register submit clicked - starting...');
+    if (!_formKey.currentState!.validate()) {
+      print('Form validation failed');
+      return;
+    }
+    print('Form valid - calling API');
+    
     setState(() {
       _error = null;
       _loading = true;
     });
+    
     try {
+      print('Calling AuthApi.register...');
       await AuthApi.register(
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
@@ -51,25 +59,43 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
         role: _role,
-        businessName: _role == 'vendor' ? _businessNameController.text.trim() : null,
+        businessName: _role == 'vendor'
+            ? _businessNameController.text.trim()
+            : null,
       );
-      if (!mounted) return;
+      print('API call completed successfully');
+      
+      if (!mounted) {
+        print('Widget unmounted - exiting');
+        return;
+      }
+      
       Navigator.of(context).pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registration successful. Please sign in.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Registration successful. Please sign in.'),
+          backgroundColor: Colors.green,
+        ),
+      );
       widget.onSuccess?.call();
     } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.message;
-        _loading = false;
-      });
+      print('API Exception: ${e.statusCode} - ${e.message}');
+      if (mounted) {
+        setState(() {
+          _error = 'Error ${e.statusCode}: ${e.message}';
+          _loading = false;
+        });
+      }
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      print('Unexpected error: $e');
+      if (mounted) {
+        setState(() {
+          _error = 'Registration failed: $e';
+          _loading = false;
+        });
+      }
     }
+    print('Submit complete');
   }
 
   @override
@@ -90,7 +116,11 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
             children: [
               Text(
                 'Register',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _navBlue),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: _navBlue,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -106,7 +136,10 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.red.shade200),
                   ),
-                  child: Text(_error!, style: TextStyle(color: Colors.red.shade800, fontSize: 13)),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: Colors.red.shade800, fontSize: 13),
+                  ),
                 ),
                 const SizedBox(height: 16),
               ],
@@ -115,16 +148,29 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
                   Expanded(
                     child: TextFormField(
                       controller: _firstNameController,
-                      decoration: const InputDecoration(labelText: 'First name *', border: OutlineInputBorder()),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'First name *',
+                        border: OutlineInputBorder(),
+                      ),
+                validator: (v) {
+                  final trimmed = v?.trim();
+                  if (trimmed == null || trimmed.isEmpty) return 'Required';
+                  if (trimmed.length < 3) return 'At least 3 characters';
+                  return null;
+                },
+
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextFormField(
                       controller: _lastNameController,
-                      decoration: const InputDecoration(labelText: 'Last name *', border: OutlineInputBorder()),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Last name *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
                     ),
                   ),
                 ],
@@ -132,31 +178,53 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _usernameController,
-                decoration: const InputDecoration(labelText: 'User name *', border: OutlineInputBorder()),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                decoration: const InputDecoration(
+                  labelText: 'User name *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) {
+                  final trimmed = v?.trim();
+                  if (trimmed == null || trimmed.isEmpty) return 'Required';
+                  if (trimmed.length < 3) return 'At least 3 characters';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'E-mail *', border: OutlineInputBorder()),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                decoration: const InputDecoration(
+                  labelText: 'E-mail *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) {
+                  final trimmed = v?.trim();
+                  if (trimmed == null || trimmed.isEmpty) return 'Required';
+                  if (!RegExp(r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(trimmed)) return 'Enter a valid email';
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Password *', border: OutlineInputBorder()),
-                validator: (v) => v == null || v.length < 6 ? 'At least 6 characters' : null,
+                decoration: const InputDecoration(
+                  labelText: 'Password *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) =>
+                    v == null || v.length < 6 ? 'At least 6 characters' : null,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _role,
-                decoration: const InputDecoration(labelText: 'Role *', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Role *',
+                  border: OutlineInputBorder(),
+                ),
                 items: const [
                   DropdownMenuItem(value: 'customer', child: Text('Customer')),
                   DropdownMenuItem(value: 'vendor', child: Text('Vendor')),
-                  DropdownMenuItem(value: 'administrator', child: Text('Administrator')),
                 ],
                 onChanged: (v) => setState(() => _role = v ?? 'customer'),
               ),
@@ -164,29 +232,48 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _businessNameController,
-                  decoration: const InputDecoration(labelText: 'Business name', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Business name *',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) {
+                    if (_role == 'vendor' && (v?.trim().isEmpty ?? true)) {
+                      return 'Business name is required for vendors';
+                    }
+                    return null;
+                  },
                 ),
               ],
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _loading
-                    ? null
-                    : () => _submit(),
+                onPressed: _loading ? null : () => _submit(),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _primaryBlue,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: _loading 
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                child: _loading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Text('Register'),
               ),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('Already have an account? ', style: TextStyle(color: Colors.grey[600])),
+                  Text(
+                    'Already have an account? ',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
                   TextButton(
                     onPressed: () async {
                       Navigator.of(context).pop(context);

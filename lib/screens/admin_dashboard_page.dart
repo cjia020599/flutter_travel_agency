@@ -4,6 +4,7 @@ import 'package:flutter_travel_agency/api/chatbot_api.dart';
 import '../api/tours_api.dart';
 import '../api/cars_api.dart';
 import '../api/lookups_api.dart';
+import '../api/auth_api.dart';
 import '../api/admin_api.dart';
 import '../api/user_api.dart';
 import '../api/api_client.dart';
@@ -36,10 +37,7 @@ enum AdminSection {
   settings,
 }
 
-enum _ChatbotFilter {
-  all,
-  unanswered,
-}
+enum _ChatbotFilter { all, unanswered }
 
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({
@@ -81,6 +79,14 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   _ChatbotFilter _chatFilter = _ChatbotFilter.all;
   List<dynamic> _ratings = [];
   bool _loadingRatings = false;
+  final GlobalKey<FormState> _settingsFormKey = GlobalKey<FormState>();
+  final _adminFirstNameController = TextEditingController();
+  final _adminLastNameController = TextEditingController();
+  final _adminUsernameController = TextEditingController();
+  final _adminEmailController = TextEditingController();
+  final _adminPasswordController = TextEditingController();
+  bool _creatingAdmin = false;
+  String? _adminCreationError;
 
   @override
   void initState() {
@@ -140,9 +146,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             ],
           )
         : _buildContent();
-    return Scaffold(
-      body: body,
-    );
+    return Scaffold(body: body);
   }
 
   void setSection(AdminSection section) {
@@ -220,8 +224,16 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             expanded: _toursExpanded,
             onToggle: () => setState(() => _toursExpanded = !_toursExpanded),
             children: [
-              _sideSubItem('All Tours', _current == AdminSection.toursAll, () => setState(() => _current = AdminSection.toursAll)),
-              _sideSubItem('Add Tour', _current == AdminSection.toursAdd, () => setState(() => _current = AdminSection.toursAdd)),
+              _sideSubItem(
+                'All Tours',
+                _current == AdminSection.toursAll,
+                () => setState(() => _current = AdminSection.toursAll),
+              ),
+              _sideSubItem(
+                'Add Tour',
+                _current == AdminSection.toursAdd,
+                () => setState(() => _current = AdminSection.toursAdd),
+              ),
             ],
           ),
           _sideGroup(
@@ -230,8 +242,16 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             expanded: _carsExpanded,
             onToggle: () => setState(() => _carsExpanded = !_carsExpanded),
             children: [
-              _sideSubItem('All Cars', _current == AdminSection.carsAll, () => setState(() => _current = AdminSection.carsAll)),
-              _sideSubItem('Add new car', _current == AdminSection.carsAdd, () => setState(() => _current = AdminSection.carsAdd)),
+              _sideSubItem(
+                'All Cars',
+                _current == AdminSection.carsAll,
+                () => setState(() => _current = AdminSection.carsAll),
+              ),
+              _sideSubItem(
+                'Add new car',
+                _current == AdminSection.carsAdd,
+                () => setState(() => _current = AdminSection.carsAdd),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -327,14 +347,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   Expanded(
                     child: Text(
                       label,
-                      style: const TextStyle(
-                        color: _sidebarText,
-                        fontSize: 14,
-                      ),
+                      style: const TextStyle(color: _sidebarText, fontSize: 14),
                     ),
                   ),
                   Icon(
-                    expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                    expanded
+                        ? Icons.keyboard_arrow_down
+                        : Icons.keyboard_arrow_right,
                     color: _sidebarTextMuted,
                     size: 20,
                   ),
@@ -400,7 +419,11 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -458,7 +481,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           children: [
             const Icon(Icons.lock, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
-            const Text('Unauthorized', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              'Unauthorized',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             const Text('You do not have permission to view this page.'),
             const SizedBox(height: 24),
@@ -483,7 +509,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       case AdminSection.carsAll:
         return _buildCarsList();
       case AdminSection.carsAdd:
-        return _buildCarForm();
+        return _buildSettingsContent();
       case AdminSection.ratings:
         return _buildRatingsList();
       case AdminSection.chatbot:
@@ -491,7 +517,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       case AdminSection.reports:
         return _buildReportsDashboard();
       case AdminSection.settings:
-        return _buildPlaceholder('Settings', Icons.settings);
+        return _buildSettingsContent();
     }
   }
 
@@ -533,7 +559,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           ],
         ),
         const SizedBox(height: 24),
-        const Text('Raw report data', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        const Text(
+          'Raw report data',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
@@ -541,17 +570,21 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)],
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+            ],
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Text(
               // Show a compact string representation of the reports map
-              _reportsData.entries.map((e) {
-                final v = e.value;
-                if (v is List) return '${e.key}: ${v.length} items';
-                return '${e.key}: ${v ?? 'null'}';
-              }).join('  •  '),
+              _reportsData.entries
+                  .map((e) {
+                    final v = e.value;
+                    if (v is List) return '${e.key}: ${v.length} items';
+                    return '${e.key}: ${v ?? 'null'}';
+                  })
+                  .join('  •  '),
               style: TextStyle(color: Colors.grey[800]),
             ),
           ),
@@ -572,12 +605,17 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 foregroundColor: Colors.white,
                 elevation: 8,
                 shadowColor: Colors.black26,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
               ),
-              onPressed: _loadingReports || _reportsData.isEmpty 
-                ? null 
-                : () => _generatePdfReport(context),
+              onPressed: _loadingReports || _reportsData.isEmpty
+                  ? null
+                  : () => _generatePdfReport(context),
             ),
           ),
         ),
@@ -612,7 +650,11 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -622,8 +664,17 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-              Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              Text(
+                label,
+                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
         ],
@@ -680,30 +731,37 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             role = role.toString().toLowerCase();
             if (role == 'customer') role = 'Customer';
             if (role == 'vendor') role = 'Vendor';
-            if (role == 'administrator' || role == 'admin') role = 'Administrator';
+            if (role == 'administrator' || role == 'admin')
+              role = 'Administrator';
             if (role.isEmpty) role = 'Unknown';
 
             final isSelf = id == _currentUserId;
-            return DataRow(cells: [
-              DataCell(Text(id)),
-              DataCell(Text(name?.toString() ?? '')),
-              DataCell(Text(email?.toString() ?? '')),
-              DataCell(Text(role)),
-              DataCell(Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () => _showEditUserDialog(m),
-                    tooltip: 'Edit User',
+            return DataRow(
+              cells: [
+                DataCell(Text(id)),
+                DataCell(Text(name?.toString() ?? '')),
+                DataCell(Text(email?.toString() ?? '')),
+                DataCell(Text(role)),
+                DataCell(
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _showEditUserDialog(m),
+                        tooltip: 'Edit User',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: isSelf ? null : () => _deleteUser(id),
+                        tooltip: isSelf
+                            ? 'Cannot delete yourself'
+                            : 'Delete User',
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: isSelf ? null : () => _deleteUser(id),
-                    tooltip: isSelf ? 'Cannot delete yourself' : 'Delete User',
-                  ),
-                ],
-              )),
-            ]);
+                ),
+              ],
+            );
           }).toList(),
         ),
       ],
@@ -711,7 +769,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildRatingsList() {
-    if (_loadingRatings) return const Center(child: CircularProgressIndicator());
+    if (_loadingRatings)
+      return const Center(child: CircularProgressIndicator());
     if (_ratings.isEmpty) return const Center(child: Text('No ratings yet.'));
 
     return Column(
@@ -739,34 +798,43 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             String userName = '';
             final user = m['user'];
             if (user is Map<String, dynamic>) {
-              userName = user['name']?.toString() ?? user['username']?.toString() ?? user['email']?.toString() ?? '';
+              userName =
+                  user['name']?.toString() ??
+                  user['username']?.toString() ??
+                  user['email']?.toString() ??
+                  '';
             } else {
-              userName = m['userName']?.toString() ?? m['username']?.toString() ?? '';
+              userName =
+                  m['userName']?.toString() ?? m['username']?.toString() ?? '';
             }
             if (userName.isEmpty) userName = 'Unknown';
 
-            return DataRow(cells: [
-              DataCell(Text(id)),
-              DataCell(Text(moduleType)),
-              DataCell(Text(moduleId)),
-              DataCell(Text(userName)),
-              DataCell(Text(stars)),
-              DataCell(Text(comment.isEmpty ? 'No comment' : comment)),
-              DataCell(Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () => _showEditRatingDialog(m),
-                    tooltip: 'Edit Rating',
+            return DataRow(
+              cells: [
+                DataCell(Text(id)),
+                DataCell(Text(moduleType)),
+                DataCell(Text(moduleId)),
+                DataCell(Text(userName)),
+                DataCell(Text(stars)),
+                DataCell(Text(comment.isEmpty ? 'No comment' : comment)),
+                DataCell(
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _showEditRatingDialog(m),
+                        tooltip: 'Edit Rating',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: () => _deleteRating(id),
+                        tooltip: 'Delete Rating',
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: () => _deleteRating(id),
-                    tooltip: 'Delete Rating',
-                  ),
-                ],
-              )),
-            ]);
+                ),
+              ],
+            );
           }).toList(),
         ),
       ],
@@ -784,7 +852,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey[100],
                   borderRadius: BorderRadius.circular(8),
@@ -793,7 +864,12 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: 'Bulk Actions',
-                    items: const [DropdownMenuItem(value: 'Bulk Actions', child: Text('Bulk Actions'))],
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Bulk Actions',
+                        child: Text('Bulk Actions'),
+                      ),
+                    ],
                     onChanged: (_) {},
                   ),
                 ),
@@ -818,8 +894,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 child: TextField(
                   decoration: InputDecoration(
                     hintText: 'Search by name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     suffixIcon: const Padding(
                       padding: EdgeInsets.all(8.0),
                       child: Icon(Icons.search, size: 20),
@@ -836,7 +917,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     side: const BorderSide(color: Color(0xFF5B667A)),
                   ),
-                  child: const Text('Advanced', style: TextStyle(color: Colors.black87)),
+                  child: const Text(
+                    'Advanced',
+                    style: TextStyle(color: Colors.black87),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -862,7 +946,11 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             children: [
               Text(
                 'Found ${_tours.length} items',
-                style: const TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ],
           ),
@@ -870,7 +958,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         Theme(
           data: Theme.of(context).copyWith(
             dataTableTheme: DataTableThemeData(
-              headingRowColor: MaterialStateProperty.all(const Color(0xFFFAFAFC)),
+              headingRowColor: MaterialStateProperty.all(
+                const Color(0xFFFAFAFC),
+              ),
               headingRowHeight: 56,
               dataRowMinHeight: 56,
               dataRowMaxHeight: 72,
@@ -885,36 +975,81 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             scrollDirection: Axis.horizontal,
             child: DataTable(
               columns: const [
-                DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Location', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Author', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Reviews', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(
+                  label: Text(
+                    'Name',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Location',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Author',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Status',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Reviews',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Date',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Actions',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
               ],
               rows: _tours.map<DataRow>((t) {
                 final m = t as Map<String, dynamic>;
                 final title = m['title']?.toString() ?? 'Tour';
-                final isFeatured = m['featured'] == true || m['isFeatured'] == true;
-                final location = (m['realTourAddress']?.toString().isNotEmpty == true
+                final isFeatured =
+                    m['featured'] == true || m['isFeatured'] == true;
+                final location =
+                    (m['realTourAddress']?.toString().isNotEmpty == true
                         ? m['realTourAddress']?.toString()
                         : (m['location']?.toString().isNotEmpty == true
-                            ? m['location']?.toString()
-                            : (m['address']?.toString().isNotEmpty == true
-                                ? m['address']?.toString()
-                                : (m['city']?.toString().isNotEmpty == true
-                                    ? m['city']?.toString()
-                                    : 'N/A'))))
-                    ?? 'N/A';
-                final author = m['author']?.toString() ?? m['userName']?.toString() ?? m['username']?.toString() ?? 'Admin';
+                              ? m['location']?.toString()
+                              : (m['address']?.toString().isNotEmpty == true
+                                    ? m['address']?.toString()
+                                    : (m['city']?.toString().isNotEmpty == true
+                                          ? m['city']?.toString()
+                                          : 'N/A')))) ??
+                    'N/A';
+                final author =
+                    m['author']?.toString() ??
+                    m['userName']?.toString() ??
+                    m['username']?.toString() ??
+                    'Admin';
                 final status = m['status']?.toString().toLowerCase() ?? 'draft';
-                final createdAt = m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
-                final reviewCount = m['reviewCount'] ?? m['reviews'] ?? m['ratingCount'] ?? 0;
+                final createdAt =
+                    m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
+                final reviewCount =
+                    m['reviewCount'] ?? m['reviews'] ?? m['ratingCount'] ?? 0;
 
                 String dateStr = '';
                 try {
-                  final date = createdAt is String ? DateTime.parse(createdAt) : createdAt as DateTime;
+                  final date = createdAt is String
+                      ? DateTime.parse(createdAt)
+                      : createdAt as DateTime;
                   dateStr = DateFormat('MM/dd/yyyy').format(date);
                 } catch (_) {
                   dateStr = 'N/A';
@@ -930,7 +1065,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                             if (isFeatured)
                               Container(
                                 margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFFBBF24),
                                   borderRadius: BorderRadius.circular(4),
@@ -960,7 +1098,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                       ),
                     ),
                     DataCell(
-                      Text(location, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                      Text(
+                        location,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey,
+                        ),
+                      ),
                     ),
                     DataCell(
                       Text(author, style: const TextStyle(fontSize: 13)),
@@ -968,18 +1112,32 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     DataCell(_carStatusChip(status)),
                     DataCell(
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey[100],
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           reviewCount.toString(),
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ),
-                    DataCell(Text(dateStr, style: const TextStyle(fontSize: 13, color: Colors.grey))),
+                    DataCell(
+                      Text(
+                        dateStr,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
                     DataCell(
                       ElevatedButton.icon(
                         onPressed: () => _showEditTourDialog(m),
@@ -988,7 +1146,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2563EB),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           textStyle: const TextStyle(fontSize: 12),
                         ),
                       ),
@@ -1022,10 +1183,37 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
+  Widget _buildTourForm() {
+    return Center(
+      child: Container(
+        width: 920,
+        height: 720,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: _AddTourForm(
+          onCreated: () {
+            setState(() => _current = AdminSection.toursAll);
+            _loadData();
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildCarsList() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_cars.isEmpty) return const Center(child: Text('No cars yet.'));
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1034,7 +1222,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey[100],
                   borderRadius: BorderRadius.circular(8),
@@ -1043,7 +1234,12 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: 'Bulk Actions',
-                    items: const [DropdownMenuItem(value: 'Bulk Actions', child: Text('Bulk Actions'))],
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Bulk Actions',
+                        child: Text('Bulk Actions'),
+                      ),
+                    ],
                     onChanged: (_) {},
                   ),
                 ),
@@ -1068,8 +1264,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 child: TextField(
                   decoration: InputDecoration(
                     hintText: 'Search by name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     suffixIcon: const Padding(
                       padding: EdgeInsets.all(8.0),
                       child: Icon(Icons.search, size: 20),
@@ -1086,7 +1287,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     side: const BorderSide(color: Color(0xFF5B667A)),
                   ),
-                  child: const Text('Advanced', style: TextStyle(color: Colors.black87)),
+                  child: const Text(
+                    'Advanced',
+                    style: TextStyle(color: Colors.black87),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1112,7 +1316,11 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             children: [
               Text(
                 'Found ${_cars.length} items',
-                style: const TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ],
           ),
@@ -1137,35 +1345,79 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             scrollDirection: Axis.horizontal,
             child: DataTable(
               columns: const [
-                DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Location', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Author', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Reviews', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(
+                  label: Text(
+                    'Name',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Location',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Author',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Status',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Reviews',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Date',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    'Actions',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
               ],
               rows: _cars.map<DataRow>((c) {
                 final m = c as Map<String, dynamic>;
                 final title = m['title']?.toString() ?? 'Car';
-                final isFeatured = m['featured'] == true || m['isFeatured'] == true;
+                final isFeatured =
+                    m['featured'] == true || m['isFeatured'] == true;
                 // Try multiple location field names
-                final location = (m['realTourAddress']?.toString().isNotEmpty == true
-                    ? m['realTourAddress']?.toString()
-                    : (m['location']?.toString().isNotEmpty == true
-                        ? m['location']?.toString()
-                        : (m['address']?.toString().isNotEmpty == true
-                            ? m['address']?.toString()
-                            : (m['city']?.toString().isNotEmpty == true
-                                ? m['city']?.toString()
-                                : 'N/A')))) ?? 'N/A';
-                final author = m['author']?.toString() ?? m['userName']?.toString() ?? 'Admin';
+                final location =
+                    (m['realTourAddress']?.toString().isNotEmpty == true
+                        ? m['realTourAddress']?.toString()
+                        : (m['location']?.toString().isNotEmpty == true
+                              ? m['location']?.toString()
+                              : (m['address']?.toString().isNotEmpty == true
+                                    ? m['address']?.toString()
+                                    : (m['city']?.toString().isNotEmpty == true
+                                          ? m['city']?.toString()
+                                          : 'N/A')))) ??
+                    'N/A';
+                final author =
+                    m['author']?.toString() ??
+                    m['userName']?.toString() ??
+                    'Admin';
                 final status = m['status']?.toString().toLowerCase() ?? 'draft';
-                final createdAt = m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
+                final createdAt =
+                    m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
 
                 String dateStr = '';
                 try {
-                  final date = createdAt is String ? DateTime.parse(createdAt) : createdAt as DateTime;
+                  final date = createdAt is String
+                      ? DateTime.parse(createdAt)
+                      : createdAt as DateTime;
                   dateStr = DateFormat('MM/dd/yyyy').format(date);
                 } catch (_) {
                   dateStr = 'N/A';
@@ -1186,7 +1438,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                                 if (isFeatured)
                                   Container(
                                     margin: const EdgeInsets.only(right: 8),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFFBBF24),
                                       borderRadius: BorderRadius.circular(4),
@@ -1217,32 +1472,33 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                         ),
                       ),
                     ),
-                    
+
                     // Location
                     DataCell(
                       Text(
                         location,
-                        style: const TextStyle(fontSize: 13, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey,
+                        ),
                       ),
                     ),
 
                     // Author
                     DataCell(
-                      Text(
-                        author,
-                        style: const TextStyle(fontSize: 13),
-                      ),
+                      Text(author, style: const TextStyle(fontSize: 13)),
                     ),
 
                     // Status
-                    DataCell(
-                      _carStatusChip(status),
-                    ),
+                    DataCell(_carStatusChip(status)),
 
                     // Reviews
                     DataCell(
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey[100],
                           borderRadius: BorderRadius.circular(4),
@@ -1261,7 +1517,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     DataCell(
                       Text(
                         dateStr,
-                        style: const TextStyle(fontSize: 13, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey,
+                        ),
                       ),
                     ),
 
@@ -1274,7 +1533,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2563EB),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           textStyle: const TextStyle(fontSize: 12),
                         ),
                       ),
@@ -1289,7 +1551,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
-Future<void> _showEditTourDialog(Map<String, dynamic> tour) async {
+  Future<void> _showEditTourDialog(Map<String, dynamic> tour) async {
     final id = tour['id'];
     if (id == null) return;
 
@@ -1335,13 +1597,13 @@ Future<void> _showEditTourDialog(Map<String, dynamic> tour) async {
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context).pop(); // Close loading
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load tour: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load tour: $e')));
     }
   }
 
-Future<void> _showEditCarDialog(Map<String, dynamic> car) async {
+  Future<void> _showEditCarDialog(Map<String, dynamic> car) async {
     final id = car['id'];
     if (id == null) return;
 
@@ -1387,9 +1649,9 @@ Future<void> _showEditCarDialog(Map<String, dynamic> car) async {
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context).pop(); // Close loading
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load car: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load car: $e')));
     }
   }
 
@@ -1416,10 +1678,14 @@ Future<void> _showEditCarDialog(Map<String, dynamic> car) async {
         await ToursApi.delete(id);
         _loadData();
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tour deleted')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Tour deleted')));
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting tour: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error deleting tour: $e')));
       }
     }
   }
@@ -1447,151 +1713,155 @@ Future<void> _showEditCarDialog(Map<String, dynamic> car) async {
         await CarsApi.delete(id);
         _loadData();
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Car deleted')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Car deleted')));
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting car: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error deleting car: $e')));
       }
     }
   }
 
-Future<void> _loadReports() async {
-  if (_loadingReports) return;
-  setState(() {
-    _loadingReports = true;
-  });
-  try {
-    final results = await Future.wait([
-      ReportsApi.tours(),
-      ReportsApi.cars(),
-      ReportsApi.bookings(),
-      ReportsApi.locations(),
-    ]);
-    if (!mounted) return;
+  Future<void> _loadReports() async {
+    if (_loadingReports) return;
     setState(() {
-      _reportsData = {
-        'tours': results[0],
-        'cars': results[1],
-        'bookings': results[2],
-        'locations': results[3],
-      };
-      _loadingReports = false;
+      _loadingReports = true;
     });
-  } catch (e) {
-    if (mounted) {
-      setState(() => _loadingReports = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load reports: $e')),
-      );
+    try {
+      final results = await Future.wait([
+        ReportsApi.tours(),
+        ReportsApi.cars(),
+        ReportsApi.bookings(),
+        ReportsApi.locations(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _reportsData = {
+          'tours': results[0],
+          'cars': results[1],
+          'bookings': results[2],
+          'locations': results[3],
+        };
+        _loadingReports = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingReports = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load reports: $e')));
+      }
     }
   }
-}
 
-Future<void> _loadChatQuestions() async {
-  if (_loadingChatQuestions) return;
-  setState(() {
-    _loadingChatQuestions = true;
-    _chatError = null;
-  });
-  try {
-    final questions = await ChatbotApi.listQuestions();
-    if (!mounted) return;
+  Future<void> _loadChatQuestions() async {
+    if (_loadingChatQuestions) return;
     setState(() {
-      _chatQuestions = questions;
-      _loadingChatQuestions = false;
+      _loadingChatQuestions = true;
+      _chatError = null;
     });
-  } catch (e) {
-    if (!mounted) return;
-    setState(() {
-      _loadingChatQuestions = false;
-      _chatError = e.toString();
-    });
+    try {
+      final questions = await ChatbotApi.listQuestions();
+      if (!mounted) return;
+      setState(() {
+        _chatQuestions = questions;
+        _loadingChatQuestions = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingChatQuestions = false;
+        _chatError = e.toString();
+      });
+    }
   }
-}
 
-Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
-  final questionController = TextEditingController(
-    text: existing?['question']?.toString() ?? '',
-  );
-  final answerController = TextEditingController(
-    text: existing?['answer']?.toString() ?? '',
-  );
+  Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
+    final questionController = TextEditingController(
+      text: existing?['question']?.toString() ?? '',
+    );
+    final answerController = TextEditingController(
+      text: existing?['answer']?.toString() ?? '',
+    );
 
-  final saved = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(existing == null ? 'Add Q&A' : 'Edit Q&A'),
-      content: SizedBox(
-        width: 520,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: questionController,
-              decoration: const InputDecoration(
-                labelText: 'Question',
-                border: OutlineInputBorder(),
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(existing == null ? 'Add Q&A' : 'Edit Q&A'),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: questionController,
+                decoration: const InputDecoration(
+                  labelText: 'Question',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
               ),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: answerController,
-              decoration: const InputDecoration(
-                labelText: 'Answer',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextField(
+                controller: answerController,
+                decoration: const InputDecoration(
+                  labelText: 'Answer',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 4,
               ),
-              maxLines: 4,
-            ),
-          ],
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('Save'),
-        ),
-      ],
-    ),
-  );
-
-  if (saved != true) return;
-  final question = questionController.text.trim();
-  final answer = answerController.text.trim();
-  if (question.isEmpty || answer.isEmpty) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Question and answer are required.')),
     );
-    return;
-  }
 
-  try {
-    if (existing == null) {
-      await ChatbotApi.createQuestion(question: question, answer: answer);
-    } else {
-      final id = existing['id']?.toString() ?? '';
-      if (id.isEmpty) {
-        throw Exception('Invalid question id');
-      }
-      await ChatbotApi.updateQuestion(id, question: question, answer: answer);
+    if (saved != true) return;
+    final question = questionController.text.trim();
+    final answer = answerController.text.trim();
+    if (question.isEmpty || answer.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Question and answer are required.')),
+      );
+      return;
     }
-    await _loadChatQuestions();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(existing == null ? 'Q&A added' : 'Q&A updated')),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Save failed: $e')),
-    );
+
+    try {
+      if (existing == null) {
+        await ChatbotApi.createQuestion(question: question, answer: answer);
+      } else {
+        final id = existing['id']?.toString() ?? '';
+        if (id.isEmpty) {
+          throw Exception('Invalid question id');
+        }
+        await ChatbotApi.updateQuestion(id, question: question, answer: answer);
+      }
+      await _loadChatQuestions();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(existing == null ? 'Q&A added' : 'Q&A updated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+    }
   }
-}
 
   Widget _buildChatbotManager() {
     if (_loadingChatQuestions) {
@@ -1600,7 +1870,9 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
 
     final query = _chatSearchQuery.trim().toLowerCase();
     final filtered = _chatQuestions.where((item) {
-      final map = item is Map ? Map<String, dynamic>.from(item) : <String, dynamic>{};
+      final map = item is Map
+          ? Map<String, dynamic>.from(item)
+          : <String, dynamic>{};
       final question = map['question']?.toString().toLowerCase() ?? '';
       final answer = map['answer']?.toString().toLowerCase() ?? '';
       if (_chatFilter == _ChatbotFilter.unanswered && answer.isNotEmpty) {
@@ -1645,7 +1917,8 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
                       ? null
                       : IconButton(
                           icon: const Icon(Icons.close),
-                          onPressed: () => setState(() => _chatSearchQuery = ''),
+                          onPressed: () =>
+                              setState(() => _chatSearchQuery = ''),
                         ),
                   border: const OutlineInputBorder(),
                   isDense: true,
@@ -1702,7 +1975,9 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
           )
         else
           ...filtered.map((item) {
-            final map = item is Map ? Map<String, dynamic>.from(item) : <String, dynamic>{};
+            final map = item is Map
+                ? Map<String, dynamic>.from(item)
+                : <String, dynamic>{};
             final question = map['question']?.toString() ?? 'Untitled question';
             final answer = map['answer']?.toString() ?? '';
             return Card(
@@ -1712,14 +1987,18 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(question, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      question,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     const SizedBox(height: 8),
                     Text(answer.isEmpty ? 'No answer yet.' : answer),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         TextButton.icon(
-                          onPressed: () => _openChatQuestionDialog(existing: map),
+                          onPressed: () =>
+                              _openChatQuestionDialog(existing: map),
                           icon: const Icon(Icons.edit, size: 16),
                           label: const Text('Edit'),
                         ),
@@ -1728,7 +2007,9 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
                           onPressed: () => _deleteChatQuestion(map),
                           icon: const Icon(Icons.delete_outline, size: 16),
                           label: const Text('Delete'),
-                          style: TextButton.styleFrom(foregroundColor: Colors.red),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                          ),
                         ),
                       ],
                     ),
@@ -1750,7 +2031,10 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
         title: const Text('Delete Q&A'),
         content: const Text('Are you sure you want to delete this question?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -1765,268 +2049,369 @@ Future<void> _openChatQuestionDialog({Map<String, dynamic>? existing}) async {
       await ChatbotApi.deleteQuestion(id);
       await _loadChatQuestions();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Q&A deleted')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Q&A deleted')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
     }
   }
 
   Future<void> _generatePdfReport(BuildContext context) async {
-  setState(() => _loadingReports = true); // Reuse loading for button
-  try {
-    // Get current user profile for header
-    final profile = await UserApi.getProfile();
-    final userName = profile['userName'] ?? profile['username'] ?? profile['firstName'] ?? 'Admin';
-    final userEmail = profile['email'] ?? 'admin@example.com';
-    final now = DateTime.now();
-    final formatter = DateFormat('MMMM dd, yyyy \'at\' h:mm a');
+    setState(() => _loadingReports = true); // Reuse loading for button
+    try {
+      // Get current user profile for header
+      final profile = await UserApi.getProfile();
+      final userName =
+          profile['userName'] ??
+          profile['username'] ??
+          profile['firstName'] ??
+          'Admin';
+      final userEmail = profile['email'] ?? 'admin@example.com';
+      final now = DateTime.now();
+      final formatter = DateFormat('MMMM dd, yyyy \'at\' h:mm a');
 
-    final pdf = pw.Document();
+      final pdf = pw.Document();
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: [
-            // Header
-            pw.Container(
-              padding: const pw.EdgeInsets.all(20),
-              decoration: pw.BoxDecoration(
-                color: PdfColor.fromHex('#1E3A5F'),
-                borderRadius: pw.BorderRadius.circular(8),
-              ),
-              child: pw.Column(
-                children: [
-                  pw.Text(
-                    'Travelista Adventures Reports',
-                    style: pw.TextStyle(
-                      fontSize: 28,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.white,
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              // Header
+              pw.Container(
+                padding: const pw.EdgeInsets.all(20),
+                decoration: pw.BoxDecoration(
+                  color: PdfColor.fromHex('#1E3A5F'),
+                  borderRadius: pw.BorderRadius.circular(8),
+                ),
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      'Travelista Adventures Reports',
+                      style: pw.TextStyle(
+                        fontSize: 28,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                      ),
                     ),
-                  ),
-                  pw.SizedBox(height: 8),
-                  pw.Text(
-                    'Comprehensive Dashboard Summary',
-                    style: pw.TextStyle(fontSize: 16, color: PdfColors.grey200),
-                  ),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 20),
-
-            // Account Details Card - Center Top
-            pw.Container(
-              margin: const pw.EdgeInsets.symmetric(horizontal: 40),
-              padding: const pw.EdgeInsets.all(16),
-              decoration: pw.BoxDecoration(
-                color: PdfColors.grey200,
-                borderRadius: pw.BorderRadius.circular(8),
-                border: pw.Border.all(color: PdfColors.grey300),
-              ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.center,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.center,
-                    children: [
-                      pw.Text(
-                        'Printed by: $userName',
-                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                    pw.SizedBox(height: 8),
+                    pw.Text(
+                      'Comprehensive Dashboard Summary',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        color: PdfColors.grey200,
                       ),
-                      pw.SizedBox(height: 4),
-                      pw.Text(
-                        userEmail,
-                        style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
-                      ),
-                      pw.SizedBox(height: 4),
-                      pw.Text(
-                        'Generated: ${formatter.format(now)}',
-                        style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
-                      ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+
+              // Account Details Card - Center Top
+              pw.Container(
+                margin: const pw.EdgeInsets.symmetric(horizontal: 40),
+                padding: const pw.EdgeInsets.all(16),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                  borderRadius: pw.BorderRadius.circular(8),
+                  border: pw.Border.all(color: PdfColors.grey300),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Text(
+                          'Printed by: $userName',
+                          style: pw.TextStyle(
+                            fontSize: 14,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          userEmail,
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          'Generated: ${formatter.format(now)}',
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 30),
+
+              // Stats Row
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
+                children: _buildPdfStatCards(_reportsData),
+              ),
+              pw.SizedBox(height: 30),
+
+              // Data Tables
+              ..._buildPdfDataTables(_reportsData),
+
+              // Footer
+              pw.Spacer(),
+              pw.Container(
+                alignment: pw.Alignment.center,
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  border: pw.Border(
+                    top: pw.BorderSide(color: PdfColors.grey300),
                   ),
-                ],
+                ),
+                child: pw.Text(
+                  'Page ${context.pageNumber} | Travel Agency Admin System v1.0',
+                  style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                ),
               ),
+            ],
+          ),
+        ),
+      );
+
+      // Share/print PDF
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename:
+            'travel-agency-reports-${DateFormat('yyyy-MM-dd-HHmmss').format(now)}.pdf',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PDF report generated and shared successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error generating PDF: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingReports = false);
+      }
+    }
+  }
+
+  List<pw.Widget> _buildPdfStatCards(Map<String, dynamic> data) {
+    final stats = {
+      'Tours': data['tours'],
+      'Cars': data['cars'],
+      'Bookings': data['bookings'],
+      'Locations': data['locations'],
+    };
+    return stats.entries.map((e) {
+      final count = _pdfCount(e.value);
+      return pw.Container(
+        width: 120,
+        padding: const pw.EdgeInsets.all(12),
+        decoration: pw.BoxDecoration(
+          color: PdfColor.fromHex('#3B82F6'),
+          borderRadius: pw.BorderRadius.circular(8),
+        ),
+        child: pw.Column(
+          children: [
+            pw.Text(
+              e.key,
+              style: const pw.TextStyle(fontSize: 12, color: PdfColors.white),
             ),
-            pw.SizedBox(height: 30),
-
-            // Stats Row
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
-              children: _buildPdfStatCards(_reportsData),
-            ),
-            pw.SizedBox(height: 30),
-
-            // Data Tables
-            ..._buildPdfDataTables(_reportsData),
-
-            // Footer
-            pw.Spacer(),
-            pw.Container(
-              alignment: pw.Alignment.center,
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: PdfColors.grey100,
-                border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300)),
-              ),
-              child: pw.Text(
-                'Page ${context.pageNumber} | Travel Agency Admin System v1.0',
-                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              '$count',
+              style: pw.TextStyle(
+                fontSize: 24,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
               ),
             ),
           ],
         ),
-      ),
-    );
-
-    // Share/print PDF
-    await Printing.sharePdf(
-      bytes: await pdf.save(),
-      filename: 'travel-agency-reports-${DateFormat('yyyy-MM-dd-HHmmss').format(now)}.pdf',
-    );
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('PDF report generated and shared successfully!'),
-          backgroundColor: Colors.green,
-        ),
       );
-    }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error generating PDF: $e')),
-      );
-    }
-  } finally {
-    if (mounted) {
-      setState(() => _loadingReports = false);
-    }
+    }).toList();
   }
-}
 
-List<pw.Widget> _buildPdfStatCards(Map<String, dynamic> data) {
-  final stats = {
-    'Tours': data['tours'],
-    'Cars': data['cars'],
-    'Bookings': data['bookings'],
-    'Locations': data['locations'],
-  };
-  return stats.entries.map((e) {
-    final count = _pdfCount(e.value);
-    return pw.Container(
-      width: 120,
-      padding: const pw.EdgeInsets.all(12),
-      decoration: pw.BoxDecoration(
-        color: PdfColor.fromHex('#3B82F6'),
-        borderRadius: pw.BorderRadius.circular(8),
-      ),
-      child: pw.Column(
-        children: [
-          pw.Text(e.key, style: const pw.TextStyle(fontSize: 12, color: PdfColors.white)),
-          pw.SizedBox(height: 4),
-          pw.Text('$count', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
-        ],
-      ),
-    );
-  }).toList();
-}
+  List<pw.Widget> _buildPdfDataTables(Map<String, dynamic> data) {
+    final sections = ['tours', 'cars', 'bookings', 'locations'];
+    return sections
+        .map((key) {
+          final items = data[key];
+          final rows = _extractTableRows(items ?? []);
+          if (rows.isEmpty) return pw.SizedBox.shrink();
 
-List<pw.Widget> _buildPdfDataTables(Map<String, dynamic> data) {
-  final sections = ['tours', 'cars', 'bookings', 'locations'];
-  return sections.map((key) {
-    final items = data[key];
-    final rows = _extractTableRows(items ?? []);
-            if (rows.isEmpty) return pw.SizedBox.shrink();
-
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 20),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            '${key.toUpperCase()} (${rows.length})',
-            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 8),
-          pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey400),
-            defaultColumnWidth: const pw.FlexColumnWidth(),
-            children: [
-              // Header
-              pw.TableRow(
-                decoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E3A5F')),
-                children: [
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('ID', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+          return pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 20),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  '${key.toUpperCase()} (${rows.length})',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
                   ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Title/Name', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Price', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: pw.Text('Status', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
-                  ),
-                ],
-              ),
-              // Data rows
-              ...rows.asMap().entries.take(20).map((entry) {
-                final row = rows[entry.key];
-                return pw.TableRow( // Limit to 20 rows per table
-                  decoration: pw.BoxDecoration(color: entry.key % 2 == 0 ? PdfColors.white : PdfColors.grey50),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey400),
+                  defaultColumnWidth: const pw.FlexColumnWidth(),
                   children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(row.id.toString(), style: const pw.TextStyle(fontSize: 11))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(row.title ?? '', style: const pw.TextStyle(fontSize: 11), maxLines: 2)),
-                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(row.price ?? '-', style: const pw.TextStyle(fontSize: 11))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(row.status ?? '-', style: const pw.TextStyle(fontSize: 11))),
+                    // Header
+                    pw.TableRow(
+                      decoration: pw.BoxDecoration(
+                        color: PdfColor.fromHex('#1E3A5F'),
+                      ),
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text(
+                            'ID',
+                            style: pw.TextStyle(
+                              fontSize: 12,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text(
+                            'Title/Name',
+                            style: pw.TextStyle(
+                              fontSize: 12,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text(
+                            'Price',
+                            style: pw.TextStyle(
+                              fontSize: 12,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text(
+                            'Status',
+                            style: pw.TextStyle(
+                              fontSize: 12,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Data rows
+                    ...rows.asMap().entries.take(20).map((entry) {
+                      final row = rows[entry.key];
+                      return pw.TableRow(
+                        // Limit to 20 rows per table
+                        decoration: pw.BoxDecoration(
+                          color: entry.key % 2 == 0
+                              ? PdfColors.white
+                              : PdfColors.grey50,
+                        ),
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              row.id.toString(),
+                              style: const pw.TextStyle(fontSize: 11),
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              row.title ?? '',
+                              style: const pw.TextStyle(fontSize: 11),
+                              maxLines: 2,
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              row.price ?? '-',
+                              style: const pw.TextStyle(fontSize: 11),
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(8),
+                            child: pw.Text(
+                              row.status ?? '-',
+                              style: const pw.TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
                   ],
-                );
-              }),
-            ],
-          ),
-        ],
-      ),
-    );
-  }).where((w) => w != pw.SizedBox.shrink()).toList();
-}
+                ),
+              ],
+            ),
+          );
+        })
+        .where((w) => w != pw.SizedBox.shrink())
+        .toList();
+  }
 
-int _pdfCount(dynamic data) {
-  if (data == null) return 0;
-  if (data is List) return data.length;
-  if (data is Map) return data.length;
-  return 1;
-}
+  int _pdfCount(dynamic data) {
+    if (data == null) return 0;
+    if (data is List) return data.length;
+    if (data is Map) return data.length;
+    return 1;
+  }
 
-List<({int id, String? title, String? price, String? status})> _extractTableRows(dynamic data) {
-  final List<({int id, String? title, String? price, String? status})> rows = [];
-  if (data is List) {
-    for (int i = 0; i < data.length; i++) {
-      final item = data[i];
-      if (item is Map<String, dynamic>) {
-        final id = item['id'] ?? i;
-        rows.add((
-          id: id is int ? id : (id?.hashCode ?? i),
-          title: item['title'] ?? item['name'] ?? item['userName'] ?? '-',
-          price: '\u20B1${item['price'] ?? item['salePrice'] ?? '-'}',
-          status: item['status']?.toString() ?? '-',
-        ));
+  List<({int id, String? title, String? price, String? status})>
+  _extractTableRows(dynamic data) {
+    final List<({int id, String? title, String? price, String? status})> rows =
+        [];
+    if (data is List) {
+      for (int i = 0; i < data.length; i++) {
+        final item = data[i];
+        if (item is Map<String, dynamic>) {
+          final id = item['id'] ?? i;
+          rows.add((
+            id: id is int ? id : (id?.hashCode ?? i),
+            title: item['title'] ?? item['name'] ?? item['userName'] ?? '-',
+            price: '\u20B1${item['price'] ?? item['salePrice'] ?? '-'}',
+            status: item['status']?.toString() ?? '-',
+          ));
+        }
       }
     }
+    return rows;
   }
-  return rows;
-}
 
-Future<void> _loadUsers() async {
+  Future<void> _loadUsers() async {
     setState(() {
       _loadingUsers = true;
       _usersError = null;
@@ -2041,7 +2426,9 @@ Future<void> _loadUsers() async {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _usersError = e is ApiException ? 'Error ${e.statusCode}: ${e.message}' : e.toString();
+        _usersError = e is ApiException
+            ? 'Error ${e.statusCode}: ${e.message}'
+            : e.toString();
       });
     } finally {
       if (mounted) {
@@ -2066,9 +2453,9 @@ Future<void> _loadUsers() async {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load ratings: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load ratings: $e')));
       }
     } finally {
       if (mounted) {
@@ -2110,7 +2497,9 @@ Future<void> _loadUsers() async {
       messenger.showSnackBar(const SnackBar(content: Text('User deleted')));
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('Error deleting user: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error deleting user: $e')),
+      );
     }
   }
 
@@ -2139,10 +2528,14 @@ Future<void> _loadUsers() async {
       await RatingsApi.delete(int.parse(id));
       _loadRatings();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating deleted')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Rating deleted')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting rating: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error deleting rating: $e')));
     }
   }
 
@@ -2163,10 +2556,16 @@ Future<void> _loadUsers() async {
   }
 
   void _showEditUserDialog(Map<String, dynamic> user) {
-    final firstName = TextEditingController(text: user['firstName']?.toString() ?? '');
-    final lastName = TextEditingController(text: user['lastName']?.toString() ?? '');
+    final firstName = TextEditingController(
+      text: user['firstName']?.toString() ?? '',
+    );
+    final lastName = TextEditingController(
+      text: user['lastName']?.toString() ?? '',
+    );
     final email = TextEditingController(text: user['email']?.toString() ?? '');
-    final username = TextEditingController(text: user['userName']?.toString() ?? user['username']?.toString() ?? '');
+    final username = TextEditingController(
+      text: user['userName']?.toString() ?? user['username']?.toString() ?? '',
+    );
 
     // Extract role using same logic as in _buildUsersList
     String rawRole = '';
@@ -2205,21 +2604,42 @@ Future<void> _loadUsers() async {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: firstName, decoration: const InputDecoration(labelText: 'First name')),
+                TextField(
+                  controller: firstName,
+                  decoration: const InputDecoration(labelText: 'First name'),
+                ),
                 const SizedBox(height: 12),
-                TextField(controller: lastName, decoration: const InputDecoration(labelText: 'Last name')),
+                TextField(
+                  controller: lastName,
+                  decoration: const InputDecoration(labelText: 'Last name'),
+                ),
                 const SizedBox(height: 12),
-                TextField(controller: username, decoration: const InputDecoration(labelText: 'Username')),
+                TextField(
+                  controller: username,
+                  decoration: const InputDecoration(labelText: 'Username'),
+                ),
                 const SizedBox(height: 12),
-                TextField(controller: email, decoration: const InputDecoration(labelText: 'Email')),
+                TextField(
+                  controller: email,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: role.isEmpty ? null : role,
                   decoration: const InputDecoration(labelText: 'Role'),
                   items: [
-                    DropdownMenuItem(value: 'customer', child: const Text('Customer')),
-                    DropdownMenuItem(value: 'vendor', child: const Text('Vendor')),
-                    DropdownMenuItem(value: 'administrator', child: const Text('Administrator')),
+                    DropdownMenuItem(
+                      value: 'customer',
+                      child: const Text('Customer'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'vendor',
+                      child: const Text('Vendor'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'administrator',
+                      child: const Text('Administrator'),
+                    ),
                   ],
                   onChanged: (v) => role = v ?? role,
                 ),
@@ -2227,7 +2647,10 @@ Future<void> _loadUsers() async {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => dialogNavigator.pop(), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => dialogNavigator.pop(),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () async {
                 try {
@@ -2242,10 +2665,14 @@ Future<void> _loadUsers() async {
                   if (!mounted) return;
                   dialogNavigator.pop();
                   _loadUsers();
-                  messenger.showSnackBar(const SnackBar(content: Text('User updated')));
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('User updated')),
+                  );
                 } catch (e) {
                   if (!mounted) return;
-                  messenger.showSnackBar(SnackBar(content: Text('Error updating user: $e')));
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Error updating user: $e')),
+                  );
                 }
               },
               child: const Text('Save'),
@@ -2257,8 +2684,12 @@ Future<void> _loadUsers() async {
   }
 
   void _showEditRatingDialog(Map<String, dynamic> rating) {
-    final starsController = TextEditingController(text: rating['stars']?.toString() ?? '5');
-    final commentController = TextEditingController(text: rating['comment']?.toString() ?? '');
+    final starsController = TextEditingController(
+      text: rating['stars']?.toString() ?? '5',
+    );
+    final commentController = TextEditingController(
+      text: rating['comment']?.toString() ?? '',
+    );
 
     showDialog<void>(
       context: context,
@@ -2293,12 +2724,19 @@ Future<void> _loadUsers() async {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => dialogNavigator.pop(), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => dialogNavigator.pop(),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () async {
                 final stars = int.tryParse(starsController.text.trim());
                 if (stars == null || stars < 1 || stars > 5) {
-                  messenger.showSnackBar(const SnackBar(content: Text('Stars must be an integer from 1 to 5')));
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Stars must be an integer from 1 to 5'),
+                    ),
+                  );
                   return;
                 }
 
@@ -2311,10 +2749,14 @@ Future<void> _loadUsers() async {
                   if (!mounted) return;
                   dialogNavigator.pop();
                   _loadRatings();
-                  messenger.showSnackBar(const SnackBar(content: Text('Rating updated')));
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Rating updated')),
+                  );
                 } catch (e) {
                   if (!mounted) return;
-                  messenger.showSnackBar(SnackBar(content: Text('Error updating rating: $e')));
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Error updating rating: $e')),
+                  );
                 }
               },
               child: const Text('Save'),
@@ -2325,12 +2767,296 @@ Future<void> _loadUsers() async {
     );
   }
 
-  Widget _buildTourForm() {
-    return _AddTourForm(onCreated: _loadData);
+  Widget _buildSettingsContent() {
+    return Column(
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 24),
+          child: Text(
+            'Settings',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ),
+        ListView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            _buildSettingsMenuItem(
+              icon: Icons.person_add,
+              title: 'Create Administrator Account',
+              description: 'Add a new administrator user to the system',
+              onTap: _showCreateAdminDialog,
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
-  Widget _buildCarForm() {
-    return _AddCarForm(onCreated: _loadData);
+  Widget _buildSettingsMenuItem({
+    required IconData icon,
+    required String title,
+    required String description,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE0E0E0)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 24, color: const Color(0xFF2563EB)),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCreateAdminDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Administrator Account'),
+        content: SizedBox(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Form(
+              key: _settingsFormKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 16),
+                  if (_adminCreationError != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Text(
+                        _adminCreationError!,
+                        style: TextStyle(color: Colors.red.shade800),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _adminFirstNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'First name *',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
+                              ? 'Required'
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _adminLastNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Last name *',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
+                              ? 'Required'
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _adminUsernameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Username *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _adminEmailController,
+                    decoration: const InputDecoration(
+                      labelText: 'Email *',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Required'
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _adminPasswordController,
+                    decoration: const InputDecoration(
+                      labelText: 'Password *',
+                      border: OutlineInputBorder(),
+                    ),
+                    obscureText: true,
+                    validator: (value) => value == null || value.length < 6
+                        ? 'At least 6 characters'
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _creatingAdmin
+                ? null
+                : () {
+                    _settingsFormKey.currentState?.reset();
+                    _adminFirstNameController.clear();
+                    _adminLastNameController.clear();
+                    _adminUsernameController.clear();
+                    _adminEmailController.clear();
+                    _adminPasswordController.clear();
+                    setState(() => _adminCreationError = null);
+                    Navigator.of(context).pop();
+                  },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: _creatingAdmin
+                ? null
+                : () => _submitCreateAdministrator(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+            ),
+            child: _creatingAdmin
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitCreateAdministrator(BuildContext dialogContext) async {
+    print('Admin create button clicked');
+    if (!_settingsFormKey.currentState!.validate()) {
+      print('Admin form validation failed');
+      setState(() {
+        _adminCreationError = 'Please fill in all required fields correctly.';
+      });
+      return;
+    }
+    print('Admin form valid - calling API');
+    
+    setState(() {
+      _adminCreationError = null;
+      _creatingAdmin = true;
+    });
+    
+    try {
+      print('Calling AuthApi.register for admin...');
+      await AuthApi.register(
+        firstName: _adminFirstNameController.text.trim(),
+        lastName: _adminLastNameController.text.trim(),
+        username: _adminUsernameController.text.trim(),  // Consistent with backend
+        email: _adminEmailController.text.trim(),
+        password: _adminPasswordController.text,
+        role: 'administrator',
+      );
+      print('Admin creation API success');
+      
+      if (!mounted) return;
+      
+      _adminFirstNameController.clear();
+      _adminLastNameController.clear();
+      _adminUsernameController.clear();
+      _adminEmailController.clear();
+      _adminPasswordController.clear();
+      
+      Navigator.of(dialogContext).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Administrator account created successfully.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _loadUsers();
+      
+      setState(() {
+        _creatingAdmin = false;
+        _adminCreationError = null;
+      });
+    } on ApiException catch (e) {
+      print('Admin API Exception: ${e.statusCode} - ${e.message}');
+      if (mounted) {
+        setState(() {
+          _adminCreationError = 'Error ${e.statusCode}: ${e.message}';
+          _creatingAdmin = false;
+        });
+      }
+    } catch (e) {
+      print('Admin creation error: $e');
+      if (mounted) {
+        setState(() {
+          _adminCreationError = 'Failed to create admin: $e';
+          _creatingAdmin = false;
+        });
+      }
+    }
+    print('Admin create complete');
   }
 
   Widget _buildPlaceholder(String title, IconData icon) {
@@ -2340,13 +3066,20 @@ Future<void> _loadUsers() async {
         children: [
           Icon(icon, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
-          Text(
-            title,
-            style: TextStyle(fontSize: 18, color: Colors.grey[700]),
-          ),
+          Text(title, style: TextStyle(fontSize: 18, color: Colors.grey[700])),
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _adminFirstNameController.dispose();
+    _adminLastNameController.dispose();
+    _adminUsernameController.dispose();
+    _adminEmailController.dispose();
+    _adminPasswordController.dispose();
+    super.dispose();
   }
 }
 
@@ -2394,7 +3127,10 @@ class _AddTourFormState extends State<_AddTourForm> {
       _slug.text = item['slug']?.toString() ?? '';
       _price.text = item['price']?.toString() ?? '';
       _salePrice.text = item['salePrice']?.toString() ?? '';
-      _realTourAddress.text = item['realTourAddress']?.toString() ?? item['address']?.toString() ?? '';
+      _realTourAddress.text =
+          item['realTourAddress']?.toString() ??
+          item['address']?.toString() ??
+          '';
       _imageUrl = item['imageUrl']?.toString();
       _imagePublicId = item['imagePublicId']?.toString();
       _mapLat = double.tryParse(item['mapLat']?.toString() ?? '');
@@ -2447,7 +3183,10 @@ class _AddTourFormState extends State<_AddTourForm> {
   void _generateSlug() {
     final title = _title.text.trim();
     if (title.isNotEmpty) {
-      _slug.text = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+      _slug.text = title
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+          .replaceAll(RegExp(r'^-+|-+$'), '');
     }
   }
 
@@ -2473,7 +3212,10 @@ class _AddTourFormState extends State<_AddTourForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(heading, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            Text(
+              heading,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 16),
             ...children,
           ],
@@ -2489,7 +3231,11 @@ class _AddTourFormState extends State<_AddTourForm> {
     }
     if (_mapLat == null || _mapLng == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a location on the map (latitude and longitude are required)')),
+        const SnackBar(
+          content: Text(
+            'Please select a location on the map (latitude and longitude are required)',
+          ),
+        ),
       );
       return;
     }
@@ -2522,11 +3268,15 @@ class _AddTourFormState extends State<_AddTourForm> {
       if (widget.itemToEdit != null) {
         await ToursApi.update(widget.itemToEdit!['id'], body);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tour updated')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Tour updated')));
       } else {
         await ToursApi.create(body);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tour created')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Tour created')));
       }
       if (!mounted) return;
       _title.clear();
@@ -2550,7 +3300,9 @@ class _AddTourFormState extends State<_AddTourForm> {
         errorMsg = 'Error ${e.statusCode}: ${e.message}';
         if (e.body is Map<String, dynamic>) {
           final errBody = e.body as Map<String, dynamic>;
-          final details = errBody.entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
+          final details = errBody.entries
+              .map((entry) => '${entry.key}: ${entry.value}')
+              .join(', ');
           if (details.length < 200) {
             errorMsg += ' ($details)';
           }
@@ -2558,88 +3310,113 @@ class _AddTourFormState extends State<_AddTourForm> {
       } else {
         errorMsg = 'Error: $e';
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(errorMsg)));
     }
     if (mounted) setState(() => _loading = false);
   }
 
   Widget _publishSidebar() {
-    return _formCard(
-      'Publish',
-      [
-        RadioListTile<String>(
-          title: const Text('Publish'),
-          value: 'publish',
-          groupValue: _status,
-          onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'publish'),
-          contentPadding: EdgeInsets.zero,
-          dense: true,
+    return _formCard('Publish', [
+      RadioListTile<String>(
+        title: const Text('Publish'),
+        value: 'publish',
+        groupValue: _status,
+        onChanged: _loading
+            ? null
+            : (v) => setState(() => _status = v ?? 'publish'),
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+      ),
+      RadioListTile<String>(
+        title: const Text('Draft'),
+        value: 'draft',
+        groupValue: _status,
+        onChanged: _loading
+            ? null
+            : (v) => setState(() => _status = v ?? 'draft'),
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+      ),
+      const SizedBox(height: 8),
+      const Divider(),
+      const SizedBox(height: 4),
+      Text(
+        'Availability',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey.shade800,
         ),
-        RadioListTile<String>(
-          title: const Text('Draft'),
-          value: 'draft',
-          groupValue: _status,
-          onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'draft'),
-          contentPadding: EdgeInsets.zero,
-          dense: true,
+      ),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        initialValue: _availability,
+        decoration: const InputDecoration(
+          labelText: 'Availability',
+          border: OutlineInputBorder(),
+          isDense: true,
         ),
-        const SizedBox(height: 8),
-        const Divider(),
-        const SizedBox(height: 4),
-        Text('Availability', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          initialValue: _availability,
-          decoration: const InputDecoration(
-            labelText: 'Availability',
-            border: OutlineInputBorder(),
-            isDense: true,
+        items: _availabilityOptions
+            .map(
+              (e) =>
+                  DropdownMenuItem<String>(value: e.key, child: Text(e.value)),
+            )
+            .toList(),
+        onChanged: _loading
+            ? null
+            : (v) => setState(() => _availability = v ?? 'always'),
+      ),
+      const SizedBox(height: 12),
+      CheckboxListTile(
+        value: _isFeatured,
+        onChanged: _loading
+            ? null
+            : (v) => setState(() => _isFeatured = v ?? false),
+        title: const Text('Enable featured'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        dense: true,
+      ),
+      const SizedBox(height: 12),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF1976D2),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14),
           ),
-          items: _availabilityOptions
-              .map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value)))
-              .toList(),
-          onChanged: _loading ? null : (v) => setState(() => _availability = v ?? 'always'),
+          onPressed: _loading ? null : _submit,
+          icon: _loading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.save_outlined, size: 20),
+          label: Text(widget.itemToEdit != null ? 'Save changes' : 'Add tour'),
         ),
-        const SizedBox(height: 12),
-        CheckboxListTile(
-          value: _isFeatured,
-          onChanged: _loading ? null : (v) => setState(() => _isFeatured = v ?? false),
-          title: const Text('Enable featured'),
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          dense: true,
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF1976D2),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            onPressed: _loading ? null : _submit,
-            icon: _loading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.save_outlined, size: 20),
-            label: Text(widget.itemToEdit != null ? 'Save changes' : 'Add tour'),
-          ),
-        ),
-      ],
-    );
+      ),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
     const pageBg = Color(0xFFF0F2F5);
-    final mapInitial = (_mapLat != null && _mapLng != null) ? LatLng(_mapLat!, _mapLng!) : null;
+    final mapInitial = (_mapLat != null && _mapLng != null)
+        ? LatLng(_mapLat!, _mapLng!)
+        : null;
 
     final locationItems = <DropdownMenuItem<String?>>[
-      const DropdownMenuItem<String?>(value: null, child: Text('-- Please Select --')),
+      const DropdownMenuItem<String?>(
+        value: null,
+        child: Text('-- Please Select --'),
+      ),
       ..._locationRows.map((loc) {
         final id = loc['id']?.toString();
         final name = loc['name']?.toString() ?? id ?? 'Location';
@@ -2650,7 +3427,13 @@ class _AddTourFormState extends State<_AddTourForm> {
     final locationDropdown = _locationsLoading
         ? const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
-            child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
           )
         : DropdownButtonFormField<String?>(
             initialValue: _locationId,
@@ -2662,15 +3445,13 @@ class _AddTourFormState extends State<_AddTourForm> {
             onChanged: _loading ? null : (v) => setState(() => _locationId = v),
           );
 
-  Widget mainColumn() {
+    Widget mainColumn() {
       return Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-          _formCard(
-            'Tour content',
-            [
+            _formCard('Tour content', [
               TextFormField(
                 controller: _title,
                 decoration: const InputDecoration(
@@ -2678,30 +3459,31 @@ class _AddTourFormState extends State<_AddTourForm> {
                   hintText: 'Title',
                   border: OutlineInputBorder(),
                 ),
-                validator: (v) => (v?.trim().isEmpty ?? true) ? 'Title is required' : null,
+                validator: (v) =>
+                    (v?.trim().isEmpty ?? true) ? 'Title is required' : null,
                 onChanged: (_) {
                   if (widget.itemToEdit == null) _generateSlug();
                 },
               ),
-            ],
-          ),
-          _formCard(
-            'Pricing',
-            [
+            ]),
+            _formCard('Pricing', [
               LayoutBuilder(
                 builder: (context, c) {
                   final row = c.maxWidth >= 480;
-final priceField = TextFormField(
+                  final priceField = TextFormField(
                     controller: _price,
                     decoration: const InputDecoration(
                       labelText: 'Price *',
                       hintText: 'Tour Price',
                       border: OutlineInputBorder(),
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     validator: (v) {
                       if (v?.trim().isEmpty ?? true) return 'Price is required';
-                      if (double.tryParse(v!.trim()) == null) return 'Enter valid number';
+                      if (double.tryParse(v!.trim()) == null)
+                        return 'Enter valid number';
                       return null;
                     },
                   );
@@ -2711,9 +3493,12 @@ final priceField = TextFormField(
                       labelText: 'Sale Price',
                       hintText: 'Tour Sale Price',
                       border: OutlineInputBorder(),
-                      helperText: 'If the regular price is less than the discount, it will show the regular price',
+                      helperText:
+                          'If the regular price is less than the discount, it will show the regular price',
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   );
                   if (row) {
                     return Row(
@@ -2735,11 +3520,8 @@ final priceField = TextFormField(
                   );
                 },
               ),
-            ],
-          ),
-          _formCard(
-            'Tour locations',
-            [
+            ]),
+            _formCard('Tour locations', [
               locationDropdown,
               const SizedBox(height: 16),
               TextFormField(
@@ -2749,7 +3531,9 @@ final priceField = TextFormField(
                   hintText: 'Real tour address',
                   border: OutlineInputBorder(),
                 ),
-                validator: (v) => (v?.trim().isEmpty ?? true) ? 'Real tour address is required' : null,
+                validator: (v) => (v?.trim().isEmpty ?? true)
+                    ? 'Real tour address is required'
+                    : null,
                 maxLines: 2,
               ),
               const SizedBox(height: 16),
@@ -2774,20 +3558,17 @@ final priceField = TextFormField(
                 '© OpenStreetMap contributors',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
-            ],
-          ),
-          _formCard(
-            'Feature image',
-            [
+            ]),
+            _formCard('Feature image', [
               ImageUploadWidget(
                 initialImageUrl: _imageUrl,
                 initialImagePublicId: _imagePublicId,
                 onImageSelected: _onImageSelected,
               ),
-            ],
-          ),
-        ],
-      ));
+            ]),
+          ],
+        ),
+      );
     }
 
     return ColoredBox(
@@ -2820,10 +3601,7 @@ final priceField = TextFormField(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                mainColumn(),
-                _publishSidebar(),
-              ],
+              children: [mainColumn(), _publishSidebar()],
             ),
           );
         },
@@ -2899,7 +3677,10 @@ class _AddCarFormState extends State<_AddCarForm> {
   void _generateSlug() {
     final title = _title.text.trim();
     if (title.isNotEmpty) {
-      _slug.text = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+      _slug.text = title
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+          .replaceAll(RegExp(r'^-+|-+$'), '');
     }
   }
 
@@ -2925,7 +3706,10 @@ class _AddCarFormState extends State<_AddCarForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(heading, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            Text(
+              heading,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 16),
             ...children,
           ],
@@ -2941,7 +3725,11 @@ class _AddCarFormState extends State<_AddCarForm> {
     }
     if (_mapLat == null || _mapLng == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a location on the map (latitude and longitude are required)')),
+        const SnackBar(
+          content: Text(
+            'Please select a location on the map (latitude and longitude are required)',
+          ),
+        ),
       );
       return;
     }
@@ -2956,9 +3744,13 @@ class _AddCarFormState extends State<_AddCarForm> {
         'slug': _slug.text.trim(),
         'price': _price.text.isEmpty ? "0" : _price.text.trim(),
         'salePrice': _salePrice.text.isEmpty ? "0" : _salePrice.text.trim(),
-        'passenger': int.parse(_passenger.text.isEmpty ? "0" : _passenger.text.trim()),
+        'passenger': int.parse(
+          _passenger.text.isEmpty ? "0" : _passenger.text.trim(),
+        ),
         'gearShift': _gearShift,
-        'baggage': int.parse(_baggage.text.isEmpty ? "0" : _baggage.text.trim()),
+        'baggage': int.parse(
+          _baggage.text.isEmpty ? "0" : _baggage.text.trim(),
+        ),
         'door': int.parse(_door.text.isEmpty ? "0" : _door.text.trim()),
         'mapLat': _mapLat != null ? _mapLat!.toString() : '',
         'mapLng': _mapLng != null ? _mapLng!.toString() : '',
@@ -2969,10 +3761,14 @@ class _AddCarFormState extends State<_AddCarForm> {
       };
       if (widget.itemToEdit != null) {
         await CarsApi.update(widget.itemToEdit!['id'], body);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Car updated')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Car updated')));
       } else {
         await CarsApi.create(body);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Car created')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Car created')));
       }
       _title.clear();
       _slug.clear();
@@ -2995,7 +3791,9 @@ class _AddCarFormState extends State<_AddCarForm> {
         errorMsg = 'Error ${e.statusCode}: ${e.message}';
         if (e.body is Map<String, dynamic>) {
           final body = e.body as Map<String, dynamic>;
-          final details = body.entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
+          final details = body.entries
+              .map((entry) => '${entry.key}: ${entry.value}')
+              .join(', ');
           if (details.length < 200) {
             errorMsg += ' ($details)';
           }
@@ -3003,59 +3801,67 @@ class _AddCarFormState extends State<_AddCarForm> {
       } else {
         errorMsg = 'Error: $e';
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(errorMsg)));
     }
     if (mounted) setState(() => _loading = false);
   }
 
   Widget _publishSidebar() {
-    return _formCard(
-      'Publish',
-      [
-        RadioListTile<String>(
-          title: const Text('Publish'),
-          value: 'publish',
-          groupValue: _status,
-          onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'publish'),
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-        ),
-        RadioListTile<String>(
-          title: const Text('Draft'),
-          value: 'draft',
-          groupValue: _status,
-          onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'draft'),
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF1976D2),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            onPressed: _loading ? null : _submit,
-            icon: _loading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.save_outlined, size: 20),
-            label: Text(widget.itemToEdit != null ? 'Save changes' : 'Add car'),
+    return _formCard('Publish', [
+      RadioListTile<String>(
+        title: const Text('Publish'),
+        value: 'publish',
+        groupValue: _status,
+        onChanged: _loading
+            ? null
+            : (v) => setState(() => _status = v ?? 'publish'),
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+      ),
+      RadioListTile<String>(
+        title: const Text('Draft'),
+        value: 'draft',
+        groupValue: _status,
+        onChanged: _loading
+            ? null
+            : (v) => setState(() => _status = v ?? 'draft'),
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+      ),
+      const SizedBox(height: 12),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF1976D2),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14),
           ),
+          onPressed: _loading ? null : _submit,
+          icon: _loading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.save_outlined, size: 20),
+          label: Text(widget.itemToEdit != null ? 'Save changes' : 'Add car'),
         ),
-      ],
-    );
+      ),
+    ]);
   }
 
-@override
+  @override
   Widget build(BuildContext context) {
     const pageBg = Color(0xFFF0F2F5);
-    final mapInitial = (_mapLat != null && _mapLng != null) ? LatLng(_mapLat!, _mapLng!) : null;
+    final mapInitial = (_mapLat != null && _mapLng != null)
+        ? LatLng(_mapLat!, _mapLng!)
+        : null;
 
     Widget mainColumn() {
       return Form(
@@ -3063,26 +3869,22 @@ class _AddCarFormState extends State<_AddCarForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _formCard(
-              'Car content',
-              [
-                TextFormField(
-                  controller: _title,
-                  decoration: const InputDecoration(
-                    labelText: 'Title *',
-                    hintText: 'Title',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) => (v?.trim().isEmpty ?? true) ? 'Title is required' : null,
-                  onChanged: (_) {
-                    if (widget.itemToEdit == null) _generateSlug();
-                  },
+            _formCard('Car content', [
+              TextFormField(
+                controller: _title,
+                decoration: const InputDecoration(
+                  labelText: 'Title *',
+                  hintText: 'Title',
+                  border: OutlineInputBorder(),
                 ),
-              ],
-            ),
-          _formCard(
-            'Pricing',
-            [
+                validator: (v) =>
+                    (v?.trim().isEmpty ?? true) ? 'Title is required' : null,
+                onChanged: (_) {
+                  if (widget.itemToEdit == null) _generateSlug();
+                },
+              ),
+            ]),
+            _formCard('Pricing', [
               LayoutBuilder(
                 builder: (context, c) {
                   final row = c.maxWidth >= 480;
@@ -3093,10 +3895,13 @@ class _AddCarFormState extends State<_AddCarForm> {
                       hintText: 'Car Price',
                       border: OutlineInputBorder(),
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     validator: (v) {
                       if (v?.trim().isEmpty ?? true) return 'Price is required';
-                      if (double.tryParse(v!.trim()) == null) return 'Enter valid number';
+                      if (double.tryParse(v!.trim()) == null)
+                        return 'Enter valid number';
                       return null;
                     },
                   );
@@ -3106,9 +3911,12 @@ class _AddCarFormState extends State<_AddCarForm> {
                       labelText: 'Sale Price',
                       hintText: 'Car Sale Price',
                       border: OutlineInputBorder(),
-                      helperText: 'If the regular price is less than the discount, it will show the regular price',
+                      helperText:
+                          'If the regular price is less than the discount, it will show the regular price',
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   );
                   if (row) {
                     return Row(
@@ -3130,14 +3938,15 @@ class _AddCarFormState extends State<_AddCarForm> {
                   );
                 },
               ),
-            ],
-          ),
-          _formCard(
-            'Extra Info',
-            [
+            ]),
+            _formCard('Extra Info', [
               LayoutBuilder(
                 builder: (context, c) {
-                  Widget cell(TextEditingController ctrl, String label, String hint) {
+                  Widget cell(
+                    TextEditingController ctrl,
+                    String label,
+                    String hint,
+                  ) {
                     return TextFormField(
                       controller: ctrl,
                       decoration: InputDecoration(
@@ -3147,8 +3956,10 @@ class _AddCarFormState extends State<_AddCarForm> {
                       ),
                       keyboardType: TextInputType.number,
                       validator: (v) {
-                        if (v?.trim().isEmpty ?? true) return '$label is required';
-                        if (int.tryParse(v!.trim()) == null) return 'Enter valid number';
+                        if (v?.trim().isEmpty ?? true)
+                          return '$label is required';
+                        if (int.tryParse(v!.trim()) == null)
+                          return 'Enter valid number';
                         return null;
                       },
                     );
@@ -3159,9 +3970,13 @@ class _AddCarFormState extends State<_AddCarForm> {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: cell(_passenger, 'Passenger', 'Example: 3')),
+                        Expanded(
+                          child: cell(_passenger, 'Passenger', 'Example: 3'),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: cell(_baggage, 'Baggage', 'Example: 5')),
+                        Expanded(
+                          child: cell(_baggage, 'Baggage', 'Example: 5'),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(child: cell(_door, 'Door', 'Example: 4')),
                         const SizedBox(width: 12),
@@ -3173,9 +3988,17 @@ class _AddCarFormState extends State<_AddCarForm> {
                               border: OutlineInputBorder(),
                             ),
                             items: _gearOptions
-                                .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                                .map(
+                                  (e) => DropdownMenuItem<String>(
+                                    value: e,
+                                    child: Text(e),
+                                  ),
+                                )
                                 .toList(),
-                            onChanged: _loading ? null : (v) => setState(() => _gearShift = v ?? 'Auto'),
+                            onChanged: _loading
+                                ? null
+                                : (v) =>
+                                      setState(() => _gearShift = v ?? 'Auto'),
                           ),
                         ),
                       ],
@@ -3186,9 +4009,17 @@ class _AddCarFormState extends State<_AddCarForm> {
                       children: [
                         Row(
                           children: [
-                            Expanded(child: cell(_passenger, 'Passenger', 'Example: 3')),
+                            Expanded(
+                              child: cell(
+                                _passenger,
+                                'Passenger',
+                                'Example: 3',
+                              ),
+                            ),
                             const SizedBox(width: 12),
-                            Expanded(child: cell(_baggage, 'Baggage', 'Example: 5')),
+                            Expanded(
+                              child: cell(_baggage, 'Baggage', 'Example: 5'),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 12),
@@ -3204,9 +4035,18 @@ class _AddCarFormState extends State<_AddCarForm> {
                                   border: OutlineInputBorder(),
                                 ),
                                 items: _gearOptions
-                                    .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                                    .map(
+                                      (e) => DropdownMenuItem<String>(
+                                        value: e,
+                                        child: Text(e),
+                                      ),
+                                    )
                                     .toList(),
-                                onChanged: _loading ? null : (v) => setState(() => _gearShift = v ?? 'Auto'),
+                                onChanged: _loading
+                                    ? null
+                                    : (v) => setState(
+                                        () => _gearShift = v ?? 'Auto',
+                                      ),
                               ),
                             ),
                           ],
@@ -3230,19 +4070,23 @@ class _AddCarFormState extends State<_AddCarForm> {
                           border: OutlineInputBorder(),
                         ),
                         items: _gearOptions
-                            .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                            .map(
+                              (e) => DropdownMenuItem<String>(
+                                value: e,
+                                child: Text(e),
+                              ),
+                            )
                             .toList(),
-                        onChanged: _loading ? null : (v) => setState(() => _gearShift = v ?? 'Auto'),
+                        onChanged: _loading
+                            ? null
+                            : (v) => setState(() => _gearShift = v ?? 'Auto'),
                       ),
                     ],
                   );
                 },
               ),
-            ],
-          ),
-          _formCard(
-            'Locations',
-            [
+            ]),
+            _formCard('Locations', [
               Text(
                 'Tap the map to set latitude and longitude (coordinates are saved automatically).',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
@@ -3264,20 +4108,17 @@ class _AddCarFormState extends State<_AddCarForm> {
                 '© OpenStreetMap contributors',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
-            ],
-          ),
-          _formCard(
-            'Feature image',
-            [
+            ]),
+            _formCard('Feature image', [
               ImageUploadWidget(
                 initialImageUrl: _imageUrl,
                 initialImagePublicId: _imagePublicId,
                 onImageSelected: _onImageSelected,
               ),
-            ],
-          ),
-        ],
-      ));
+            ]),
+          ],
+        ),
+      );
     }
 
     return ColoredBox(
@@ -3310,10 +4151,7 @@ class _AddCarFormState extends State<_AddCarForm> {
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                mainColumn(),
-                _publishSidebar(),
-              ],
+              children: [mainColumn(), _publishSidebar()],
             ),
           );
         },
