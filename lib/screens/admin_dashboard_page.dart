@@ -535,7 +535,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       case AdminSection.carsAll:
         return _buildCarsList();
       case AdminSection.carsAdd:
-        return _buildSettingsContent();
+        return _buildCarForm();
       case AdminSection.ratings:
         return _buildRatingsList();
       case AdminSection.chatbot:
@@ -1080,17 +1080,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 final title = m['title']?.toString() ?? 'Tour';
                 final isFeatured =
                     m['featured'] == true || m['isFeatured'] == true;
-                final location =
-                    (m['realTourAddress']?.toString().isNotEmpty == true
-                        ? m['realTourAddress']?.toString()
-                        : (m['location']?.toString().isNotEmpty == true
-                              ? m['location']?.toString()
-                              : (m['address']?.toString().isNotEmpty == true
-                                    ? m['address']?.toString()
-                                    : (m['city']?.toString().isNotEmpty == true
-                                          ? m['city']?.toString()
-                                          : 'N/A')))) ??
-                    'N/A';
+                final location = m['realTourAddress']?.toString().trim() ?? 
+                    m['location']?.toString().trim() ?? 
+                    m['address']?.toString().trim() ?? 
+                    m['city']?.toString().trim() ?? 'N/A';
                 final author =
                     m['author']?.toString() ??
                     m['userName']?.toString() ??
@@ -1244,7 +1237,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     return Center(
       child: Container(
         width: 920,
-        height: 720,
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1257,11 +1250,42 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             ),
           ],
         ),
-        child: _AddTourForm(
-          onCreated: () {
-            setState(() => _current = AdminSection.toursAll);
-            _loadData();
-          },
+        child: SingleChildScrollView(
+          child: _AddTourForm(
+            onCreated: () {
+              setState(() => _current = AdminSection.toursAll);
+              _loadData();
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCarForm() {
+    return Center(
+      child: Container(
+        width: 720,
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: SingleChildScrollView(
+          child: _AddCarForm(
+            onCreated: () {
+              setState(() => _current = AdminSection.carsAll);
+              _loadData();
+            },
+          ),
         ),
       ),
     );
@@ -1481,18 +1505,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 final title = m['title']?.toString() ?? 'Car';
                 final isFeatured =
                     m['featured'] == true || m['isFeatured'] == true;
-                // Try multiple location field names
-                final location =
-                    (m['realTourAddress']?.toString().isNotEmpty == true
-                        ? m['realTourAddress']?.toString()
-                        : (m['location']?.toString().isNotEmpty == true
-                              ? m['location']?.toString()
-                              : (m['address']?.toString().isNotEmpty == true
-                                    ? m['address']?.toString()
-                                    : (m['city']?.toString().isNotEmpty == true
-                                          ? m['city']?.toString()
-                                          : 'N/A')))) ??
-                    'N/A';
+                final location = m['realTourAddress']?.toString().trim() ?? 
+                    m['location']?.toString().trim() ?? 
+                    m['address']?.toString().trim() ?? 
+                    m['city']?.toString().trim() ?? 'N/A';
                 final author =
                     m['author']?.toString() ??
                     m['userName']?.toString() ??
@@ -3285,30 +3301,13 @@ class _AddTourFormState extends State<_AddTourForm> {
     });
   }
 
-  Widget _formCard(String heading, List<Widget> children) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: Colors.grey.shade300),
-      ),
-      clipBehavior: Clip.antiAlias,
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              heading,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
+Widget _formCard(String heading, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(heading, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        ...children,
+      ],
     );
   }
 
@@ -3411,84 +3410,35 @@ class _AddTourFormState extends State<_AddTourForm> {
         title: const Text('Publish'),
         value: 'publish',
         groupValue: _status,
-        onChanged: _loading
-            ? null
-            : (v) => setState(() => _status = v ?? 'publish'),
-        contentPadding: EdgeInsets.zero,
+        onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'publish'),
         dense: true,
       ),
       RadioListTile<String>(
         title: const Text('Draft'),
         value: 'draft',
         groupValue: _status,
-        onChanged: _loading
-            ? null
-            : (v) => setState(() => _status = v ?? 'draft'),
-        contentPadding: EdgeInsets.zero,
+        onChanged: _loading ? null : (v) => setState(() => _status = v ?? 'draft'),
         dense: true,
       ),
-      const SizedBox(height: 8),
       const Divider(),
-      const SizedBox(height: 4),
-      Text(
-        'Availability',
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Colors.grey.shade800,
-        ),
-      ),
-      const SizedBox(height: 8),
       DropdownButtonFormField<String>(
         initialValue: _availability,
-        decoration: const InputDecoration(
-          labelText: 'Availability',
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
-        items: _availabilityOptions
-            .map(
-              (e) =>
-                  DropdownMenuItem<String>(value: e.key, child: Text(e.value)),
-            )
-            .toList(),
-        onChanged: _loading
-            ? null
-            : (v) => setState(() => _availability = v ?? 'always'),
+        decoration: const InputDecoration(labelText: 'Availability', border: OutlineInputBorder(), isDense: true),
+        items: const [
+          DropdownMenuItem(value: 'always', child: Text('Always Available')),
+        ],
+        onChanged: _loading ? null : (v) => setState(() => _availability = v ?? 'always'),
       ),
-      const SizedBox(height: 12),
       CheckboxListTile(
         value: _isFeatured,
-        onChanged: _loading
-            ? null
-            : (v) => setState(() => _isFeatured = v ?? false),
+        onChanged: _loading ? null : (v) => setState(() => _isFeatured = v ?? false),
         title: const Text('Enable featured'),
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
         dense: true,
       ),
-      const SizedBox(height: 12),
-      SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF1976D2),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-          onPressed: _loading ? null : _submit,
-          icon: _loading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Icon(Icons.save_outlined, size: 20),
-          label: Text(widget.itemToEdit != null ? 'Save changes' : 'Add tour'),
-        ),
+      FilledButton.icon(
+        onPressed: _loading ? null : _submit,
+        icon: _loading ? const CircularProgressIndicator() : const Icon(Icons.save_outlined),
+        label: Text(widget.itemToEdit != null ? 'Save changes' : 'Add tour'),
       ),
     ]);
   }
@@ -3539,21 +3489,19 @@ class _AddTourFormState extends State<_AddTourForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _formCard('Tour content', [
-              TextFormField(
-                controller: _title,
-                decoration: const InputDecoration(
-                  labelText: 'Title *',
-                  hintText: 'Title',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v?.trim().isEmpty ?? true) ? 'Title is required' : null,
-                onChanged: (_) {
-                  if (widget.itemToEdit == null) _generateSlug();
-                },
+_formCard('Tour content', [
+            TextFormField(
+              controller: _title,
+              decoration: const InputDecoration(
+                labelText: 'Title *',
+                border: OutlineInputBorder(),
               ),
-            ]),
+              validator: (v) => (v?.trim().isEmpty ?? true) ? 'Title is required' : null,
+              onChanged: (_) { if (widget.itemToEdit == null) _generateSlug(); },
+            ),
+            // Slug auto-generated, hidden for cleaner UI like car form
+            const SizedBox(height: 16),
+          ]),
             _formCard('Pricing', [
               LayoutBuilder(
                 builder: (context, c) {
@@ -3612,18 +3560,15 @@ class _AddTourFormState extends State<_AddTourForm> {
             _formCard('Tour locations', [
               locationDropdown,
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _realTourAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Real tour address *',
-                  hintText: 'Real tour address',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) => (v?.trim().isEmpty ?? true)
-                    ? 'Real tour address is required'
-                    : null,
-                maxLines: 2,
+TextFormField(
+              controller: _realTourAddress,
+              decoration: const InputDecoration(
+                labelText: 'Real tour address *',
+                border: OutlineInputBorder(),
               ),
+              validator: (v) => (v?.trim().isEmpty ?? true) ? 'Real tour address is required' : null,
+              maxLines: 2,
+            ),
               const SizedBox(height: 16),
               Text(
                 'Tap the map to set the meeting point. Latitude and longitude are saved automatically (no manual entry).',
