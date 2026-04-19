@@ -81,6 +81,20 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   bool _loadingRatings = false;
   String _toursSearchQuery = '';
   String _carsSearchQuery = '';
+  bool _showToursAdvancedFilters = false;
+  bool _showCarsAdvancedFilters = false;
+  String _toursBulkAction = 'delete';
+  String _carsBulkAction = 'delete';
+  String _toursFeaturedFilter = 'all';
+  String _carsFeaturedFilter = 'all';
+  String _toursLocationFilter = 'all';
+  String _carsLocationFilter = 'all';
+  String _toursCategoryFilter = 'all';
+  String _carsCategoryFilter = 'all';
+  String _toursVendorFilter = 'all';
+  String _carsVendorFilter = 'all';
+  final Set<String> _selectedTourIds = {};
+  final Set<String> _selectedCarIds = {};
 
   final GlobalKey<FormState> _settingsFormKey = GlobalKey<FormState>();
   final _adminFirstNameController = TextEditingController();
@@ -125,26 +139,293 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
 
   List<dynamic> _getFilteredTours() {
     final query = _toursSearchQuery.toLowerCase().trim();
-    if (query.isEmpty) return _tours;
     return _tours.where((tour) {
       final m = tour as Map<String, dynamic>;
       final title = (m['title'] ?? m['name'] ?? '').toString().toLowerCase();
-      final location = (m['realTourAddress'] ?? m['location'] ?? m['address'] ?? m['city'] ?? '').toString().toLowerCase();
-      final author = (m['author'] ?? m['userName'] ?? m['username'] ?? '').toString().toLowerCase();
-      return title.contains(query) || location.contains(query) || author.contains(query);
+      final location =
+          (m['realTourAddress'] ??
+                  m['location'] ??
+                  m['address'] ??
+                  m['city'] ??
+                  '')
+              .toString()
+              .toLowerCase();
+      final author = (m['author'] ?? m['userName'] ?? m['username'] ?? '')
+          .toString()
+          .toLowerCase();
+      if (query.isNotEmpty &&
+          !(title.contains(query) ||
+              location.contains(query) ||
+              author.contains(query))) {
+        return false;
+      }
+      if (_toursFeaturedFilter != 'all') {
+        final isFeatured = m['featured'] == true || m['isFeatured'] == true;
+        if (_toursFeaturedFilter == 'featured' && !isFeatured) return false;
+        if (_toursFeaturedFilter == 'draft' && isFeatured) return false;
+      }
+      if (_toursLocationFilter != 'all') {
+        if (location != _toursLocationFilter.toLowerCase()) return false;
+      }
+      if (_toursCategoryFilter != 'all') {
+        final category = (m['category'] ?? m['tourCategory'] ?? '')
+            .toString()
+            .toLowerCase();
+        if (category != _toursCategoryFilter.toLowerCase()) return false;
+      }
+      if (_toursVendorFilter != 'all') {
+        final vendor =
+            (m['vendor'] ?? m['author'] ?? m['userName'] ?? m['username'] ?? '')
+                .toString()
+                .toLowerCase();
+        if (vendor != _toursVendorFilter.toLowerCase()) return false;
+      }
+      return true;
     }).toList();
   }
 
   List<dynamic> _getFilteredCars() {
     final query = _carsSearchQuery.toLowerCase().trim();
-    if (query.isEmpty) return _cars;
     return _cars.where((car) {
       final m = car as Map<String, dynamic>;
       final title = (m['title'] ?? m['name'] ?? '').toString().toLowerCase();
-      final location = (m['realTourAddress'] ?? m['location'] ?? m['address'] ?? m['city'] ?? '').toString().toLowerCase();
-      final author = (m['author'] ?? m['userName'] ?? m['username'] ?? '').toString().toLowerCase();
-      return title.contains(query) || location.contains(query) || author.contains(query);
+      final location =
+          (m['realTourAddress'] ??
+                  m['location'] ??
+                  m['address'] ??
+                  m['city'] ??
+                  '')
+              .toString()
+              .toLowerCase();
+      final author = (m['author'] ?? m['userName'] ?? '')
+          .toString()
+          .toLowerCase();
+      if (query.isNotEmpty &&
+          !(title.contains(query) ||
+              location.contains(query) ||
+              author.contains(query))) {
+        return false;
+      }
+      if (_carsFeaturedFilter != 'all') {
+        final isFeatured = m['featured'] == true || m['isFeatured'] == true;
+        if (_carsFeaturedFilter == 'featured' && !isFeatured) return false;
+        if (_carsFeaturedFilter == 'draft' && isFeatured) return false;
+      }
+      if (_carsLocationFilter != 'all') {
+        if (location != _carsLocationFilter.toLowerCase()) return false;
+      }
+      if (_carsCategoryFilter != 'all') {
+        final category = (m['category'] ?? m['carCategory'] ?? '')
+            .toString()
+            .toLowerCase();
+        if (category != _carsCategoryFilter.toLowerCase()) return false;
+      }
+      if (_carsVendorFilter != 'all') {
+        final vendor = (m['vendor'] ?? m['author'] ?? m['userName'] ?? '')
+            .toString()
+            .toLowerCase();
+        if (vendor != _carsVendorFilter.toLowerCase()) return false;
+      }
+      return true;
     }).toList();
+  }
+
+  void _toggleTourSelection(String id, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedTourIds.add(id);
+      } else {
+        _selectedTourIds.remove(id);
+      }
+    });
+  }
+
+  void _toggleCarSelection(String id, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedCarIds.add(id);
+      } else {
+        _selectedCarIds.remove(id);
+      }
+    });
+  }
+
+  void _selectAllTours(bool selected) {
+    final ids = _getFilteredTours()
+        .map((tour) => (tour['id']?.toString() ?? ''))
+        .where((id) => id.isNotEmpty);
+    setState(() {
+      if (selected) {
+        _selectedTourIds.addAll(ids);
+      } else {
+        _selectedTourIds.removeAll(ids);
+      }
+    });
+  }
+
+  void _selectAllCars(bool selected) {
+    final ids = _getFilteredCars()
+        .map((car) => (car['id']?.toString() ?? ''))
+        .where((id) => id.isNotEmpty);
+    setState(() {
+      if (selected) {
+        _selectedCarIds.addAll(ids);
+      } else {
+        _selectedCarIds.removeAll(ids);
+      }
+    });
+  }
+
+  void _removeToursByIds(Set<String> ids) {
+    setState(() {
+      _tours.removeWhere((tour) {
+        final id = (tour['id']?.toString() ?? '');
+        return ids.contains(id);
+      });
+      _selectedTourIds.removeAll(ids);
+    });
+  }
+
+  void _removeCarsByIds(Set<String> ids) {
+    setState(() {
+      _cars.removeWhere((car) {
+        final id = (car['id']?.toString() ?? '');
+        return ids.contains(id);
+      });
+      _selectedCarIds.removeAll(ids);
+    });
+  }
+
+  Future<void> _deleteSelectedTours() async {
+    if (_selectedTourIds.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete selected tours'),
+        content: Text(
+          'Delete ${_selectedTourIds.length} selected tour(s) from the list?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      final removed = Set<String>.from(_selectedTourIds);
+      _removeToursByIds(removed);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${removed.length} tour(s) removed.')),
+      );
+    }
+  }
+
+  Future<void> _deleteSelectedCars() async {
+    if (_selectedCarIds.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete selected cars'),
+        content: Text(
+          'Delete ${_selectedCarIds.length} selected car(s) from the list?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      final removed = Set<String>.from(_selectedCarIds);
+      _removeCarsByIds(removed);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${removed.length} car(s) removed.')),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteTour(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete tour'),
+        content: const Text(
+          'Are you sure you want to delete this tour? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      _deleteTourFromList(id);
+    }
+  }
+
+  void _deleteTourFromList(String id) {
+    setState(() {
+      _tours.removeWhere((tour) => (tour['id']?.toString() ?? '') == id);
+      _selectedTourIds.remove(id);
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Tour removed from list.')));
+  }
+
+  Future<void> _confirmDeleteCar(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete car'),
+        content: const Text(
+          'Are you sure you want to delete this car? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      _deleteCarFromList(id);
+    }
+  }
+
+  void _deleteCarFromList(String id) {
+    setState(() {
+      _cars.removeWhere((car) => (car['id']?.toString() ?? '') == id);
+      _selectedCarIds.remove(id);
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Car removed from list.')));
   }
 
   Future<void> _loadData() async {
@@ -751,8 +1032,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             role = role.toString().toLowerCase();
             if (role == 'customer') role = 'Customer';
             if (role == 'vendor') role = 'Vendor';
-            if (role == 'administrator' || role == 'admin')
+            if (role == 'administrator' || role == 'admin') {
               role = 'Administrator';
+            }
             if (role.isEmpty) role = 'Unknown';
 
             final isSelf = id == _currentUserId;
@@ -789,8 +1071,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildRatingsList() {
-    if (_loadingRatings)
+    if (_loadingRatings) {
       return const Center(child: CircularProgressIndicator());
+    }
     if (_ratings.isEmpty) return const Center(child: Text('No ratings yet.'));
 
     return Column(
@@ -824,8 +1107,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   '';
             } else {
               userName =
-                  m['userName']?.toString() ??
-                  m['username']?.toString() ?? '';
+                  m['userName']?.toString() ?? m['username']?.toString() ?? '';
             }
             if (userName.isEmpty) userName = 'Unknown';
             return DataRow(
@@ -863,47 +1145,254 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   Widget _buildToursList() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_tours.isEmpty) return const Center(child: Text('No tours yet.'));
+
+    final filteredTours = _getFilteredTours();
+    final tourLocations = _tours
+        .cast<Map<String, dynamic>>()
+        .map((m) => (m['realTourAddress'] ?? m['location'] ?? m['address'] ?? m['city'] ?? '').toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final tourCategories = _tours
+        .cast<Map<String, dynamic>>()
+        .map((m) => (m['category'] ?? m['tourCategory'] ?? '').toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final tourVendors = _tours
+        .cast<Map<String, dynamic>>()
+        .map((m) => (m['vendor'] ?? m['author'] ?? m['userName'] ?? m['username'] ?? '').toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Row(
-            children: [
-              const Spacer(),
-              SizedBox(
-                width: 300,
-                child: TextField(
-                  onChanged: (value) => setState(() => _toursSearchQuery = value),
-                  decoration: InputDecoration(
-                    hintText: 'Search tours by name, location or author...',
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                    suffixIcon: _toursSearchQuery.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () => setState(() => _toursSearchQuery = ''),
-                          ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                ),
+        Container(
+          margin: const EdgeInsets.only(bottom: 24),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x11000000),
+                blurRadius: 12,
+                offset: Offset(0, 5),
               ),
             ],
           ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('Bulk Actions', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 12),
+                        DropdownButton<String>(
+                          value: _toursBulkAction,
+                          underline: const SizedBox.shrink(),
+                          items: const [
+                            DropdownMenuItem(value: 'delete', child: Text('Delete selected')),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _toursBulkAction = value);
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: _selectedTourIds.isEmpty ? null : _deleteSelectedTours,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0EA5E9),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Apply'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    width: 320,
+                    child: TextField(
+                      onChanged: (value) => setState(() => _toursSearchQuery = value),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name',
+                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        suffixIcon: _toursSearchQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () => setState(() => _toursSearchQuery = ''),
+                              ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton(
+                    onPressed: () => setState(() => _showToursAdvancedFilters = !_showToursAdvancedFilters),
+                    child: Row(
+                      children: [
+                        const Text('Advanced'),
+                        const SizedBox(width: 6),
+                        AnimatedRotation(
+                          turns: _showToursAdvancedFilters ? 0.5 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: const Icon(Icons.expand_more),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (_showToursAdvancedFilters)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: 220,
+                        child: DropdownButtonFormField<String>(
+                          value: _toursCategoryFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Category',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: 'all', child: Text('-- All Category --')),
+                            ...tourCategories.map((category) => DropdownMenuItem(value: category.toLowerCase(), child: Text(category))),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _toursCategoryFilter = value);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 220,
+                        child: DropdownButtonFormField<String>(
+                          value: _toursVendorFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Vendor',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: 'all', child: Text('-- Vendor --')),
+                            ...tourVendors.map((vendor) => DropdownMenuItem(value: vendor.toLowerCase(), child: Text(vendor))),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _toursVendorFilter = value);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 220,
+                        child: DropdownButtonFormField<String>(
+                          value: _toursLocationFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Location',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: 'all', child: Text('-- All Location --')),
+                            ...tourLocations.map((location) => DropdownMenuItem(value: location.toLowerCase(), child: Text(location))),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _toursLocationFilter = value);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<String>(
+                          value: _toursFeaturedFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Featured',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'all', child: Text('-- All --')),
+                            DropdownMenuItem(value: 'featured', child: Text('Featured')),
+                            DropdownMenuItem(value: 'draft', child: Text('Draft')),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _toursFeaturedFilter = value);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
+        if (_selectedTourIds.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_selectedTourIds.length} selected',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _selectedTourIds.clear()),
+                    child: const Text('Clear'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _deleteSelectedTours,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Delete selected'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.only(bottom: 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Text(
-                'Found ${_getFilteredTours().length} items',
+                'Found ${filteredTours.length} items',
                 style: const TextStyle(
                   fontSize: 14,
                   color: Colors.grey,
@@ -916,7 +1405,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         Theme(
           data: Theme.of(context).copyWith(
             dataTableTheme: DataTableThemeData(
-              headingRowColor: MaterialStateProperty.all(
+              headingRowColor: WidgetStateProperty.all(
                 const Color(0xFFFAFAFC),
               ),
               headingRowHeight: 56,
@@ -932,6 +1421,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
+              showCheckboxColumn: true,
+              onSelectAll: (selected) => _selectAllTours(selected == true),
               columns: const [
                 DataColumn(
                   label: Text(
@@ -976,14 +1467,15 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   ),
                 ),
               ],
-              rows: _getFilteredTours().map<DataRow>((t) {
+              rows: filteredTours.map<DataRow>((t) {
                 final m = t as Map<String, dynamic>;
+                final id = m['id']?.toString() ?? '';
                 final title = m['title']?.toString() ?? 'Tour';
                 final isFeatured =
                     m['featured'] == true || m['isFeatured'] == true;
-                final location = m['realTourAddress']?.toString().trim() ?? 
-                    m['location']?.toString().trim() ?? 
-                    m['address']?.toString().trim() ?? 
+                final location = m['realTourAddress']?.toString().trim() ??
+                    m['location']?.toString().trim() ??
+                    m['address']?.toString().trim() ??
                     m['city']?.toString().trim() ?? 'N/A';
                 final author =
                     m['author']?.toString() ??
@@ -1009,6 +1501,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 }
 
                 return DataRow(
+                  selected: id.isNotEmpty && _selectedTourIds.contains(id),
+                  onSelectChanged: id.isEmpty
+                      ? null
+                      : (selected) => _toggleTourSelection(id, selected == true),
                   cells: [
                     DataCell(
                       Padding(
@@ -1059,9 +1555,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                         ),
                       ),
                     ),
-                    DataCell(
-                      Text(author, style: const TextStyle(fontSize: 13)),
-                    ),
+                    DataCell(Text(author, style: const TextStyle(fontSize: 13))),
                     DataCell(_carStatusChip(status)),
                     DataCell(
                       Container(
@@ -1092,19 +1586,30 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                       ),
                     ),
                     DataCell(
-                      ElevatedButton.icon(
-                        onPressed: () => _showEditTourDialog(m),
-                        icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Edit'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () => _showEditTourDialog(m),
+                            icon: const Icon(Icons.edit, size: 16),
+                            label: const Text('Edit'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
                           ),
-                          textStyle: const TextStyle(fontSize: 12),
-                        ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                            onPressed: id.isEmpty ? null : () => _confirmDeleteTour(id),
+                            tooltip: 'Delete tour',
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1158,47 +1663,251 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_cars.isEmpty) return const Center(child: Text('No cars yet.'));
 
+    final filteredCars = _getFilteredCars();
+    final carLocations = _cars
+        .cast<Map<String, dynamic>>()
+        .map((m) => (m['realTourAddress'] ?? m['location'] ?? m['address'] ?? m['city'] ?? '').toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final carCategories = _cars
+        .cast<Map<String, dynamic>>()
+        .map((m) => (m['category'] ?? m['carCategory'] ?? '').toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final carVendors = _cars
+        .cast<Map<String, dynamic>>()
+        .map((m) => (m['vendor'] ?? m['author'] ?? m['userName'] ?? '').toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Row(
-            children: [
-              const Spacer(),
-              SizedBox(
-                width: 300,
-                child: TextField(
-                  onChanged: (value) => setState(() => _carsSearchQuery = value),
-                  decoration: InputDecoration(
-                    hintText: 'Search cars by name, location or author...',
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                    suffixIcon: _carsSearchQuery.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () => setState(() => _carsSearchQuery = ''),
-                          ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                ),
+        Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1A000000),
+                blurRadius: 12,
+                offset: Offset(0, 3),
               ),
             ],
           ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('Bulk Actions', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 12),
+                        DropdownButton<String>(
+                          value: _carsBulkAction,
+                          underline: const SizedBox.shrink(),
+                          items: const [
+                            DropdownMenuItem(value: 'delete', child: Text('Delete selected')),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _carsBulkAction = value);
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: _selectedCarIds.isEmpty ? null : _deleteSelectedCars,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0EA5E9),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Apply'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    width: 320,
+                    child: TextField(
+                      onChanged: (value) => setState(() => _carsSearchQuery = value),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name',
+                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        suffixIcon: _carsSearchQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () => setState(() => _carsSearchQuery = ''),
+                              ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton(
+                    onPressed: () => setState(() => _showCarsAdvancedFilters = !_showCarsAdvancedFilters),
+                    child: Row(
+                      children: [
+                        const Text('Advanced'),
+                        const SizedBox(width: 6),
+                        AnimatedRotation(
+                          turns: _showCarsAdvancedFilters ? 0.5 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: const Icon(Icons.expand_more),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (_showCarsAdvancedFilters)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: 220,
+                        child: DropdownButtonFormField<String>(
+                          value: _carsCategoryFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Category',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: 'all', child: Text('-- All Category --')),
+                            ...carCategories.map((category) => DropdownMenuItem(value: category.toLowerCase(), child: Text(category))),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _carsCategoryFilter = value);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 220,
+                        child: DropdownButtonFormField<String>(
+                          value: _carsVendorFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Vendor',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: 'all', child: Text('-- Vendor --')),
+                            ...carVendors.map((vendor) => DropdownMenuItem(value: vendor.toLowerCase(), child: Text(vendor))),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _carsVendorFilter = value);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 220,
+                        child: DropdownButtonFormField<String>(
+                          value: _carsLocationFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Location',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: 'all', child: Text('-- All Location --')),
+                            ...carLocations.map((location) => DropdownMenuItem(value: location.toLowerCase(), child: Text(location))),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _carsLocationFilter = value);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 180,
+                        child: DropdownButtonFormField<String>(
+                          value: _carsFeaturedFilter,
+                          decoration: InputDecoration(
+                            labelText: 'Featured',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'all', child: Text('-- All --')),
+                            DropdownMenuItem(value: 'featured', child: Text('Featured')),
+                            DropdownMenuItem(value: 'draft', child: Text('Draft')),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => _carsFeaturedFilter = value);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
+        if (_selectedCarIds.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_selectedCarIds.length} selected',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _selectedCarIds.clear()),
+                    child: const Text('Clear selection'),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    onPressed: _deleteSelectedCars,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Delete selected'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.only(bottom: 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Text(
-                'Found ${_getFilteredCars().length} items',
+                'Found ${filteredCars.length} items',
                 style: const TextStyle(
                   fontSize: 14,
                   color: Colors.grey,
@@ -1208,7 +1917,6 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             ],
           ),
         ),
-
         Theme(
           data: Theme.of(context).copyWith(
             dataTableTheme: DataTableThemeData(
@@ -1226,6 +1934,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
+              showCheckboxColumn: true,
+              onSelectAll: (selected) => _selectAllCars(selected == true),
               columns: const [
                 DataColumn(
                   label: Text(
@@ -1270,14 +1980,15 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   ),
                 ),
               ],
-              rows: _cars.map<DataRow>((c) {
+              rows: filteredCars.map<DataRow>((c) {
                 final m = c as Map<String, dynamic>;
+                final id = m['id']?.toString() ?? '';
                 final title = m['title']?.toString() ?? 'Car';
                 final isFeatured =
                     m['featured'] == true || m['isFeatured'] == true;
-                final location = m['realTourAddress']?.toString().trim() ?? 
-                    m['location']?.toString().trim() ?? 
-                    m['address']?.toString().trim() ?? 
+                final location = m['realTourAddress']?.toString().trim() ??
+                    m['location']?.toString().trim() ??
+                    m['address']?.toString().trim() ??
                     m['city']?.toString().trim() ?? 'N/A';
                 final author =
                     m['author']?.toString() ??
@@ -1299,6 +2010,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 }
 
                 return DataRow(
+                  selected: id.isNotEmpty && _selectedCarIds.contains(id),
+                  onSelectChanged: id.isEmpty
+                      ? null
+                      : (selected) => _toggleCarSelection(id, selected == true),
                   cells: [
                     DataCell(
                       Padding(
@@ -1388,19 +2103,30 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                       ),
                     ),
                     DataCell(
-                      ElevatedButton.icon(
-                        onPressed: () => _showEditCarDialog(m),
-                        icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Edit'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () => _showEditCarDialog(m),
+                            icon: const Icon(Icons.edit, size: 16),
+                            label: const Text('Edit'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
                           ),
-                          textStyle: const TextStyle(fontSize: 12),
-                        ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                            onPressed: id.isEmpty ? null : () => _confirmDeleteCar(id),
+                            tooltip: 'Delete car',
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1412,8 +2138,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       ],
     );
   }
-
-  Future<void> _showEditTourDialog(Map<String, dynamic> tour) async {
+Future<void> _showEditTourDialog(Map<String, dynamic> tour) async {
     final id = tour['id'];
     if (id == null) return;
     showDialog(
@@ -1424,7 +2149,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 16),
-            const Text('Loading tour details...'),
+            Text('Loading tour details...'),
           ],
         ),
       ),
@@ -1436,18 +2161,63 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
 
       showDialog(
         context: context,
-        builder: (context) => Dialog.fullscreen(
-          child: Scaffold(
-            appBar: AppBar(title: const Text('Edit Tour')),
-            body: _AddTourForm(
-              onCreated: () async {
-                Navigator.of(context).pop();
-                await _loadData();
-              },
-              itemToEdit: freshTour,
+        builder: (context) {
+          final size = MediaQuery.of(context).size;
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 18,
             ),
-          ),
-        ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: size.width * 0.9,
+                maxHeight: size.height * 0.9,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    color: Theme.of(context).colorScheme.primary,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Edit Tour',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(18),
+                      child: _AddTourForm(
+                        onCreated: () async {
+                          Navigator.of(context).pop();
+                          await _loadData();
+                        },
+                        itemToEdit: freshTour,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       );
     } catch (e) {
       if (!mounted) return;
@@ -1469,7 +2239,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 16),
-            const Text('Loading car details...'),
+            Text('Loading car details...'),
           ],
         ),
       ),
@@ -1481,18 +2251,63 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
 
       showDialog(
         context: context,
-        builder: (context) => Dialog.fullscreen(
-          child: Scaffold(
-            appBar: AppBar(title: const Text('Edit Car')),
-            body: _AddCarForm(
-              onCreated: () async {
-                Navigator.of(context).pop();
-                await _loadData();
-              },
-              itemToEdit: freshCar,
+        builder: (context) {
+          final size = MediaQuery.of(context).size;
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 18,
             ),
-          ),
-        ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: size.width * 0.9,
+                maxHeight: size.height * 0.9,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    color: Theme.of(context).colorScheme.primary,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Edit Car',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(18),
+                      child: _AddCarForm(
+                        onCreated: () async {
+                          Navigator.of(context).pop();
+                          await _loadData();
+                        },
+                        itemToEdit: freshCar,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       );
     } catch (e) {
       if (!mounted) return;
@@ -1500,76 +2315,6 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to load car: $e')));
-    }
-  }
-
-  Future<void> _deleteTour(int id) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Tour'),
-        content: const Text('Are you sure you want to delete this tour?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      try {
-        await ToursApi.delete(id);
-        _loadData();
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Tour deleted')));
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error deleting tour: $e')));
-      }
-    }
-  }
-
-  Future<void> _deleteCar(int id) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Car'),
-        content: const Text('Are you sure you want to delete this car?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      try {
-        await CarsApi.delete(id);
-        _loadData();
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Car deleted')));
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error deleting car: $e')));
-      }
     }
   }
 
@@ -1774,7 +2519,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             SizedBox(
               width: 200,
               child: DropdownButtonFormField<_ChatbotFilter>(
-                value: _chatFilter,
+                initialValue: _chatFilter,
                 decoration: const InputDecoration(
                   labelText: 'Filter',
                   border: OutlineInputBorder(),
@@ -2448,17 +3193,14 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: role.isEmpty ? null : role,
+                  initialValue: role.isEmpty ? null : role,
                   decoration: const InputDecoration(labelText: 'Role'),
                   items: const [
                     DropdownMenuItem(
                       value: 'customer',
                       child: Text('Customer'),
                     ),
-                    DropdownMenuItem(
-                      value: 'vendor',
-                      child: Text('Vendor'),
-                    ),
+                    DropdownMenuItem(value: 'vendor', child: Text('Vendor')),
                     DropdownMenuItem(
                       value: 'administrator',
                       child: Text('Administrator'),
@@ -2712,8 +3454,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                           ),
                           validator: (value) =>
                               value == null || value.trim().isEmpty
-                                  ? 'Required'
-                                  : null,
+                              ? 'Required'
+                              : null,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -2726,8 +3468,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                           ),
                           validator: (value) =>
                               value == null || value.trim().isEmpty
-                                  ? 'Required'
-                                  : null,
+                              ? 'Required'
+                              : null,
                         ),
                       ),
                     ],
@@ -2832,15 +3574,15 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         password: _adminPasswordController.text,
         role: 'administrator',
       );
-      
+
       if (!mounted) return;
-      
+
       _adminFirstNameController.clear();
       _adminLastNameController.clear();
       _adminUsernameController.clear();
       _adminEmailController.clear();
       _adminPasswordController.clear();
-      
+
       Navigator.of(dialogContext).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2849,7 +3591,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         ),
       );
       _loadUsers();
-      
+
       setState(() {
         _creatingAdmin = false;
         _adminCreationError = null;
@@ -3007,7 +3749,9 @@ class _AddTourFormState extends State<_AddTourForm> {
         'name': _title.text.trim(),
         'slug': _slug.text.trim(),
         'price': _price.text.trim().isEmpty ? "0" : _price.text.trim(),
-        'salePrice': _salePrice.text.trim().isEmpty ? "0" : _salePrice.text.trim(),
+        'salePrice': _salePrice.text.trim().isEmpty
+            ? "0"
+            : _salePrice.text.trim(),
         'realTourAddress': _realTourAddress.text.trim(),
         'address': _realTourAddress.text.trim(),
         'mapLat': _mapLat.toString(),
@@ -3018,7 +3762,8 @@ class _AddTourFormState extends State<_AddTourForm> {
         'published': _status == 'publish',
         'availability': _availability,
         'isFeatured': _isFeatured,
-        if (_locationId != null) 'locationId': int.tryParse(_locationId!) ?? _locationId,
+        if (_locationId != null)
+          'locationId': int.tryParse(_locationId!) ?? _locationId,
       };
 
       if (widget.itemToEdit != null) {
@@ -3029,12 +3774,18 @@ class _AddTourFormState extends State<_AddTourForm> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.itemToEdit != null ? 'Tour updated' : 'Tour created')),
+        SnackBar(
+          content: Text(
+            widget.itemToEdit != null ? 'Tour updated' : 'Tour created',
+          ),
+        ),
       );
       widget.onCreated();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -3053,7 +3804,10 @@ class _AddTourFormState extends State<_AddTourForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             const Divider(height: 32),
             ...children,
           ],
@@ -3064,7 +3818,9 @@ class _AddTourFormState extends State<_AddTourForm> {
 
   @override
   Widget build(BuildContext context) {
-    final mapInitial = (_mapLat != null && _mapLng != null) ? LatLng(_mapLat!, _mapLng!) : null;
+    final mapInitial = (_mapLat != null && _mapLng != null)
+        ? LatLng(_mapLat!, _mapLng!)
+        : null;
 
     final mainForm = Form(
       key: _formKey,
@@ -3075,9 +3831,14 @@ class _AddTourFormState extends State<_AddTourForm> {
             const SizedBox(height: 8),
             TextFormField(
               controller: _title,
-              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Tour Name'),
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Tour Name',
+              ),
               validator: (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null,
-              onChanged: (_) { if (widget.itemToEdit == null) _generateSlug(); },
+              onChanged: (_) {
+                if (widget.itemToEdit == null) _generateSlug();
+              },
             ),
           ]),
           _buildBookingCoreCard('Pricing', [
@@ -3087,13 +3848,20 @@ class _AddTourFormState extends State<_AddTourForm> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Price', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const Text(
+                        'Price',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _price,
-                        decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '0'),
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: '0',
+                        ),
                         keyboardType: TextInputType.number,
-                        validator: (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null,
+                        validator: (v) =>
+                            (v?.trim().isEmpty ?? true) ? 'Required' : null,
                       ),
                     ],
                   ),
@@ -3103,11 +3871,17 @@ class _AddTourFormState extends State<_AddTourForm> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Sale Price', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const Text(
+                        'Sale Price',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _salePrice,
-                        decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '0'),
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: '0',
+                        ),
                         keyboardType: TextInputType.number,
                       ),
                     ],
@@ -3117,19 +3891,33 @@ class _AddTourFormState extends State<_AddTourForm> {
             ),
           ]),
           _buildBookingCoreCard('Tour Locations', [
-            const Text('Location', style: TextStyle(fontWeight: FontWeight.w500)),
+            const Text(
+              'Location',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String?>(
-              value: _locationId,
+              initialValue: _locationId,
               decoration: const InputDecoration(border: OutlineInputBorder()),
               items: [
-                const DropdownMenuItem(value: null, child: Text('-- Please Select --')),
-                ..._locationRows.map((l) => DropdownMenuItem(value: l['id']?.toString(), child: Text(l['name']?.toString() ?? ''))),
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('-- Please Select --'),
+                ),
+                ..._locationRows.map(
+                  (l) => DropdownMenuItem(
+                    value: l['id']?.toString(),
+                    child: Text(l['name']?.toString() ?? ''),
+                  ),
+                ),
               ],
               onChanged: (v) => setState(() => _locationId = v),
             ),
             const SizedBox(height: 20),
-            const Text('Real tour address', style: TextStyle(fontWeight: FontWeight.w500)),
+            const Text(
+              'Real tour address',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
             const SizedBox(height: 8),
             TextFormField(
               controller: _realTourAddress,
@@ -3140,9 +3928,12 @@ class _AddTourFormState extends State<_AddTourForm> {
             SizedBox(
               height: 300,
               child: CarLocationMapPicker(
-                key: ValueKey('map_${_mapLat}_${_mapLng}'),
+                key: ValueKey('map_${_mapLat}_$_mapLng'),
                 initial: mapInitial,
-                onPick: (p) => setState(() { _mapLat = p.latitude; _mapLng = p.longitude; }),
+                onPick: (p) => setState(() {
+                  _mapLat = p.latitude;
+                  _mapLng = p.longitude;
+                }),
               ),
             ),
           ]),
@@ -3150,7 +3941,10 @@ class _AddTourFormState extends State<_AddTourForm> {
             ImageUploadWidget(
               initialImageUrl: _imageUrl,
               initialImagePublicId: _imagePublicId,
-              onImageSelected: (url, id) => setState(() { _imageUrl = url; _imagePublicId = id; }),
+              onImageSelected: (url, id) => setState(() {
+                _imageUrl = url;
+                _imagePublicId = id;
+              }),
             ),
           ]),
         ],
@@ -3184,7 +3978,16 @@ class _AddTourFormState extends State<_AddTourForm> {
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Save Changes'),
+              child: _loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text('Save Changes'),
             ),
           ),
         ]),
@@ -3198,12 +4001,23 @@ class _AddTourFormState extends State<_AddTourForm> {
           ),
         ]),
         _buildBookingCoreCard('Availability', [
-          const Text('Default State', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          const Text(
+            'Default State',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            value: _availability,
-            decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-            items: const [DropdownMenuItem(value: 'always', child: Text('Always available'))],
+            initialValue: _availability,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'always',
+                child: Text('Always available'),
+              ),
+            ],
             onChanged: (v) => setState(() => _availability = v!),
           ),
         ]),
@@ -3271,10 +4085,14 @@ class _AddCarFormState extends State<_AddCarForm> {
       _passenger.text = item['passenger']?.toString() ?? '4';
       _baggage.text = item['baggage']?.toString() ?? '2';
       _door.text = item['door']?.toString() ?? '4';
-      _gearShift = _gearOptions.contains(item['gearShift']) ? item['gearShift'] : 'Auto';
+      _gearShift = _gearOptions.contains(item['gearShift'])
+          ? item['gearShift']
+          : 'Auto';
       _mapLat = double.tryParse(item['mapLat']?.toString() ?? '');
       _mapLng = double.tryParse(item['mapLng']?.toString() ?? '');
-      _status = (item['status']?.toString().toLowerCase() == 'draft') ? 'draft' : 'publish';
+      _status = (item['status']?.toString().toLowerCase() == 'draft')
+          ? 'draft'
+          : 'publish';
       _imageUrl = item['imageUrl']?.toString();
       _imagePublicId = item['imagePublicId']?.toString();
     }
@@ -3283,14 +4101,19 @@ class _AddCarFormState extends State<_AddCarForm> {
   void _generateSlug() {
     final t = _title.text.trim();
     if (t.isNotEmpty) {
-      _slug.text = t.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+      _slug.text = t
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+          .replaceAll(RegExp(r'^-+|-+$'), '');
     }
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_mapLat == null || _mapLng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Set location on map')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Set location on map')));
       return;
     }
     setState(() => _loading = true);
@@ -3298,10 +4121,14 @@ class _AddCarFormState extends State<_AddCarForm> {
       // FIX: Price must be a String, but Passenger/Baggage/Door must be Numbers
       final body = {
         'title': _title.text.trim(),
-        'slug': _slug.text.isEmpty ? _title.text.toLowerCase().replaceAll(' ', '-') : _slug.text,
+        'slug': _slug.text.isEmpty
+            ? _title.text.toLowerCase().replaceAll(' ', '-')
+            : _slug.text,
         'carNumber': _carNumber.text.trim(),
         'price': _price.text.trim().isEmpty ? "0" : _price.text.trim(),
-        'salePrice': _salePrice.text.trim().isEmpty ? "0" : _salePrice.text.trim(),
+        'salePrice': _salePrice.text.trim().isEmpty
+            ? "0"
+            : _salePrice.text.trim(),
         'passenger': int.tryParse(_passenger.text.trim()) ?? 0,
         'baggage': int.tryParse(_baggage.text.trim()) ?? 0,
         'door': int.tryParse(_door.text.trim()) ?? 0,
@@ -3320,7 +4147,9 @@ class _AddCarFormState extends State<_AddCarForm> {
       }
       widget.onCreated();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       setState(() => _loading = false);
     }
@@ -3329,90 +4158,229 @@ class _AddCarFormState extends State<_AddCarForm> {
   Widget _buildCard(String title, List<Widget> children) {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: Colors.grey.shade300)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
       margin: const EdgeInsets.only(bottom: 24),
-      child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        const Divider(height: 32),
-        ...children,
-      ])),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const Divider(height: 32),
+            ...children,
+          ],
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final mapInitial = (_mapLat != null && _mapLng != null) ? LatLng(_mapLat!, _mapLng!) : null;
+    final mapInitial = (_mapLat != null && _mapLng != null)
+        ? LatLng(_mapLat!, _mapLng!)
+        : null;
 
     final mainForm = Form(
       key: _formKey,
-      child: Column(children: [
-        _buildCard('Car Content', [
-          const Text('Title', style: TextStyle(fontWeight: FontWeight.w500)),
-          const SizedBox(height: 8),
-          TextFormField(controller: _title, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Car model')),
-          const SizedBox(height: 16),
-          const Text('Car Number', style: TextStyle(fontWeight: FontWeight.w500)),
-          const SizedBox(height: 8),
-          TextFormField(controller: _carNumber, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'License Plate')),
-        ]),
-        _buildCard('Pricing', [
-          Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Daily Price', style: TextStyle(fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              TextFormField(controller: _price, keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder())),
-            ])),
-            const SizedBox(width: 16),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Sale Price', style: TextStyle(fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              TextFormField(controller: _salePrice, keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder())),
-            ])),
+      child: Column(
+        children: [
+          _buildCard('Car Content', [
+            const Text('Title', style: TextStyle(fontWeight: FontWeight.w500)),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _title,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Car model',
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Car Number',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _carNumber,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'License Plate',
+              ),
+            ),
           ]),
-        ]),
-        _buildCard('Vehicle Specs', [
-          Row(children: [
-            Expanded(child: TextFormField(controller: _passenger, decoration: const InputDecoration(labelText: 'Passengers', border: OutlineInputBorder()))),
-            const SizedBox(width: 16),
-            Expanded(child: TextFormField(controller: _door, decoration: const InputDecoration(labelText: 'Doors', border: OutlineInputBorder()))),
+          _buildCard('Pricing', [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Daily Price',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _price,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Sale Price',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _salePrice,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ]),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: TextFormField(controller: _baggage, decoration: const InputDecoration(labelText: 'Baggage', border: OutlineInputBorder()))),
-            const SizedBox(width: 16),
-            Expanded(child: DropdownButtonFormField<String>(
-              value: _gearShift,
-              decoration: const InputDecoration(labelText: 'Gear Shift', border: OutlineInputBorder()),
-              items: _gearOptions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (v) => setState(() => _gearShift = v!),
-            )),
+          _buildCard('Vehicle Specs', [
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _passenger,
+                    decoration: const InputDecoration(
+                      labelText: 'Passengers',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _door,
+                    decoration: const InputDecoration(
+                      labelText: 'Doors',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _baggage,
+                    decoration: const InputDecoration(
+                      labelText: 'Baggage',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _gearShift,
+                    decoration: const InputDecoration(
+                      labelText: 'Gear Shift',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _gearOptions
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _gearShift = v!),
+                  ),
+                ),
+              ],
+            ),
           ]),
-        ]),
-        _buildCard('Location', [
-          SizedBox(height: 300, child: CarLocationMapPicker(
-            key: ValueKey('car_map_${_mapLat}'),
-            initial: mapInitial,
-            onPick: (p) => setState(() { _mapLat = p.latitude; _mapLng = p.longitude; }),
-          )),
-        ]),
-        _buildCard('Feature Image', [
-          ImageUploadWidget(initialImageUrl: _imageUrl, initialImagePublicId: _imagePublicId, onImageSelected: (u, i) => setState(() { _imageUrl = u; _imagePublicId = i; })),
-        ]),
-      ]),
+          _buildCard('Location', [
+            SizedBox(
+              height: 300,
+              child: CarLocationMapPicker(
+                key: ValueKey('car_map_$_mapLat'),
+                initial: mapInitial,
+                onPick: (p) => setState(() {
+                  _mapLat = p.latitude;
+                  _mapLng = p.longitude;
+                }),
+              ),
+            ),
+          ]),
+          _buildCard('Feature Image', [
+            ImageUploadWidget(
+              initialImageUrl: _imageUrl,
+              initialImagePublicId: _imagePublicId,
+              onImageSelected: (u, i) => setState(() {
+                _imageUrl = u;
+                _imagePublicId = i;
+              }),
+            ),
+          ]),
+        ],
+      ),
     );
 
-    final sidebar = Column(children: [
-      _buildCard('Publish', [
-        RadioListTile<String>(title: const Text('Publish'), value: 'publish', groupValue: _status, onChanged: (v) => setState(() => _status = v!), contentPadding: EdgeInsets.zero),
-        RadioListTile<String>(title: const Text('Draft'), value: 'draft', groupValue: _status, onChanged: (v) => setState(() => _status = v!), contentPadding: EdgeInsets.zero),
-        const SizedBox(height: 16),
-        SizedBox(width: double.infinity, child: ElevatedButton(
-          onPressed: _loading ? null : _submit,
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
-          child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Text(widget.itemToEdit == null ? 'Add Car' : 'Update Car'),
-        )),
-      ]),
-    ]);
+    final sidebar = Column(
+      children: [
+        _buildCard('Publish', [
+          RadioListTile<String>(
+            title: const Text('Publish'),
+            value: 'publish',
+            groupValue: _status,
+            onChanged: (v) => setState(() => _status = v!),
+            contentPadding: EdgeInsets.zero,
+          ),
+          RadioListTile<String>(
+            title: const Text('Draft'),
+            value: 'draft',
+            groupValue: _status,
+            onChanged: (v) => setState(() => _status = v!),
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _loading ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: _loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(widget.itemToEdit == null ? 'Add Car' : 'Update Car'),
+            ),
+          ),
+        ]),
+      ],
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
