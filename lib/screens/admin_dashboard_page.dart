@@ -3620,6 +3620,180 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
 
 // --- FORM WIDGETS ---
 
+void _wrapSelection(
+  TextEditingController controller,
+  String left,
+  String right,
+) {
+  final text = controller.text;
+  final selection = controller.selection;
+  if (!selection.isValid) return;
+  final start = selection.start;
+  final end = selection.end;
+  final selectedText = selection.textInside(text);
+  final newText = text.replaceRange(start, end, '$left$selectedText$right');
+  final caret = start + left.length + selectedText.length + right.length;
+  controller.value = controller.value.copyWith(
+    text: newText,
+    selection: TextSelection.collapsed(offset: caret),
+  );
+}
+
+void _insertLinePrefix(TextEditingController controller, String prefix) {
+  final text = controller.text;
+  final selection = controller.selection;
+  if (!selection.isValid) return;
+  final startOfLine = text.lastIndexOf('\n', selection.start - 1) + 1;
+  final newText = text.replaceRange(startOfLine, startOfLine, prefix);
+  final delta = prefix.length;
+  controller.value = controller.value.copyWith(
+    text: newText,
+    selection: TextSelection.collapsed(offset: selection.end + delta),
+  );
+}
+
+class _ContentTextEditor extends StatelessWidget {
+  const _ContentTextEditor({
+    required this.controller,
+    required this.label,
+    this.hintText,
+    this.maxLines = 8,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final String? hintText;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade300),
+                  ),
+                ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _EditorActionButton(
+                      icon: Icons.format_bold,
+                      tooltip: 'Bold',
+                      onPressed: () => _wrapSelection(controller, '**', '**'),
+                    ),
+                    _EditorActionButton(
+                      icon: Icons.format_italic,
+                      tooltip: 'Italic',
+                      onPressed: () => _wrapSelection(controller, '_', '_'),
+                    ),
+                    _EditorActionButton(
+                      icon: Icons.format_quote,
+                      tooltip: 'Quote',
+                      onPressed: () => _insertLinePrefix(controller, '> '),
+                    ),
+                    _EditorActionButton(
+                      icon: Icons.format_list_bulleted,
+                      tooltip: 'Bullet list',
+                      onPressed: () => _insertLinePrefix(controller, '- '),
+                    ),
+                    _EditorActionButton(
+                      icon: Icons.format_list_numbered,
+                      tooltip: 'Numbered list',
+                      onPressed: () => _insertLinePrefix(controller, '1. '),
+                    ),
+                    _EditorActionButton(
+                      icon: Icons.link,
+                      tooltip: 'Link',
+                      onPressed: () =>
+                          _wrapSelection(controller, '[', '](https://)'),
+                    ),
+                  ],
+                ),
+              ),
+              TextFormField(
+                controller: controller,
+                decoration: InputDecoration(
+                  hintText: hintText,
+                  hintStyle: TextStyle(color: Colors.grey.shade500),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
+                ),
+                minLines: 7,
+                maxLines: maxLines,
+                keyboardType: TextInputType.multiline,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditorActionButton extends StatelessWidget {
+  const _EditorActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 36,
+      child: Tooltip(
+        message: tooltip,
+        child: OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: const Size(40, 36),
+            side: BorderSide(color: Colors.grey.shade300),
+          ),
+          onPressed: onPressed,
+          child: Icon(icon, size: 18, color: Colors.grey.shade700),
+        ),
+      ),
+    );
+  }
+}
+
 class _AddTourForm extends StatefulWidget {
   const _AddTourForm({required this.onCreated, this.itemToEdit});
 
@@ -3839,18 +4013,11 @@ class _AddTourFormState extends State<_AddTourForm> {
               },
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Content',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
+            _ContentTextEditor(
               controller: _content,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Tour description',
-              ),
-              maxLines: 5,
+              label: 'Content',
+              hintText: 'Write a rich tour description here...',
+              maxLines: 10,
             ),
           ]),
           _buildBookingCoreCard('Pricing', [
@@ -4216,18 +4383,11 @@ class _AddCarFormState extends State<_AddCarForm> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Content',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
+            _ContentTextEditor(
               controller: _content,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Car description',
-              ),
-              maxLines: 4,
+              label: 'Content',
+              hintText: 'Write a rich car description here...',
+              maxLines: 8,
             ),
             const SizedBox(height: 16),
             const Text(
