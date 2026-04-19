@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'; // 1. Add this import
+import 'package:flutter_quill/flutter_quill.dart'; // 2. Add this import
 import 'package:flutter_travel_agency/screens/home_page.dart';
 import 'package:flutter_travel_agency/widgets/chat_overlay_shell.dart';
 
@@ -23,6 +25,20 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
+      
+      // --- ADD THESE TWO PROPERTIES HERE ---
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en', 'US'),
+        Locale('fil', 'PH'), 
+      ],
+      // --------------------------------------
+
       builder: (context, child) {
         return Overlay(
           initialEntries: [

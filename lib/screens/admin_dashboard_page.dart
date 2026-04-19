@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_travel_agency/api/chatbot_api.dart';
 
 import '../api/tours_api.dart';
@@ -3620,39 +3622,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
 
 // --- FORM WIDGETS ---
 
-void _wrapSelection(
-  TextEditingController controller,
-  String left,
-  String right,
-) {
-  final text = controller.text;
-  final selection = controller.selection;
-  if (!selection.isValid) return;
-  final start = selection.start;
-  final end = selection.end;
-  final selectedText = selection.textInside(text);
-  final newText = text.replaceRange(start, end, '$left$selectedText$right');
-  final caret = start + left.length + selectedText.length + right.length;
-  controller.value = controller.value.copyWith(
-    text: newText,
-    selection: TextSelection.collapsed(offset: caret),
-  );
-}
-
-void _insertLinePrefix(TextEditingController controller, String prefix) {
-  final text = controller.text;
-  final selection = controller.selection;
-  if (!selection.isValid) return;
-  final startOfLine = text.lastIndexOf('\n', selection.start - 1) + 1;
-  final newText = text.replaceRange(startOfLine, startOfLine, prefix);
-  final delta = prefix.length;
-  controller.value = controller.value.copyWith(
-    text: newText,
-    selection: TextSelection.collapsed(offset: selection.end + delta),
-  );
-}
-
-class _ContentTextEditor extends StatelessWidget {
+class _ContentTextEditor extends StatefulWidget {
   const _ContentTextEditor({
     required this.controller,
     required this.label,
@@ -3666,11 +3636,59 @@ class _ContentTextEditor extends StatelessWidget {
   final int maxLines;
 
   @override
+  State<_ContentTextEditor> createState() => _ContentTextEditorState();
+}
+
+class _ContentTextEditorState extends State<_ContentTextEditor> {
+  late QuillController _quillController;
+
+  @override
+  void initState() {
+    super.initState();
+    final document = Document.fromJson(
+      _parseJsonFromText(widget.controller.text),
+    );
+    _quillController = QuillController(
+      document: document,
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+
+    // Sync Quill to TextEditingController
+    _quillController.document.changes.listen((event) {
+      final delta = _quillController.document.toDelta();
+      widget.controller.text = jsonEncode(delta.toJson());
+    });
+  }
+
+  List<dynamic> _parseJsonFromText(String text) {
+    if (text.isEmpty)
+      return [
+        {"insert": "\n"},
+      ];
+    try {
+      final parsed = jsonDecode(text);
+      if (parsed is List) return parsed;
+    } catch (e) {
+      // Ignore parse errors
+    }
+    return [
+      {"insert": text},
+      {"insert": "\n"},
+    ];
+  }
+
+  @override
+  void dispose() {
+    _quillController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+        Text(widget.label, style: const TextStyle(fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
@@ -3689,10 +3707,7 @@ class _ContentTextEditor extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 10,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: const BorderRadius.vertical(
@@ -3702,94 +3717,16 @@ class _ContentTextEditor extends StatelessWidget {
                     bottom: BorderSide(color: Colors.grey.shade300),
                   ),
                 ),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _EditorActionButton(
-                      icon: Icons.format_bold,
-                      tooltip: 'Bold',
-                      onPressed: () => _wrapSelection(controller, '**', '**'),
-                    ),
-                    _EditorActionButton(
-                      icon: Icons.format_italic,
-                      tooltip: 'Italic',
-                      onPressed: () => _wrapSelection(controller, '_', '_'),
-                    ),
-                    _EditorActionButton(
-                      icon: Icons.format_quote,
-                      tooltip: 'Quote',
-                      onPressed: () => _insertLinePrefix(controller, '> '),
-                    ),
-                    _EditorActionButton(
-                      icon: Icons.format_list_bulleted,
-                      tooltip: 'Bullet list',
-                      onPressed: () => _insertLinePrefix(controller, '- '),
-                    ),
-                    _EditorActionButton(
-                      icon: Icons.format_list_numbered,
-                      tooltip: 'Numbered list',
-                      onPressed: () => _insertLinePrefix(controller, '1. '),
-                    ),
-                    _EditorActionButton(
-                      icon: Icons.link,
-                      tooltip: 'Link',
-                      onPressed: () =>
-                          _wrapSelection(controller, '[', '](https://)'),
-                    ),
-                  ],
-                ),
+                child: QuillSimpleToolbar(controller: _quillController),
               ),
-              TextFormField(
-                controller: controller,
-                decoration: InputDecoration(
-                  hintText: hintText,
-                  hintStyle: TextStyle(color: Colors.grey.shade500),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 16,
-                  ),
-                ),
-                minLines: 7,
-                maxLines: maxLines,
-                keyboardType: TextInputType.multiline,
+              SizedBox(
+                height: 300,
+                child: QuillEditor.basic(controller: _quillController),
               ),
             ],
           ),
         ),
       ],
-    );
-  }
-}
-
-class _EditorActionButton extends StatelessWidget {
-  const _EditorActionButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 36,
-      child: Tooltip(
-        message: tooltip,
-        child: OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            minimumSize: const Size(40, 36),
-            side: BorderSide(color: Colors.grey.shade300),
-          ),
-          onPressed: onPressed,
-          child: Icon(icon, size: 18, color: Colors.grey.shade700),
-        ),
-      ),
     );
   }
 }

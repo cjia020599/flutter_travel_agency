@@ -36,16 +36,29 @@ class _ImageUploadWidgetState extends State<ImageUploadWidget> {
 
   Future<void> _pickAndUploadImage() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['png', 'PNG', 'jpg', 'JPG', 'jpeg', 'JPEG', 'gif', 'GIF', 'webp', 'WEBP'],
+        allowedExtensions: [
+          'png',
+          'PNG',
+          'jpg',
+          'JPG',
+          'jpeg',
+          'JPEG',
+          'gif',
+          'GIF',
+          'webp',
+          'WEBP',
+        ],
         allowMultiple: false,
       );
 
       if (result != null && result.files.isNotEmpty) {
         setState(() => _isUploading = true);
 
-        final uploadResult = await ImageUploadService.uploadImage(result.files.first);
+        final uploadResult = await ImageUploadService.uploadImage(
+          result.files.first,
+        );
         if (uploadResult == null) {
           throw Exception('Upload service returned null');
         }
@@ -61,9 +74,9 @@ class _ImageUploadWidgetState extends State<ImageUploadWidget> {
     } catch (e) {
       setState(() => _isUploading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     }
   }
@@ -104,7 +117,9 @@ class _ImageUploadWidgetState extends State<ImageUploadWidget> {
                         fit: BoxFit.cover,
                         loadingBuilder: (context, child, loadingProgress) {
                           if (loadingProgress == null) return child;
-                          return const Center(child: CircularProgressIndicator());
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
                         },
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
@@ -135,7 +150,11 @@ class _ImageUploadWidgetState extends State<ImageUploadWidget> {
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.add_photo_alternate, size: 48, color: Colors.grey),
+                              Icon(
+                                Icons.add_photo_alternate,
+                                size: 48,
+                                color: Colors.grey,
+                              ),
                               const SizedBox(height: 8),
                               const Text('Tap to upload image'),
                             ],
@@ -146,7 +165,9 @@ class _ImageUploadWidgetState extends State<ImageUploadWidget> {
         const SizedBox(height: 8),
         ElevatedButton.icon(
           onPressed: _isUploading ? null : _pickAndUploadImage,
-          icon: _isUploading ? const SizedBox.shrink() : const Icon(Icons.upload),
+          icon: _isUploading
+              ? const SizedBox.shrink()
+              : const Icon(Icons.upload),
           label: Text(_isUploading ? 'Uploading...' : 'Change Image'),
         ),
       ],
