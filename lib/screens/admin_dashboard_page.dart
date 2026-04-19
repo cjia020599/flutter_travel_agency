@@ -85,14 +85,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   bool _showCarsAdvancedFilters = false;
   String _toursBulkAction = 'delete';
   String _carsBulkAction = 'delete';
-  String _toursFeaturedFilter = 'all';
-  String _carsFeaturedFilter = 'all';
-  String _toursLocationFilter = 'all';
-  String _carsLocationFilter = 'all';
-  String _toursCategoryFilter = 'all';
-  String _carsCategoryFilter = 'all';
-  String _toursVendorFilter = 'all';
-  String _carsVendorFilter = 'all';
+  String _toursStatusFilter = 'all';
+  String _carsStatusFilter = 'all';
+  String _toursAuthorFilter = 'all';
+  String _carsAuthorFilter = 'all';
   final Set<String> _selectedTourIds = {};
   final Set<String> _selectedCarIds = {};
 
@@ -159,26 +155,26 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
               author.contains(query))) {
         return false;
       }
-      if (_toursFeaturedFilter != 'all') {
-        final isFeatured = m['featured'] == true || m['isFeatured'] == true;
-        if (_toursFeaturedFilter == 'featured' && !isFeatured) return false;
-        if (_toursFeaturedFilter == 'draft' && isFeatured) return false;
+      if (_toursStatusFilter != 'all') {
+        final status = (m['status'] ?? '').toString().toLowerCase();
+        if (_toursStatusFilter == 'publish' && status == 'draft') return false;
+        if (_toursStatusFilter == 'draft' && status != 'draft') return false;
       }
-      if (_toursLocationFilter != 'all') {
-        if (location != _toursLocationFilter.toLowerCase()) return false;
-      }
-      if (_toursCategoryFilter != 'all') {
-        final category = (m['category'] ?? m['tourCategory'] ?? '')
-            .toString()
-            .toLowerCase();
-        if (category != _toursCategoryFilter.toLowerCase()) return false;
-      }
-      if (_toursVendorFilter != 'all') {
-        final vendor =
-            (m['vendor'] ?? m['author'] ?? m['userName'] ?? m['username'] ?? '')
+      if (_toursAuthorFilter != 'all') {
+        final vendorValue = (m['vendor'] ?? '').toString().toLowerCase();
+        final authorValue =
+            (m['author'] ?? m['userName'] ?? m['username'] ?? '')
                 .toString()
                 .toLowerCase();
-        if (vendor != _toursVendorFilter.toLowerCase()) return false;
+        final isVendor =
+            vendorValue.isNotEmpty || authorValue.contains('vendor');
+        final isAdmin =
+            authorValue == 'admin' ||
+            authorValue == 'administrator' ||
+            authorValue.contains('admin');
+
+        if (_toursAuthorFilter == 'vendor' && !isVendor) return false;
+        if (_toursAuthorFilter == 'administrator' && !isAdmin) return false;
       }
       return true;
     }).toList();
@@ -206,25 +202,25 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
               author.contains(query))) {
         return false;
       }
-      if (_carsFeaturedFilter != 'all') {
-        final isFeatured = m['featured'] == true || m['isFeatured'] == true;
-        if (_carsFeaturedFilter == 'featured' && !isFeatured) return false;
-        if (_carsFeaturedFilter == 'draft' && isFeatured) return false;
+      if (_carsStatusFilter != 'all') {
+        final status = (m['status'] ?? '').toString().toLowerCase();
+        if (_carsStatusFilter == 'publish' && status == 'draft') return false;
+        if (_carsStatusFilter == 'draft' && status != 'draft') return false;
       }
-      if (_carsLocationFilter != 'all') {
-        if (location != _carsLocationFilter.toLowerCase()) return false;
-      }
-      if (_carsCategoryFilter != 'all') {
-        final category = (m['category'] ?? m['carCategory'] ?? '')
+      if (_carsAuthorFilter != 'all') {
+        final vendorValue = (m['vendor'] ?? '').toString().toLowerCase();
+        final authorValue = (m['author'] ?? m['userName'] ?? '')
             .toString()
             .toLowerCase();
-        if (category != _carsCategoryFilter.toLowerCase()) return false;
-      }
-      if (_carsVendorFilter != 'all') {
-        final vendor = (m['vendor'] ?? m['author'] ?? m['userName'] ?? '')
-            .toString()
-            .toLowerCase();
-        if (vendor != _carsVendorFilter.toLowerCase()) return false;
+        final isVendor =
+            vendorValue.isNotEmpty || authorValue.contains('vendor');
+        final isAdmin =
+            authorValue == 'admin' ||
+            authorValue == 'administrator' ||
+            authorValue.contains('admin');
+
+        if (_carsAuthorFilter == 'vendor' && !isVendor) return false;
+        if (_carsAuthorFilter == 'administrator' && !isAdmin) return false;
       }
       return true;
     }).toList();
@@ -1147,27 +1143,6 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     if (_tours.isEmpty) return const Center(child: Text('No tours yet.'));
 
     final filteredTours = _getFilteredTours();
-    final tourLocations = _tours
-        .cast<Map<String, dynamic>>()
-        .map((m) => (m['realTourAddress'] ?? m['location'] ?? m['address'] ?? m['city'] ?? '').toString().trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
-    final tourCategories = _tours
-        .cast<Map<String, dynamic>>()
-        .map((m) => (m['category'] ?? m['tourCategory'] ?? '').toString().trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
-    final tourVendors = _tours
-        .cast<Map<String, dynamic>>()
-        .map((m) => (m['vendor'] ?? m['author'] ?? m['userName'] ?? m['username'] ?? '').toString().trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1192,7 +1167,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(10),
@@ -1200,13 +1178,19 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     ),
                     child: Row(
                       children: [
-                        const Text('Bulk Actions', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Text(
+                          'Bulk Actions',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(width: 12),
                         DropdownButton<String>(
                           value: _toursBulkAction,
                           underline: const SizedBox.shrink(),
                           items: const [
-                            DropdownMenuItem(value: 'delete', child: Text('Delete selected')),
+                            DropdownMenuItem(
+                              value: 'delete',
+                              child: Text('Delete selected'),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value == null) return;
@@ -1215,7 +1199,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                         ),
                         const SizedBox(width: 12),
                         ElevatedButton(
-                          onPressed: _selectedTourIds.isEmpty ? null : _deleteSelectedTours,
+                          onPressed: _selectedTourIds.isEmpty
+                              ? null
+                              : _deleteSelectedTours,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0EA5E9),
                             foregroundColor: Colors.white,
@@ -1229,24 +1215,37 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   SizedBox(
                     width: 320,
                     child: TextField(
-                      onChanged: (value) => setState(() => _toursSearchQuery = value),
+                      onChanged: (value) =>
+                          setState(() => _toursSearchQuery = value),
                       decoration: InputDecoration(
                         hintText: 'Search by name',
-                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.grey,
+                        ),
                         suffixIcon: _toursSearchQuery.isEmpty
                             ? null
                             : IconButton(
                                 icon: const Icon(Icons.clear),
-                                onPressed: () => setState(() => _toursSearchQuery = ''),
+                                onPressed: () =>
+                                    setState(() => _toursSearchQuery = ''),
                               ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   OutlinedButton(
-                    onPressed: () => setState(() => _showToursAdvancedFilters = !_showToursAdvancedFilters),
+                    onPressed: () => setState(
+                      () => _showToursAdvancedFilters =
+                          !_showToursAdvancedFilters,
+                    ),
                     child: Row(
                       children: [
                         const Text('Advanced'),
@@ -1271,73 +1270,60 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                       SizedBox(
                         width: 220,
                         child: DropdownButtonFormField<String>(
-                          value: _toursCategoryFilter,
+                          value: _toursAuthorFilter,
                           decoration: InputDecoration(
-                            labelText: 'Category',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            labelText: 'Author',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                          items: [
-                            const DropdownMenuItem(value: 'all', child: Text('-- All Category --')),
-                            ...tourCategories.map((category) => DropdownMenuItem(value: category.toLowerCase(), child: Text(category))),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'all',
+                              child: Text('-- All --'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'vendor',
+                              child: Text('Vendor'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'administrator',
+                              child: Text('Administrator'),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value == null) return;
-                            setState(() => _toursCategoryFilter = value);
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<String>(
-                          value: _toursVendorFilter,
-                          decoration: InputDecoration(
-                            labelText: 'Vendor',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          items: [
-                            const DropdownMenuItem(value: 'all', child: Text('-- Vendor --')),
-                            ...tourVendors.map((vendor) => DropdownMenuItem(value: vendor.toLowerCase(), child: Text(vendor))),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _toursVendorFilter = value);
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<String>(
-                          value: _toursLocationFilter,
-                          decoration: InputDecoration(
-                            labelText: 'Location',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          items: [
-                            const DropdownMenuItem(value: 'all', child: Text('-- All Location --')),
-                            ...tourLocations.map((location) => DropdownMenuItem(value: location.toLowerCase(), child: Text(location))),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _toursLocationFilter = value);
+                            setState(() => _toursAuthorFilter = value);
                           },
                         ),
                       ),
                       SizedBox(
                         width: 180,
                         child: DropdownButtonFormField<String>(
-                          value: _toursFeaturedFilter,
+                          value: _toursStatusFilter,
                           decoration: InputDecoration(
-                            labelText: 'Featured',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            labelText: 'Status',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 'all', child: Text('-- All --')),
-                            DropdownMenuItem(value: 'featured', child: Text('Featured')),
-                            DropdownMenuItem(value: 'draft', child: Text('Draft')),
+                            DropdownMenuItem(
+                              value: 'all',
+                              child: Text('-- All --'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'publish',
+                              child: Text('Publish'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'draft',
+                              child: Text('Draft'),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value == null) return;
-                            setState(() => _toursFeaturedFilter = value);
+                            setState(() => _toursStatusFilter = value);
                           },
                         ),
                       ),
@@ -1405,9 +1391,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         Theme(
           data: Theme.of(context).copyWith(
             dataTableTheme: DataTableThemeData(
-              headingRowColor: WidgetStateProperty.all(
-                const Color(0xFFFAFAFC),
-              ),
+              headingRowColor: WidgetStateProperty.all(const Color(0xFFFAFAFC)),
               headingRowHeight: 56,
               dataRowMinHeight: 56,
               dataRowMaxHeight: 72,
@@ -1473,10 +1457,12 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 final title = m['title']?.toString() ?? 'Tour';
                 final isFeatured =
                     m['featured'] == true || m['isFeatured'] == true;
-                final location = m['realTourAddress']?.toString().trim() ??
+                final location =
+                    m['realTourAddress']?.toString().trim() ??
                     m['location']?.toString().trim() ??
                     m['address']?.toString().trim() ??
-                    m['city']?.toString().trim() ?? 'N/A';
+                    m['city']?.toString().trim() ??
+                    'N/A';
                 final author =
                     m['author']?.toString() ??
                     m['userName']?.toString() ??
@@ -1484,11 +1470,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     'Admin';
                 final status = m['status']?.toString().toLowerCase() ?? 'draft';
                 final createdAt =
-                    m['createdAt'] ??
-                    m['dateCreated'] ?? DateTime.now();
+                    m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
                 final reviewCount =
-                    m['reviewCount'] ??
-                    m['reviews'] ?? m['ratingCount'] ?? 0;
+                    m['reviewCount'] ?? m['reviews'] ?? m['ratingCount'] ?? 0;
 
                 String dateStr = '';
                 try {
@@ -1504,7 +1488,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   selected: id.isNotEmpty && _selectedTourIds.contains(id),
                   onSelectChanged: id.isEmpty
                       ? null
-                      : (selected) => _toggleTourSelection(id, selected == true),
+                      : (selected) =>
+                            _toggleTourSelection(id, selected == true),
                   cells: [
                     DataCell(
                       Padding(
@@ -1555,7 +1540,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                         ),
                       ),
                     ),
-                    DataCell(Text(author, style: const TextStyle(fontSize: 13))),
+                    DataCell(
+                      Text(author, style: const TextStyle(fontSize: 13)),
+                    ),
                     DataCell(_carStatusChip(status)),
                     DataCell(
                       Container(
@@ -1605,8 +1592,14 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                           ),
                           const SizedBox(width: 8),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
-                            onPressed: id.isEmpty ? null : () => _confirmDeleteTour(id),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: Colors.redAccent,
+                            ),
+                            onPressed: id.isEmpty
+                                ? null
+                                : () => _confirmDeleteTour(id),
                             tooltip: 'Delete tour',
                           ),
                         ],
@@ -1664,27 +1657,6 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     if (_cars.isEmpty) return const Center(child: Text('No cars yet.'));
 
     final filteredCars = _getFilteredCars();
-    final carLocations = _cars
-        .cast<Map<String, dynamic>>()
-        .map((m) => (m['realTourAddress'] ?? m['location'] ?? m['address'] ?? m['city'] ?? '').toString().trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
-    final carCategories = _cars
-        .cast<Map<String, dynamic>>()
-        .map((m) => (m['category'] ?? m['carCategory'] ?? '').toString().trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
-    final carVendors = _cars
-        .cast<Map<String, dynamic>>()
-        .map((m) => (m['vendor'] ?? m['author'] ?? m['userName'] ?? '').toString().trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1709,7 +1681,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(10),
@@ -1717,13 +1692,19 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     ),
                     child: Row(
                       children: [
-                        const Text('Bulk Actions', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const Text(
+                          'Bulk Actions',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(width: 12),
                         DropdownButton<String>(
                           value: _carsBulkAction,
                           underline: const SizedBox.shrink(),
                           items: const [
-                            DropdownMenuItem(value: 'delete', child: Text('Delete selected')),
+                            DropdownMenuItem(
+                              value: 'delete',
+                              child: Text('Delete selected'),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value == null) return;
@@ -1732,7 +1713,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                         ),
                         const SizedBox(width: 12),
                         ElevatedButton(
-                          onPressed: _selectedCarIds.isEmpty ? null : _deleteSelectedCars,
+                          onPressed: _selectedCarIds.isEmpty
+                              ? null
+                              : _deleteSelectedCars,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0EA5E9),
                             foregroundColor: Colors.white,
@@ -1746,24 +1729,37 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   SizedBox(
                     width: 320,
                     child: TextField(
-                      onChanged: (value) => setState(() => _carsSearchQuery = value),
+                      onChanged: (value) =>
+                          setState(() => _carsSearchQuery = value),
                       decoration: InputDecoration(
                         hintText: 'Search by name',
-                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.grey,
+                        ),
                         suffixIcon: _carsSearchQuery.isEmpty
                             ? null
                             : IconButton(
                                 icon: const Icon(Icons.clear),
-                                onPressed: () => setState(() => _carsSearchQuery = ''),
+                                onPressed: () =>
+                                    setState(() => _carsSearchQuery = ''),
                               ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   OutlinedButton(
-                    onPressed: () => setState(() => _showCarsAdvancedFilters = !_showCarsAdvancedFilters),
+                    onPressed: () => setState(
+                      () =>
+                          _showCarsAdvancedFilters = !_showCarsAdvancedFilters,
+                    ),
                     child: Row(
                       children: [
                         const Text('Advanced'),
@@ -1788,73 +1784,60 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                       SizedBox(
                         width: 220,
                         child: DropdownButtonFormField<String>(
-                          value: _carsCategoryFilter,
+                          value: _carsAuthorFilter,
                           decoration: InputDecoration(
-                            labelText: 'Category',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            labelText: 'Author',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                          items: [
-                            const DropdownMenuItem(value: 'all', child: Text('-- All Category --')),
-                            ...carCategories.map((category) => DropdownMenuItem(value: category.toLowerCase(), child: Text(category))),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'all',
+                              child: Text('-- All --'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'vendor',
+                              child: Text('Vendor'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'administrator',
+                              child: Text('Administrator'),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value == null) return;
-                            setState(() => _carsCategoryFilter = value);
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<String>(
-                          value: _carsVendorFilter,
-                          decoration: InputDecoration(
-                            labelText: 'Vendor',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          items: [
-                            const DropdownMenuItem(value: 'all', child: Text('-- Vendor --')),
-                            ...carVendors.map((vendor) => DropdownMenuItem(value: vendor.toLowerCase(), child: Text(vendor))),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _carsVendorFilter = value);
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<String>(
-                          value: _carsLocationFilter,
-                          decoration: InputDecoration(
-                            labelText: 'Location',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          items: [
-                            const DropdownMenuItem(value: 'all', child: Text('-- All Location --')),
-                            ...carLocations.map((location) => DropdownMenuItem(value: location.toLowerCase(), child: Text(location))),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _carsLocationFilter = value);
+                            setState(() => _carsAuthorFilter = value);
                           },
                         ),
                       ),
                       SizedBox(
                         width: 180,
                         child: DropdownButtonFormField<String>(
-                          value: _carsFeaturedFilter,
+                          value: _carsStatusFilter,
                           decoration: InputDecoration(
-                            labelText: 'Featured',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            labelText: 'Status',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 'all', child: Text('-- All --')),
-                            DropdownMenuItem(value: 'featured', child: Text('Featured')),
-                            DropdownMenuItem(value: 'draft', child: Text('Draft')),
+                            DropdownMenuItem(
+                              value: 'all',
+                              child: Text('-- All --'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'publish',
+                              child: Text('Publish'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'draft',
+                              child: Text('Draft'),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value == null) return;
-                            setState(() => _carsFeaturedFilter = value);
+                            setState(() => _carsStatusFilter = value);
                           },
                         ),
                       ),
@@ -1894,7 +1877,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFDC2626),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -1986,18 +1972,19 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 final title = m['title']?.toString() ?? 'Car';
                 final isFeatured =
                     m['featured'] == true || m['isFeatured'] == true;
-                final location = m['realTourAddress']?.toString().trim() ??
+                final location =
+                    m['realTourAddress']?.toString().trim() ??
                     m['location']?.toString().trim() ??
                     m['address']?.toString().trim() ??
-                    m['city']?.toString().trim() ?? 'N/A';
+                    m['city']?.toString().trim() ??
+                    'N/A';
                 final author =
                     m['author']?.toString() ??
                     m['userName']?.toString() ??
                     'Admin';
                 final status = m['status']?.toString().toLowerCase() ?? 'draft';
                 final createdAt =
-                    m['createdAt'] ??
-                    m['dateCreated'] ?? DateTime.now();
+                    m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
 
                 String dateStr = '';
                 try {
@@ -2122,8 +2109,14 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                           ),
                           const SizedBox(width: 8),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
-                            onPressed: id.isEmpty ? null : () => _confirmDeleteCar(id),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: Colors.redAccent,
+                            ),
+                            onPressed: id.isEmpty
+                                ? null
+                                : () => _confirmDeleteCar(id),
                             tooltip: 'Delete car',
                           ),
                         ],
@@ -2138,7 +2131,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       ],
     );
   }
-Future<void> _showEditTourDialog(Map<String, dynamic> tour) async {
+
+  Future<void> _showEditTourDialog(Map<String, dynamic> tour) async {
     final id = tour['id'];
     if (id == null) return;
     showDialog(
@@ -3643,6 +3637,7 @@ class _AddTourFormState extends State<_AddTourForm> {
   ];
 
   final _title = TextEditingController();
+  final _content = TextEditingController();
   final _slug = TextEditingController();
   final _price = TextEditingController();
   final _salePrice = TextEditingController();
@@ -3665,6 +3660,7 @@ class _AddTourFormState extends State<_AddTourForm> {
     if (widget.itemToEdit != null) {
       final item = widget.itemToEdit!;
       _title.text = item['title']?.toString() ?? '';
+      _content.text = item['content']?.toString() ?? '';
       _slug.text = item['slug']?.toString() ?? '';
       _price.text = item['price']?.toString() ?? '';
       _salePrice.text = item['salePrice']?.toString() ?? '';
@@ -3714,6 +3710,7 @@ class _AddTourFormState extends State<_AddTourForm> {
   @override
   void dispose() {
     _title.dispose();
+    _content.dispose();
     _slug.dispose();
     _price.dispose();
     _salePrice.dispose();
@@ -3757,6 +3754,7 @@ class _AddTourFormState extends State<_AddTourForm> {
         'mapLat': _mapLat.toString(),
         'mapLng': _mapLng.toString(),
         'imageUrl': _imageUrl ?? '',
+        'content': _content.text.trim(),
         'imagePublicId': _imagePublicId ?? '',
         'status': _status,
         'published': _status == 'publish',
@@ -3839,6 +3837,20 @@ class _AddTourFormState extends State<_AddTourForm> {
               onChanged: (_) {
                 if (widget.itemToEdit == null) _generateSlug();
               },
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Content',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _content,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Tour description',
+              ),
+              maxLines: 5,
             ),
           ]),
           _buildBookingCoreCard('Pricing', [
@@ -4057,6 +4069,7 @@ class _AddCarFormState extends State<_AddCarForm> {
   static const _gearOptions = ['Auto', 'Manual', 'CVT'];
 
   final _title = TextEditingController();
+  final _content = TextEditingController();
   final _slug = TextEditingController();
   final _carNumber = TextEditingController();
   final _price = TextEditingController();
@@ -4078,6 +4091,7 @@ class _AddCarFormState extends State<_AddCarForm> {
     if (widget.itemToEdit != null) {
       final item = widget.itemToEdit!;
       _title.text = item['title']?.toString() ?? '';
+      _content.text = item['content']?.toString() ?? '';
       _slug.text = item['slug']?.toString() ?? '';
       _carNumber.text = item['carNumber']?.toString() ?? '';
       _price.text = item['price']?.toString() ?? '0';
@@ -4137,6 +4151,7 @@ class _AddCarFormState extends State<_AddCarForm> {
         'mapLng': _mapLng!.toString(),
         'imageUrl': _imageUrl ?? '',
         'imagePublicId': _imagePublicId ?? '',
+        'content': _content.text.trim(),
         'status': _status,
       };
 
@@ -4199,6 +4214,20 @@ class _AddCarFormState extends State<_AddCarForm> {
                 border: OutlineInputBorder(),
                 hintText: 'Car model',
               ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Content',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _content,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Car description',
+              ),
+              maxLines: 4,
             ),
             const SizedBox(height: 16),
             const Text(
