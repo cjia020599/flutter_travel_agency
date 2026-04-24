@@ -20,6 +20,24 @@ class TourMapper {
       return source.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
     }
 
+    List<String> parseAttributeIds(Map<String, dynamic> source) {
+      final direct = source['attributeIds'];
+      if (direct is List) {
+        return direct.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      }
+      final attrs = source['attributes'];
+      if (attrs is List) {
+        return attrs
+            .map((e) {
+              if (e is Map) return (e['id'] ?? e['attributeId'])?.toString() ?? '';
+              return '';
+            })
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+      return [];
+    }
+
     final loc = item['location'];
     return TourDraft(
       id: item['id'],
@@ -52,6 +70,7 @@ class TourMapper {
       duration: (item['duration'] ?? '').toString(),
       minPeople: (item['minPeople'] ?? '').toString(),
       maxPeople: (item['maxPeople'] ?? '').toString(),
+      attributeIds: parseAttributeIds(item),
       faqs: parsePairs(item['faqs']),
       includeItems: parsePairs(item['include']),
       excludeItems: parsePairs(item['exclude']),
@@ -105,6 +124,11 @@ class TourMapper {
     }
     if (draft.categoryId != null && draft.categoryId!.isNotEmpty) {
       body['categoryId'] = int.tryParse(draft.categoryId!) ?? draft.categoryId;
+    }
+    if (draft.attributeIds.isNotEmpty) {
+      body['attributeIds'] = draft.attributeIds
+          .map((e) => int.tryParse(e) ?? e)
+          .toList();
     }
     body.removeWhere((key, value) => value == null || value == '');
     return body;

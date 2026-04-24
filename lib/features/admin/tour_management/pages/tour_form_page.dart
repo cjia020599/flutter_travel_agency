@@ -54,6 +54,8 @@ class _TourFormPageState extends State<TourFormPage> {
   String? _categoryId;
   List<Map<String, dynamic>> _locationRows = [];
   List<Map<String, dynamic>> _categoryRows = [];
+  List<Map<String, dynamic>> _attributeRows = [];
+  final Set<String> _selectedAttributeIds = {};
   List<Map<String, String>> _faqs = [];
   List<Map<String, String>> _includeItems = [];
   List<Map<String, String>> _excludeItems = [];
@@ -95,6 +97,9 @@ class _TourFormPageState extends State<TourFormPage> {
       _mapLng = draft.mapLng;
       _locationId = draft.locationId;
       _categoryId = draft.categoryId;
+      _selectedAttributeIds
+        ..clear()
+        ..addAll(draft.attributeIds);
       _faqs = List.of(draft.faqs);
       _includeItems = List.of(draft.includeItems);
       _excludeItems = List.of(draft.excludeItems);
@@ -110,12 +115,16 @@ class _TourFormPageState extends State<TourFormPage> {
     try {
       final locations = await LookupsApi.locations();
       final categories = await LookupsApi.categories();
+      final attributes = await LookupsApi.attributes();
       if (!mounted) return;
       setState(() {
         _locationRows = locations
             .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e))
             .toList();
         _categoryRows = categories
+            .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e))
+            .toList();
+        _attributeRows = attributes
             .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e))
             .toList();
       });
@@ -176,6 +185,7 @@ class _TourFormPageState extends State<TourFormPage> {
       duration: _duration.text,
       minPeople: _minPeople.text,
       maxPeople: _maxPeople.text,
+      attributeIds: _selectedAttributeIds.toList(),
       faqs: _faqs,
       includeItems: _includeItems,
       excludeItems: _excludeItems,
@@ -305,6 +315,10 @@ class _TourFormPageState extends State<TourFormPage> {
   @override
   Widget build(BuildContext context) {
     final mapInitial = (_mapLat != null && _mapLng != null) ? LatLng(_mapLat!, _mapLng!) : null;
+    final selectedAttributes = _attributeRows.where((row) {
+      final id = (row['id'] ?? '').toString();
+      return _selectedAttributeIds.contains(id);
+    }).toList();
 
     final mainForm = Form(
       key: _formKey,
@@ -341,6 +355,90 @@ class _TourFormPageState extends State<TourFormPage> {
                 ),
               ],
               onChanged: (v) => setState(() => _categoryId = v),
+            ),
+            const SizedBox(height: 16),
+            InkWell(
+              onTap: () async {
+                final temp = Set<String>.from(_selectedAttributeIds);
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => StatefulBuilder(
+                    builder: (context, setDialogState) => AlertDialog(
+                      title: const Text('Select Attributes'),
+                      content: SizedBox(
+                        width: 520,
+                        child: _attributeRows.isEmpty
+                            ? const Text('No attributes available.')
+                            : ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: _attributeRows.length,
+                                itemBuilder: (_, i) {
+                                  final row = _attributeRows[i];
+                                  final id = (row['id'] ?? '').toString();
+                                  return CheckboxListTile(
+                                    value: temp.contains(id),
+                                    onChanged: (v) => setDialogState(() {
+                                      if (v == true) {
+                                        temp.add(id);
+                                      } else {
+                                        temp.remove(id);
+                                      }
+                                    }),
+                                    title: Text((row['name'] ?? '').toString()),
+                                    subtitle: Text(
+                                      'Order: ${(row['positionOrder'] ?? 0).toString()}',
+                                    ),
+                                    controlAffinity: ListTileControlAffinity.leading,
+                                    contentPadding: EdgeInsets.zero,
+                                  );
+                                },
+                              ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Apply'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+                if (ok == true && mounted) {
+                  setState(() {
+                    _selectedAttributeIds
+                      ..clear()
+                      ..addAll(temp);
+                  });
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Attributes',
+                  border: OutlineInputBorder(),
+                ),
+                child: selectedAttributes.isEmpty
+                    ? const Text('Select attributes')
+                    : Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: selectedAttributes
+                            .map(
+                              (row) => Chip(
+                                label: Text((row['name'] ?? '').toString()),
+                                onDeleted: () {
+                                  setState(() {
+                                    _selectedAttributeIds.remove((row['id'] ?? '').toString());
+                                  });
+                                },
+                              ),
+                            )
+                            .toList(),
+                      ),
+              ),
             ),
             const SizedBox(height: 16),
             Row(

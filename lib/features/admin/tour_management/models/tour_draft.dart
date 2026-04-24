@@ -26,6 +26,7 @@ class TourDraft {
     this.duration = '',
     this.minPeople = '',
     this.maxPeople = '',
+    List<String>? attributeIds,
     List<Map<String, String>>? faqs,
     List<Map<String, String>>? includeItems,
     List<Map<String, String>>? excludeItems,
@@ -38,6 +39,7 @@ class TourDraft {
        includeItems = includeItems ?? [],
        excludeItems = excludeItems ?? [],
        itineraryItems = itineraryItems ?? [],
+       attributeIds = attributeIds ?? [],
        surroundingsEducation = surroundingsEducation ?? [],
        surroundingsHealth = surroundingsHealth ?? [],
        surroundingsTransportation = surroundingsTransportation ?? [],
@@ -69,6 +71,7 @@ class TourDraft {
   final String duration;
   final String minPeople;
   final String maxPeople;
+  final List<String> attributeIds;
   final List<Map<String, String>> faqs;
   final List<Map<String, String>> includeItems;
   final List<Map<String, String>> excludeItems;

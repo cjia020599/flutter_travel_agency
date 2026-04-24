@@ -20,7 +20,7 @@ class LookupsApi {
   }
 
   static Future<List<dynamic>> categories() async {
-    final res = await _client.get('/api/categories');
+    final res = await _client.get('/api/categories', auth: true);
     if (res is List) return res as List<dynamic>;
     final data = res['data'];
     if (data is List) return data;

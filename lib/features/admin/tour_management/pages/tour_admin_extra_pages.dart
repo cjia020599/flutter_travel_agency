@@ -437,10 +437,12 @@ class _TourAttributesPageState extends State<TourAttributesPage> {
   bool _loading = true;
   List<dynamic> _attributes = [];
   final _nameCtrl = TextEditingController();
-  final _typeCtrl = TextEditingController();
+  final _positionCtrl = TextEditingController();
   final _termCtrl = TextEditingController();
   final _searchCtrl = TextEditingController();
   final Set<int> _selectedIds = {};
+  bool _hideInDetail = false;
+  bool _hideInFilter = false;
   int _rowsPerPage = 10;
   int _page = 0;
 
@@ -488,7 +490,7 @@ class _TourAttributesPageState extends State<TourAttributesPage> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _typeCtrl.dispose();
+    _positionCtrl.dispose();
     _termCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -497,36 +499,72 @@ class _TourAttributesPageState extends State<TourAttributesPage> {
   Future<void> _saveAttribute({Map<String, dynamic>? current}) async {
     final isEdit = current != null;
     _nameCtrl.text = isEdit ? (current['name'] ?? '').toString() : '';
-    _typeCtrl.text = isEdit ? (current['type'] ?? '').toString() : '';
+    _positionCtrl.text = isEdit ? (current['positionOrder'] ?? 0).toString() : '0';
+    _hideInDetail = isEdit ? current['hideInDetail'] == true : false;
+    _hideInFilter = isEdit ? current['hideInFilter'] == true : false;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isEdit ? 'Edit Attribute' : 'Add Attribute'),
-        content: SizedBox(
-          width: 460,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
-              const SizedBox(height: 12),
-              TextField(controller: _typeCtrl, decoration: const InputDecoration(labelText: 'Type')),
-            ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(isEdit ? 'Edit Attribute' : 'Add Attribute'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Attribute name')),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _positionCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Position order'),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Higher number means higher priority in filters.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    value: _hideInDetail,
+                    onChanged: (v) => setDialogState(() => _hideInDetail = v ?? false),
+                    title: const Text('Hide in detail service'),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  CheckboxListTile(
+                    value: _hideInFilter,
+                    onChanged: (v) => setDialogState(() => _hideInFilter = v ?? false),
+                    title: const Text('Hide in filter search'),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                ],
+              ),
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
-        ],
       ),
     );
     if (confirmed != true) return;
     final name = _nameCtrl.text.trim();
-    final type = _typeCtrl.text.trim();
-    if (name.isEmpty || type.isEmpty) {
-      _notifyError('Attribute name and type are required.');
+    if (name.isEmpty) {
+      _notifyError('Attribute name is required.');
       return;
     }
-    final payload = {'name': name, 'type': type};
+    final payload = {
+      'name': name,
+      'type': (current?['type'] ?? 'Tour Attribute').toString(),
+      'positionOrder': int.tryParse(_positionCtrl.text.trim()) ?? 0,
+      'hideInDetail': _hideInDetail,
+      'hideInFilter': _hideInFilter,
+    };
     try {
       if (isEdit) {
         await LookupsApi.updateAttribute((current['id'] as num).toInt(), payload);
@@ -663,7 +701,9 @@ class _TourAttributesPageState extends State<TourAttributesPage> {
     final query = _searchCtrl.text.trim().toLowerCase();
     final filtered = _attributes.where((e) {
       final m = e as Map<String, dynamic>;
-      final hay = '${m['id'] ?? ''} ${m['name'] ?? ''} ${m['type'] ?? ''}'.toLowerCase();
+      final hay =
+          '${m['id'] ?? ''} ${m['name'] ?? ''} ${m['positionOrder'] ?? ''} ${m['type'] ?? ''}'
+              .toLowerCase();
       return query.isEmpty || hay.contains(query);
     }).toList();
     final totalPages = math.max(1, (filtered.length / _rowsPerPage).ceil());
@@ -712,7 +752,9 @@ class _TourAttributesPageState extends State<TourAttributesPage> {
                       DataColumn(label: Text('')),
                       DataColumn(label: Text('ID')),
                       DataColumn(label: Text('Name')),
-                      DataColumn(label: Text('Type')),
+                      DataColumn(label: Text('Position Order')),
+                      DataColumn(label: Text('Detail')),
+                      DataColumn(label: Text('Filter')),
                       DataColumn(label: Text('Actions')),
                     ],
                     rows: pageItems.map<DataRow>((e) {
@@ -734,10 +776,12 @@ class _TourAttributesPageState extends State<TourAttributesPage> {
                           ),
                           DataCell(_cellText((m['id'] ?? '').toString(), width: 70)),
                           DataCell(_cellText((m['name'] ?? '').toString(), width: 180)),
-                          DataCell(_cellText((m['type'] ?? '').toString(), width: 160)),
+                          DataCell(_cellText((m['positionOrder'] ?? 0).toString(), width: 120)),
+                          DataCell(_cellText((m['hideInDetail'] == true) ? 'Yes' : 'No', width: 90)),
+                          DataCell(_cellText((m['hideInFilter'] == true) ? 'Yes' : 'No', width: 90)),
                           DataCell(
                             SizedBox(
-                              width: 250,
+                              width: 270,
                               child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -1114,6 +1158,8 @@ class TourBookingCalendarPage extends StatefulWidget {
 class _TourBookingCalendarPageState extends State<TourBookingCalendarPage> {
   bool _loading = true;
   List<TourBooking> _bookings = [];
+  List<Map<String, dynamic>> _categoryRows = [];
+  final Map<int, String> _tourCategoryByTourId = {};
   final _searchCtrl = TextEditingController();
   String _statusFilter = 'all';
   int _rowsPerPage = 10;
@@ -1149,6 +1195,24 @@ class _TourBookingCalendarPageState extends State<TourBookingCalendarPage> {
   Future<void> _load() async {
     try {
       _bookings = await TourBookingsApi.getMyBookings();
+      final categories = await LookupsApi.categories();
+      final tours = await ToursApi.list();
+      _categoryRows = categories
+          .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e))
+          .toList();
+      final tourRows = tours
+          .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e))
+          .toList();
+      _tourCategoryByTourId.clear();
+      for (final tour in tourRows) {
+        final rawTourId = tour['id'];
+        final rawCategoryId = tour['categoryId'];
+        final tourId = rawTourId is num ? rawTourId.toInt() : int.tryParse(rawTourId?.toString() ?? '');
+        final categoryId = rawCategoryId?.toString();
+        if (tourId != null && categoryId != null && categoryId.isNotEmpty) {
+          _tourCategoryByTourId[tourId] = categoryId;
+        }
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1232,7 +1296,9 @@ class _TourBookingCalendarPageState extends State<TourBookingCalendarPage> {
           b.tourTitle.toLowerCase().contains(query) ||
           b.status.toLowerCase().contains(query);
       final s = _statusFilter == 'all' || b.status.toLowerCase() == _statusFilter;
-      return q && s;
+      final categoryId = _tourCategoryByTourId[b.tourId];
+      final c = _categoryFilter == 'all' || categoryId == _categoryFilter;
+      return q && s && c;
     }).toList();
     final totalPages = math.max(1, (filtered.length / _rowsPerPage).ceil());
     if (_page >= totalPages) _page = totalPages - 1;
@@ -1261,10 +1327,19 @@ class _TourBookingCalendarPageState extends State<TourBookingCalendarPage> {
               child: DropdownButtonFormField<String>(
                 initialValue: _categoryFilter,
                 decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Category', isDense: true),
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('--All Category--')),
+                items: [
+                  const DropdownMenuItem(value: 'all', child: Text('--All Category--')),
+                  ..._categoryRows.map(
+                    (row) => DropdownMenuItem(
+                      value: (row['id'] ?? '').toString(),
+                      child: Text((row['name'] ?? row['title'] ?? '').toString()),
+                    ),
+                  ),
                 ],
-                onChanged: (v) => setState(() => _categoryFilter = v ?? 'all'),
+                onChanged: (v) => setState(() {
+                  _categoryFilter = v ?? 'all';
+                  _page = 0;
+                }),
               ),
             ),
             const SizedBox(width: 10),
