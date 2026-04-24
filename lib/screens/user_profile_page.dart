@@ -5,6 +5,7 @@ import '../api/api_client.dart';
 import 'login_page.dart';
 import 'home_page.dart';
 import 'admin_dashboard_page.dart';
+import 'package:flutter_travel_agency/features/admin/dashboard/admin_section.dart';
 import '../api/car_rentals_api.dart';
 import '../api/tour_bookings_api.dart';
 import '../models/car_rental.dart';
@@ -420,6 +421,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
         return 'All Tours';
       case AdminSection.toursAdd:
         return 'Add Tour';
+      case AdminSection.tourCategories:
+        return 'Tour Categories';
+      case AdminSection.tourAttributes:
+        return 'Tour Attributes';
+      case AdminSection.tourAvailability:
+        return 'Tours Availability Calendar';
+      case AdminSection.tourBookingCalendar:
+        return 'Tour Booking Calendar';
+      case AdminSection.tourRecovery:
+        return 'Tour Recovery';
       case AdminSection.carsAll:
         return 'All Cars';
       case AdminSection.carsAdd:
@@ -639,6 +650,41 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 'Add Tour',
                 () => _openAdminSection(AdminSection.toursAdd),
                 isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.toursAdd,
+                isSubItem: true,
+              ),
+              _sideItem(
+                Icons.category_outlined,
+                'Categories',
+                () => _openAdminSection(AdminSection.tourCategories),
+                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourCategories,
+                isSubItem: true,
+              ),
+              _sideItem(
+                Icons.tune_outlined,
+                'Attributes',
+                () => _openAdminSection(AdminSection.tourAttributes),
+                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourAttributes,
+                isSubItem: true,
+              ),
+              _sideItem(
+                Icons.event_available_outlined,
+                'Availability',
+                () => _openAdminSection(AdminSection.tourAvailability),
+                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourAvailability,
+                isSubItem: true,
+              ),
+              _sideItem(
+                Icons.calendar_month_outlined,
+                'Booking Calendar',
+                () => _openAdminSection(AdminSection.tourBookingCalendar),
+                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourBookingCalendar,
+                isSubItem: true,
+              ),
+              _sideItem(
+                Icons.restore_from_trash_outlined,
+                'Recovery',
+                () => _openAdminSection(AdminSection.tourRecovery),
+                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourRecovery,
                 isSubItem: true,
               ),
             ],

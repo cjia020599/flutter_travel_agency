@@ -5,39 +5,31 @@ import 'package:flutter_travel_agency/api/chatbot_api.dart';
 
 import '../api/tours_api.dart';
 import '../api/cars_api.dart';
-import '../api/lookups_api.dart';
 import '../api/auth_api.dart';
 import '../api/admin_api.dart';
 import '../api/user_api.dart';
 import '../api/api_client.dart';
 import '../api/ratings_api.dart';
-import '../widgets/image_upload_widget.dart';
-import '../widgets/car_location_map_picker.dart';
-import 'package:latlong2/latlong.dart';
 import '../api/reports_api.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_travel_agency/features/admin/dashboard/admin_dashboard_shell.dart';
+import 'package:flutter_travel_agency/features/admin/dashboard/admin_section.dart';
+import 'package:flutter_travel_agency/features/admin/car_management/pages/car_form_page.dart';
+import 'package:flutter_travel_agency/features/admin/car_management/pages/car_list_page.dart';
+import 'package:flutter_travel_agency/features/admin/tour_management/pages/tour_admin_extra_pages.dart';
+import 'package:flutter_travel_agency/features/admin/tour_management/pages/tour_form_page.dart';
+import 'package:flutter_travel_agency/features/admin/tour_management/pages/tour_list_page.dart';
+
+// ignore_for_file: unused_element
 
 // Minimal admin dashboard with dark sidebar (Booking Core–style)
 const _sidebarBg = Color(0xFF1E3A5F);
 const _sidebarActive = Color(0xFF2C5282);
 const _sidebarText = Colors.white;
 const _sidebarTextMuted = Color(0xFFB0BEC5);
-
-enum AdminSection {
-  dashboard,
-  users,
-  toursAll,
-  toursAdd,
-  carsAll,
-  carsAdd,
-  ratings,
-  chatbot,
-  reports,
-  settings,
-}
 
 enum _ChatbotFilter { all, unanswered }
 
@@ -442,15 +434,22 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final body = widget.showSidebar
-        ? Row(
-            children: [
-              _buildSidebar(),
-              Expanded(child: _buildContent()),
-            ],
-          )
-        : _buildContent();
-    return Scaffold(body: body);
+    return Scaffold(
+      body: AdminDashboardShell(
+        showSidebar: widget.showSidebar,
+        showHeader: widget.showHeader,
+        showBackButton: widget.showBackButton,
+        current: _current,
+        toursExpanded: _toursExpanded,
+        carsExpanded: _carsExpanded,
+        sectionTitle: _sectionTitle(),
+        onBack: () => Navigator.of(context).pop(),
+        onSectionSelected: setSection,
+        onToursToggle: () => setState(() => _toursExpanded = !_toursExpanded),
+        onCarsToggle: () => setState(() => _carsExpanded = !_carsExpanded),
+        child: _buildSectionContent(),
+      ),
+    );
   }
 
   void setSection(AdminSection section) {
@@ -462,7 +461,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   void _expandForSection(AdminSection section) {
-    if (section == AdminSection.toursAll || section == AdminSection.toursAdd) {
+    if (section == AdminSection.toursAll ||
+        section == AdminSection.toursAdd ||
+        section == AdminSection.tourCategories ||
+        section == AdminSection.tourAttributes ||
+        section == AdminSection.tourAvailability ||
+        section == AdminSection.tourBookingCalendar ||
+        section == AdminSection.tourRecovery) {
       _toursExpanded = true;
     }
     if (section == AdminSection.carsAll || section == AdminSection.carsAdd) {
@@ -759,6 +764,16 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         return 'All Tours';
       case AdminSection.toursAdd:
         return 'Add new tour';
+      case AdminSection.tourCategories:
+        return 'Tour Categories';
+      case AdminSection.tourAttributes:
+        return 'Tour Attributes';
+      case AdminSection.tourAvailability:
+        return 'Tours Availability Calendar';
+      case AdminSection.tourBookingCalendar:
+        return 'Tour Booking Calendar';
+      case AdminSection.tourRecovery:
+        return 'Tour Recovery';
       case AdminSection.carsAll:
         return 'All Cars';
       case AdminSection.carsAdd:
@@ -810,6 +825,16 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         return _buildToursList();
       case AdminSection.toursAdd:
         return _buildTourForm();
+      case AdminSection.tourCategories:
+        return TourCategoriesPage(tours: _tours);
+      case AdminSection.tourAttributes:
+        return const TourAttributesPage();
+      case AdminSection.tourAvailability:
+        return TourAvailabilityCalendarPage(tours: _tours);
+      case AdminSection.tourBookingCalendar:
+        return const TourBookingCalendarPage();
+      case AdminSection.tourRecovery:
+        return const TourRecoveryPage();
       case AdminSection.carsAll:
         return _buildCarsList();
       case AdminSection.carsAdd:
@@ -991,15 +1016,24 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DataTable(
-          columns: const [
-            DataColumn(label: Text('ID')),
-            DataColumn(label: Text('Name')),
-            DataColumn(label: Text('Email')),
-            DataColumn(label: Text('Role')),
-            DataColumn(label: Text('Actions')),
-          ],
-          rows: _users.map<DataRow>((u) {
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('ID')),
+                DataColumn(label: Text('Name')),
+                DataColumn(label: Text('Email')),
+                DataColumn(label: Text('Role')),
+                DataColumn(label: Text('Actions')),
+              ],
+              rows: _users.map<DataRow>((u) {
             final m = u as Map<String, dynamic>;
             final id = m['id']?.toString() ?? '';
             final name = m['userName'] ?? m['username'] ?? '';
@@ -1036,33 +1070,35 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             if (role.isEmpty) role = 'Unknown';
 
             final isSelf = id == _currentUserId;
-            return DataRow(
-              cells: [
-                DataCell(Text(id)),
-                DataCell(Text(name?.toString() ?? '')),
-                DataCell(Text(email?.toString() ?? '')),
-                DataCell(Text(role)),
-                DataCell(
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _showEditUserDialog(m),
-                        tooltip: 'Edit User',
+                return DataRow(
+                  cells: [
+                    DataCell(Text(id)),
+                    DataCell(Text(name?.toString() ?? '')),
+                    DataCell(Text(email?.toString() ?? '')),
+                    DataCell(Text(role)),
+                    DataCell(
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => _showEditUserDialog(m),
+                            tooltip: 'Edit User',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete),
+                            onPressed: isSelf ? null : () => _deleteUser(id),
+                            tooltip: isSelf
+                                ? 'Cannot delete yourself'
+                                : 'Delete User',
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: isSelf ? null : () => _deleteUser(id),
-                        tooltip: isSelf
-                            ? 'Cannot delete yourself'
-                            : 'Delete User',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          }).toList(),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
         ),
       ],
     );
@@ -1077,532 +1113,66 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DataTable(
-          columns: const [
-            DataColumn(label: Text('ID')),
-            DataColumn(label: Text('Module')),
-            DataColumn(label: Text('Module ID')),
-            DataColumn(label: Text('User')),
-            DataColumn(label: Text('Stars')),
-            DataColumn(label: Text('Comment')),
-            DataColumn(label: Text('Actions')),
-          ],
-          rows: _ratings.map<DataRow>((r) {
-            final m = r as Map<String, dynamic>;
-            final id = m['id']?.toString() ?? '';
-            final moduleType = m['moduleType']?.toString() ?? '';
-            final moduleId = m['moduleId']?.toString() ?? '';
-            final stars = m['stars']?.toString() ?? '';
-            final comment = m['comment']?.toString() ?? '';
-
-            String userName = '';
-            final user = m['user'];
-            if (user is Map<String, dynamic>) {
-              userName =
-                  user['name']?.toString() ??
-                  user['username']?.toString() ??
-                  user['email']?.toString() ??
-                  '';
-            } else {
-              userName =
-                  m['userName']?.toString() ?? m['username']?.toString() ?? '';
-            }
-            if (userName.isEmpty) userName = 'Unknown';
-            return DataRow(
-              cells: [
-                DataCell(Text(id)),
-                DataCell(Text(moduleType)),
-                DataCell(Text(moduleId)),
-                DataCell(Text(userName)),
-                DataCell(Text(stars)),
-                DataCell(Text(comment.isEmpty ? 'No comment' : comment)),
-                DataCell(
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _showEditRatingDialog(m),
-                        tooltip: 'Edit Rating',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () => _deleteRating(id),
-                        tooltip: 'Delete Rating',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildToursList() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_tours.isEmpty) return const Center(child: Text('No tours yet.'));
-
-    final filteredTours = _getFilteredTours();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
         Container(
-          margin: const EdgeInsets.only(bottom: 24),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: Colors.grey.shade300),
+            color: const Color(0xFFF8FAFC),
             borderRadius: BorderRadius.circular(12),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x11000000),
-                blurRadius: 12,
-                offset: Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Text(
-                          'Bulk Actions',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(width: 12),
-                        DropdownButton<String>(
-                          value: _toursBulkAction,
-                          underline: const SizedBox.shrink(),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'delete',
-                              child: Text('Delete selected'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _toursBulkAction = value);
-                          },
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: _selectedTourIds.isEmpty
-                              ? null
-                              : _deleteSelectedTours,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0EA5E9),
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Apply'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: 320,
-                    child: TextField(
-                      onChanged: (value) =>
-                          setState(() => _toursSearchQuery = value),
-                      decoration: InputDecoration(
-                        hintText: 'Search by name',
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: Colors.grey,
-                        ),
-                        suffixIcon: _toursSearchQuery.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () =>
-                                    setState(() => _toursSearchQuery = ''),
-                              ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton(
-                    onPressed: () => setState(
-                      () => _showToursAdvancedFilters =
-                          !_showToursAdvancedFilters,
-                    ),
-                    child: Row(
-                      children: [
-                        const Text('Advanced'),
-                        const SizedBox(width: 6),
-                        AnimatedRotation(
-                          turns: _showToursAdvancedFilters ? 0.5 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: const Icon(Icons.expand_more),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (_showToursAdvancedFilters)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Wrap(
-                    spacing: 16,
-                    runSpacing: 12,
-                    children: [
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<String>(
-                          value: _toursAuthorFilter,
-                          decoration: InputDecoration(
-                            labelText: 'Author',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text('-- All --'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'vendor',
-                              child: Text('Vendor'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'administrator',
-                              child: Text('Administrator'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _toursAuthorFilter = value);
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 180,
-                        child: DropdownButtonFormField<String>(
-                          value: _toursStatusFilter,
-                          decoration: InputDecoration(
-                            labelText: 'Status',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text('-- All --'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'publish',
-                              child: Text('Publish'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'draft',
-                              child: Text('Draft'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _toursStatusFilter = value);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (_selectedTourIds.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade100),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${_selectedTourIds.length} selected',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _selectedTourIds.clear()),
-                    child: const Text('Clear'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: _deleteSelectedTours,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Delete selected'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                'Found ${filteredTours.length} items',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Theme(
-          data: Theme.of(context).copyWith(
-            dataTableTheme: DataTableThemeData(
-              headingRowColor: WidgetStateProperty.all(const Color(0xFFFAFAFC)),
-              headingRowHeight: 56,
-              dataRowMinHeight: 56,
-              dataRowMaxHeight: 72,
-              dividerThickness: 1,
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFE0E0E0)),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
-              showCheckboxColumn: true,
-              onSelectAll: (selected) => _selectAllTours(selected == true),
               columns: const [
-                DataColumn(
-                  label: Text(
-                    'Name',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Location',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Author',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Status',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Reviews',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Date',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Actions',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
+                DataColumn(label: Text('ID')),
+                DataColumn(label: Text('Module')),
+                DataColumn(label: Text('Module ID')),
+                DataColumn(label: Text('User')),
+                DataColumn(label: Text('Stars')),
+                DataColumn(label: Text('Comment')),
+                DataColumn(label: Text('Actions')),
               ],
-              rows: filteredTours.map<DataRow>((t) {
-                final m = t as Map<String, dynamic>;
+              rows: _ratings.map<DataRow>((r) {
+                final m = r as Map<String, dynamic>;
                 final id = m['id']?.toString() ?? '';
-                final title = m['title']?.toString() ?? 'Tour';
-                final isFeatured =
-                    m['featured'] == true || m['isFeatured'] == true;
-                final location =
-                    m['realTourAddress']?.toString().trim() ??
-                    m['location']?.toString().trim() ??
-                    m['address']?.toString().trim() ??
-                    m['city']?.toString().trim() ??
-                    'N/A';
-                final author =
-                    m['author']?.toString() ??
-                    m['userName']?.toString() ??
-                    m['username']?.toString() ??
-                    'Admin';
-                final status = m['status']?.toString().toLowerCase() ?? 'draft';
-                final createdAt =
-                    m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
-                final reviewCount =
-                    m['reviewCount'] ?? m['reviews'] ?? m['ratingCount'] ?? 0;
+                final moduleType = m['moduleType']?.toString() ?? '';
+                final moduleId = m['moduleId']?.toString() ?? '';
+                final stars = m['stars']?.toString() ?? '';
+                final comment = m['comment']?.toString() ?? '';
 
-                String dateStr = '';
-                try {
-                  final date = createdAt is String
-                      ? DateTime.parse(createdAt)
-                      : createdAt as DateTime;
-                  dateStr = DateFormat('MM/dd/yyyy').format(date);
-                } catch (_) {
-                  dateStr = 'N/A';
+                String userName = '';
+                final user = m['user'];
+                if (user is Map<String, dynamic>) {
+                  userName =
+                      user['name']?.toString() ??
+                      user['username']?.toString() ??
+                      user['email']?.toString() ??
+                      '';
+                } else {
+                  userName =
+                      m['userName']?.toString() ?? m['username']?.toString() ?? '';
                 }
-
+                if (userName.isEmpty) userName = 'Unknown';
                 return DataRow(
-                  selected: id.isNotEmpty && _selectedTourIds.contains(id),
-                  onSelectChanged: id.isEmpty
-                      ? null
-                      : (selected) =>
-                            _toggleTourSelection(id, selected == true),
                   cells: [
-                    DataCell(
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Row(
-                          children: [
-                            if (isFeatured)
-                              Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFBBF24),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text(
-                                  'Featured',
-                                  style: TextStyle(
-                                    color: Colors.black87,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            Flexible(
-                              child: Text(
-                                title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                  color: Color(0xFF2563EB),
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    DataCell(
-                      Text(
-                        location,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                    DataCell(
-                      Text(author, style: const TextStyle(fontSize: 13)),
-                    ),
-                    DataCell(_carStatusChip(status)),
-                    DataCell(
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          reviewCount.toString(),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                    DataCell(
-                      Text(
-                        dateStr,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
+                    DataCell(Text(id)),
+                    DataCell(Text(moduleType)),
+                    DataCell(Text(moduleId)),
+                    DataCell(Text(userName)),
+                    DataCell(Text(stars)),
+                    DataCell(Text(comment.isEmpty ? 'No comment' : comment)),
                     DataCell(
                       Row(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          ElevatedButton.icon(
-                            onPressed: () => _showEditTourDialog(m),
-                            icon: const Icon(Icons.edit, size: 16),
-                            label: const Text('Edit'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF2563EB),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              textStyle: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
                           IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              size: 20,
-                              color: Colors.redAccent,
-                            ),
-                            onPressed: id.isEmpty
-                                ? null
-                                : () => _confirmDeleteTour(id),
-                            tooltip: 'Delete tour',
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => _showEditRatingDialog(m),
+                            tooltip: 'Edit Rating',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete),
+                            onPressed: () => _deleteRating(id),
+                            tooltip: 'Delete Rating',
                           ),
                         ],
                       ),
@@ -1617,27 +1187,35 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
-  Widget _carStatusChip(String? status) {
-    final isPublish = (status ?? 'publish').toString().toLowerCase() != 'draft';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isPublish ? Colors.green.shade50 : Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(4),
+  Widget _buildToursList() {
+    final filteredTours = _getFilteredTours();
+    return TourListPage(
+      loading: _loading,
+      tours: filteredTours,
+      selectedIds: _selectedTourIds,
+      showAdvancedFilters: _showToursAdvancedFilters,
+      bulkAction: _toursBulkAction,
+      authorFilter: _toursAuthorFilter,
+      statusFilter: _toursStatusFilter,
+      onSearchChanged: (value) => setState(() => _toursSearchQuery = value),
+      onToggleAdvancedFilters: () => setState(
+        () => _showToursAdvancedFilters = !_showToursAdvancedFilters,
       ),
-      child: Text(
-        isPublish ? 'Publish' : 'Draft',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: isPublish ? Colors.green.shade800 : Colors.grey.shade800,
-        ),
-      ),
+      onBulkActionChanged: (value) => setState(() => _toursBulkAction = value),
+      onAuthorFilterChanged: (value) => setState(() => _toursAuthorFilter = value),
+      onStatusFilterChanged: (value) => setState(() => _toursStatusFilter = value),
+      onApplyBulkAction: _deleteSelectedTours,
+      onSelectAll: _selectAllTours,
+      onToggleSelection: _toggleTourSelection,
+      onClearSelection: () => setState(() => _selectedTourIds.clear()),
+      onDeleteSelected: _deleteSelectedTours,
+      onEdit: _showEditTourDialog,
+      onDelete: _confirmDeleteTour,
     );
   }
 
   Widget _buildTourForm() {
-    return _AddTourForm(
+    return TourFormPage(
       onCreated: () {
         setState(() => _current = AdminSection.toursAll);
         _loadData();
@@ -1646,491 +1224,39 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildCarForm() {
-    return _AddCarForm(
+    return CarFormPage(
       onCreated: () {
         setState(() => _current = AdminSection.carsAll);
         _loadData();
       },
+      itemToEdit: null,
     );
   }
 
   Widget _buildCarsList() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_cars.isEmpty) return const Center(child: Text('No cars yet.'));
-
     final filteredCars = _getFilteredCars();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(bottom: 20),
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1A000000),
-                blurRadius: 12,
-                offset: Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Text(
-                          'Bulk Actions',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(width: 12),
-                        DropdownButton<String>(
-                          value: _carsBulkAction,
-                          underline: const SizedBox.shrink(),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'delete',
-                              child: Text('Delete selected'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _carsBulkAction = value);
-                          },
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: _selectedCarIds.isEmpty
-                              ? null
-                              : _deleteSelectedCars,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0EA5E9),
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Apply'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: 320,
-                    child: TextField(
-                      onChanged: (value) =>
-                          setState(() => _carsSearchQuery = value),
-                      decoration: InputDecoration(
-                        hintText: 'Search by name',
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: Colors.grey,
-                        ),
-                        suffixIcon: _carsSearchQuery.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () =>
-                                    setState(() => _carsSearchQuery = ''),
-                              ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton(
-                    onPressed: () => setState(
-                      () =>
-                          _showCarsAdvancedFilters = !_showCarsAdvancedFilters,
-                    ),
-                    child: Row(
-                      children: [
-                        const Text('Advanced'),
-                        const SizedBox(width: 6),
-                        AnimatedRotation(
-                          turns: _showCarsAdvancedFilters ? 0.5 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: const Icon(Icons.expand_more),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (_showCarsAdvancedFilters)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Wrap(
-                    spacing: 16,
-                    runSpacing: 12,
-                    children: [
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<String>(
-                          value: _carsAuthorFilter,
-                          decoration: InputDecoration(
-                            labelText: 'Author',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text('-- All --'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'vendor',
-                              child: Text('Vendor'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'administrator',
-                              child: Text('Administrator'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _carsAuthorFilter = value);
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 180,
-                        child: DropdownButtonFormField<String>(
-                          value: _carsStatusFilter,
-                          decoration: InputDecoration(
-                            labelText: 'Status',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text('-- All --'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'publish',
-                              child: Text('Publish'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'draft',
-                              child: Text('Draft'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() => _carsStatusFilter = value);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (_selectedCarIds.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${_selectedCarIds.length} selected',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _selectedCarIds.clear()),
-                    child: const Text('Clear selection'),
-                  ),
-                  const SizedBox(width: 10),
-                  ElevatedButton.icon(
-                    onPressed: _deleteSelectedCars,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Delete selected'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                'Found ${filteredCars.length} items',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Theme(
-          data: Theme.of(context).copyWith(
-            dataTableTheme: DataTableThemeData(
-              headingRowColor: WidgetStateProperty.all(const Color(0xFFFAFAFC)),
-              headingRowHeight: 56,
-              dataRowMinHeight: 56,
-              dataRowMaxHeight: 72,
-              dividerThickness: 1,
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFE0E0E0)),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              showCheckboxColumn: true,
-              onSelectAll: (selected) => _selectAllCars(selected == true),
-              columns: const [
-                DataColumn(
-                  label: Text(
-                    'Name',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Location',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Author',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Status',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Reviews',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Date',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Actions',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-              rows: filteredCars.map<DataRow>((c) {
-                final m = c as Map<String, dynamic>;
-                final id = m['id']?.toString() ?? '';
-                final title = m['title']?.toString() ?? 'Car';
-                final isFeatured =
-                    m['featured'] == true || m['isFeatured'] == true;
-                final location =
-                    m['realTourAddress']?.toString().trim() ??
-                    m['location']?.toString().trim() ??
-                    m['address']?.toString().trim() ??
-                    m['city']?.toString().trim() ??
-                    'N/A';
-                final author =
-                    m['author']?.toString() ??
-                    m['userName']?.toString() ??
-                    'Admin';
-                final status = m['status']?.toString().toLowerCase() ?? 'draft';
-                final createdAt =
-                    m['createdAt'] ?? m['dateCreated'] ?? DateTime.now();
-
-                String dateStr = '';
-                try {
-                  final date = createdAt is String
-                      ? DateTime.parse(createdAt)
-                      : createdAt as DateTime;
-                  dateStr = DateFormat('MM/dd/yyyy').format(date);
-                } catch (_) {
-                  dateStr = 'N/A';
-                }
-
-                return DataRow(
-                  selected: id.isNotEmpty && _selectedCarIds.contains(id),
-                  onSelectChanged: id.isEmpty
-                      ? null
-                      : (selected) => _toggleCarSelection(id, selected == true),
-                  cells: [
-                    DataCell(
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Row(
-                              children: [
-                                if (isFeatured)
-                                  Container(
-                                    margin: const EdgeInsets.only(right: 8),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFBBF24),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text(
-                                      'Featured',
-                                      style: TextStyle(
-                                        color: Colors.black87,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                Flexible(
-                                  child: Text(
-                                    title,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
-                                      color: Color(0xFF3B82F6),
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    DataCell(
-                      Text(
-                        location,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                    DataCell(
-                      Text(author, style: const TextStyle(fontSize: 13)),
-                    ),
-                    DataCell(_carStatusChip(status)),
-                    DataCell(
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          '0',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                    DataCell(
-                      Text(
-                        dateStr,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                    DataCell(
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () => _showEditCarDialog(m),
-                            icon: const Icon(Icons.edit, size: 16),
-                            label: const Text('Edit'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF2563EB),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              textStyle: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              size: 20,
-                              color: Colors.redAccent,
-                            ),
-                            onPressed: id.isEmpty
-                                ? null
-                                : () => _confirmDeleteCar(id),
-                            tooltip: 'Delete car',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ],
+    return CarListPage(
+      loading: _loading,
+      cars: filteredCars,
+      selectedIds: _selectedCarIds,
+      showAdvancedFilters: _showCarsAdvancedFilters,
+      bulkAction: _carsBulkAction,
+      authorFilter: _carsAuthorFilter,
+      statusFilter: _carsStatusFilter,
+      onSearchChanged: (value) => setState(() => _carsSearchQuery = value),
+      onToggleAdvancedFilters: () => setState(
+        () => _showCarsAdvancedFilters = !_showCarsAdvancedFilters,
+      ),
+      onBulkActionChanged: (value) => setState(() => _carsBulkAction = value),
+      onAuthorFilterChanged: (value) => setState(() => _carsAuthorFilter = value),
+      onStatusFilterChanged: (value) => setState(() => _carsStatusFilter = value),
+      onApplyBulkAction: _deleteSelectedCars,
+      onSelectAll: _selectAllCars,
+      onToggleSelection: _toggleCarSelection,
+      onClearSelection: () => setState(() => _selectedCarIds.clear()),
+      onDeleteSelected: _deleteSelectedCars,
+      onEdit: _showEditCarDialog,
+      onDelete: _confirmDeleteCar,
     );
   }
 
@@ -2200,7 +1326,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(18),
-                      child: _AddTourForm(
+                      child: TourFormPage(
                         onCreated: () async {
                           Navigator.of(context).pop();
                           await _loadData();
@@ -2290,7 +1416,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(18),
-                      child: _AddCarForm(
+                      child: CarFormPage(
                         onCreated: () async {
                           Navigator.of(context).pop();
                           await _loadData();
@@ -3626,14 +2752,10 @@ class _ContentTextEditor extends StatefulWidget {
   const _ContentTextEditor({
     required this.controller,
     required this.label,
-    this.hintText,
-    this.maxLines = 8,
   });
 
   final TextEditingController controller;
   final String label;
-  final String? hintText;
-  final int maxLines;
 
   @override
   State<_ContentTextEditor> createState() => _ContentTextEditorState();
@@ -3731,797 +2853,3 @@ class _ContentTextEditorState extends State<_ContentTextEditor> {
   }
 }
 
-class _AddTourForm extends StatefulWidget {
-  const _AddTourForm({required this.onCreated, this.itemToEdit});
-
-  final VoidCallback onCreated;
-  final Map<String, dynamic>? itemToEdit;
-
-  @override
-  State<_AddTourForm> createState() => _AddTourFormState();
-}
-
-class _AddTourFormState extends State<_AddTourForm> {
-  final _formKey = GlobalKey<FormState>();
-  static const _availabilityOptions = <MapEntry<String, String>>[
-    MapEntry('always', 'Always available'),
-  ];
-
-  final _title = TextEditingController();
-  final _content = TextEditingController();
-  final _slug = TextEditingController();
-  final _price = TextEditingController();
-  final _salePrice = TextEditingController();
-  final _realTourAddress = TextEditingController();
-  String? _imageUrl;
-  String? _imagePublicId;
-  bool _loading = false;
-  String _status = 'publish';
-  String _availability = 'always';
-  bool _isFeatured = false;
-  double? _mapLat;
-  double? _mapLng;
-  String? _locationId;
-  List<Map<String, dynamic>> _locationRows = [];
-  bool _locationsLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.itemToEdit != null) {
-      final item = widget.itemToEdit!;
-      _title.text = item['title']?.toString() ?? '';
-      _content.text = item['content']?.toString() ?? '';
-      _slug.text = item['slug']?.toString() ?? '';
-      _price.text = item['price']?.toString() ?? '';
-      _salePrice.text = item['salePrice']?.toString() ?? '';
-      _realTourAddress.text =
-          item['realTourAddress']?.toString() ??
-          item['address']?.toString() ??
-          '';
-      _imageUrl = item['imageUrl']?.toString();
-      _imagePublicId = item['imagePublicId']?.toString();
-      _mapLat = double.tryParse(item['mapLat']?.toString() ?? '');
-      _mapLng = double.tryParse(item['mapLng']?.toString() ?? '');
-      final st = item['status']?.toString().toLowerCase() ?? 'publish';
-      _status = st == 'draft' ? 'draft' : 'publish';
-      _isFeatured = item['isFeatured'] == true || item['featured'] == true;
-      final av = item['availability']?.toString() ?? '';
-      if (_availabilityOptions.any((e) => e.key == av)) {
-        _availability = av;
-      }
-      final loc = item['location'];
-      final lid = item['locationId'] ?? (loc is Map ? loc['id'] : loc);
-      _locationId = lid?.toString();
-    }
-    _loadLocations();
-  }
-
-  Future<void> _loadLocations() async {
-    try {
-      final list = await LookupsApi.locations();
-      if (!mounted) return;
-      final rows = <Map<String, dynamic>>[];
-      for (final e in list) {
-        if (e is Map<String, dynamic>) {
-          rows.add(e);
-        } else if (e is Map) {
-          rows.add(Map<String, dynamic>.from(e));
-        }
-      }
-      setState(() {
-        _locationRows = rows;
-        _locationsLoading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _locationsLoading = false);
-    }
-  }
-
-  @override
-  void dispose() {
-    _title.dispose();
-    _content.dispose();
-    _slug.dispose();
-    _price.dispose();
-    _salePrice.dispose();
-    _realTourAddress.dispose();
-    super.dispose();
-  }
-
-  void _generateSlug() {
-    final title = _title.text.trim();
-    if (title.isNotEmpty) {
-      _slug.text = title
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-          .replaceAll(RegExp(r'^-+|-+$'), '');
-    }
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_mapLat == null || _mapLng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a location on the map')),
-      );
-      return;
-    }
-    if (_slug.text.trim().isEmpty) _generateSlug();
-
-    setState(() => _loading = true);
-    try {
-      // Tours API expects Price as a String
-      final body = <String, dynamic>{
-        'title': _title.text.trim(),
-        'name': _title.text.trim(),
-        'slug': _slug.text.trim(),
-        'price': _price.text.trim().isEmpty ? "0" : _price.text.trim(),
-        'salePrice': _salePrice.text.trim().isEmpty
-            ? "0"
-            : _salePrice.text.trim(),
-        'realTourAddress': _realTourAddress.text.trim(),
-        'address': _realTourAddress.text.trim(),
-        'mapLat': _mapLat.toString(),
-        'mapLng': _mapLng.toString(),
-        'imageUrl': _imageUrl ?? '',
-        'content': _content.text.trim(),
-        'imagePublicId': _imagePublicId ?? '',
-        'status': _status,
-        'published': _status == 'publish',
-        'availability': _availability,
-        'isFeatured': _isFeatured,
-        if (_locationId != null)
-          'locationId': int.tryParse(_locationId!) ?? _locationId,
-      };
-
-      if (widget.itemToEdit != null) {
-        await ToursApi.update(widget.itemToEdit!['id'], body);
-      } else {
-        await ToursApi.create(body);
-      }
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.itemToEdit != null ? 'Tour updated' : 'Tour created',
-          ),
-        ),
-      );
-      widget.onCreated();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Widget _buildBookingCoreCard(String title, List<Widget> children) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-        side: BorderSide(color: Colors.grey.shade300),
-      ),
-      margin: const EdgeInsets.only(bottom: 24),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const Divider(height: 32),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mapInitial = (_mapLat != null && _mapLng != null)
-        ? LatLng(_mapLat!, _mapLng!)
-        : null;
-
-    final mainForm = Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          _buildBookingCoreCard('Tour Content', [
-            const Text('Title', style: TextStyle(fontWeight: FontWeight.w500)),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _title,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Tour Name',
-              ),
-              validator: (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null,
-              onChanged: (_) {
-                if (widget.itemToEdit == null) _generateSlug();
-              },
-            ),
-            const SizedBox(height: 16),
-            _ContentTextEditor(
-              controller: _content,
-              label: 'Content',
-              hintText: 'Write a rich tour description here...',
-              maxLines: 10,
-            ),
-          ]),
-          _buildBookingCoreCard('Pricing', [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Price',
-                        style: TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _price,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          hintText: '0',
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (v) =>
-                            (v?.trim().isEmpty ?? true) ? 'Required' : null,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Sale Price',
-                        style: TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _salePrice,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          hintText: '0',
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ]),
-          _buildBookingCoreCard('Tour Locations', [
-            const Text(
-              'Location',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String?>(
-              initialValue: _locationId,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-              items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('-- Please Select --'),
-                ),
-                ..._locationRows.map(
-                  (l) => DropdownMenuItem(
-                    value: l['id']?.toString(),
-                    child: Text(l['name']?.toString() ?? ''),
-                  ),
-                ),
-              ],
-              onChanged: (v) => setState(() => _locationId = v),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Real tour address',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _realTourAddress,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-              validator: (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null,
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 300,
-              child: CarLocationMapPicker(
-                key: ValueKey('map_${_mapLat}_$_mapLng'),
-                initial: mapInitial,
-                onPick: (p) => setState(() {
-                  _mapLat = p.latitude;
-                  _mapLng = p.longitude;
-                }),
-              ),
-            ),
-          ]),
-          _buildBookingCoreCard('Feature Image', [
-            ImageUploadWidget(
-              initialImageUrl: _imageUrl,
-              initialImagePublicId: _imagePublicId,
-              onImageSelected: (url, id) => setState(() {
-                _imageUrl = url;
-                _imagePublicId = id;
-              }),
-            ),
-          ]),
-        ],
-      ),
-    );
-
-    final sidebar = Column(
-      children: [
-        _buildBookingCoreCard('Publish', [
-          RadioListTile<String>(
-            title: const Text('Publish'),
-            value: 'publish',
-            groupValue: _status,
-            onChanged: (v) => setState(() => _status = v!),
-            contentPadding: EdgeInsets.zero,
-          ),
-          RadioListTile<String>(
-            title: const Text('Draft'),
-            value: 'draft',
-            groupValue: _status,
-            onChanged: (v) => setState(() => _status = v!),
-            contentPadding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _loading ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: _loading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Text('Save Changes'),
-            ),
-          ),
-        ]),
-        _buildBookingCoreCard('Tour Featured', [
-          CheckboxListTile(
-            title: const Text('Enable featured'),
-            value: _isFeatured,
-            onChanged: (v) => setState(() => _isFeatured = v ?? false),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-          ),
-        ]),
-        _buildBookingCoreCard('Availability', [
-          const Text(
-            'Default State',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: _availability,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: 'always',
-                child: Text('Always available'),
-              ),
-            ],
-            onChanged: (v) => setState(() => _availability = v!),
-          ),
-        ]),
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth > 900) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 7, child: mainForm),
-              const SizedBox(width: 24),
-              Expanded(flex: 3, child: sidebar),
-            ],
-          );
-        }
-        return Column(children: [mainForm, sidebar]);
-      },
-    );
-  }
-}
-
-class _AddCarForm extends StatefulWidget {
-  const _AddCarForm({required this.onCreated, this.itemToEdit});
-
-  final VoidCallback onCreated;
-  final Map<String, dynamic>? itemToEdit;
-
-  @override
-  State<_AddCarForm> createState() => _AddCarFormState();
-}
-
-class _AddCarFormState extends State<_AddCarForm> {
-  final _formKey = GlobalKey<FormState>();
-  static const _gearOptions = ['Auto', 'Manual', 'CVT'];
-
-  final _title = TextEditingController();
-  final _content = TextEditingController();
-  final _slug = TextEditingController();
-  final _carNumber = TextEditingController();
-  final _price = TextEditingController();
-  final _salePrice = TextEditingController();
-  final _passenger = TextEditingController(text: '4');
-  final _baggage = TextEditingController(text: '2');
-  final _door = TextEditingController(text: '4');
-  String _gearShift = 'Auto';
-  String _status = 'publish';
-  double? _mapLat;
-  double? _mapLng;
-  String? _imageUrl;
-  String? _imagePublicId;
-  bool _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.itemToEdit != null) {
-      final item = widget.itemToEdit!;
-      _title.text = item['title']?.toString() ?? '';
-      _content.text = item['content']?.toString() ?? '';
-      _slug.text = item['slug']?.toString() ?? '';
-      _carNumber.text = item['carNumber']?.toString() ?? '';
-      _price.text = item['price']?.toString() ?? '0';
-      _salePrice.text = item['salePrice']?.toString() ?? '0';
-      _passenger.text = item['passenger']?.toString() ?? '4';
-      _baggage.text = item['baggage']?.toString() ?? '2';
-      _door.text = item['door']?.toString() ?? '4';
-      _gearShift = _gearOptions.contains(item['gearShift'])
-          ? item['gearShift']
-          : 'Auto';
-      _mapLat = double.tryParse(item['mapLat']?.toString() ?? '');
-      _mapLng = double.tryParse(item['mapLng']?.toString() ?? '');
-      _status = (item['status']?.toString().toLowerCase() == 'draft')
-          ? 'draft'
-          : 'publish';
-      _imageUrl = item['imageUrl']?.toString();
-      _imagePublicId = item['imagePublicId']?.toString();
-    }
-  }
-
-  void _generateSlug() {
-    final t = _title.text.trim();
-    if (t.isNotEmpty) {
-      _slug.text = t
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-          .replaceAll(RegExp(r'^-+|-+$'), '');
-    }
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_mapLat == null || _mapLng == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Set location on map')));
-      return;
-    }
-    setState(() => _loading = true);
-    try {
-      // FIX: Price must be a String, but Passenger/Baggage/Door must be Numbers
-      final body = {
-        'title': _title.text.trim(),
-        'slug': _slug.text.isEmpty
-            ? _title.text.toLowerCase().replaceAll(' ', '-')
-            : _slug.text,
-        'carNumber': _carNumber.text.trim(),
-        'price': _price.text.trim().isEmpty ? "0" : _price.text.trim(),
-        'salePrice': _salePrice.text.trim().isEmpty
-            ? "0"
-            : _salePrice.text.trim(),
-        'passenger': int.tryParse(_passenger.text.trim()) ?? 0,
-        'baggage': int.tryParse(_baggage.text.trim()) ?? 0,
-        'door': int.tryParse(_door.text.trim()) ?? 0,
-        'gearShift': _gearShift,
-        'mapLat': _mapLat!.toString(),
-        'mapLng': _mapLng!.toString(),
-        'imageUrl': _imageUrl ?? '',
-        'imagePublicId': _imagePublicId ?? '',
-        'content': _content.text.trim(),
-        'status': _status,
-      };
-
-      if (widget.itemToEdit != null) {
-        await CarsApi.update(widget.itemToEdit!['id'], body);
-      } else {
-        await CarsApi.create(body);
-      }
-      widget.onCreated();
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      setState(() => _loading = false);
-    }
-  }
-
-  Widget _buildCard(String title, List<Widget> children) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-        side: BorderSide(color: Colors.grey.shade300),
-      ),
-      margin: const EdgeInsets.only(bottom: 24),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const Divider(height: 32),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mapInitial = (_mapLat != null && _mapLng != null)
-        ? LatLng(_mapLat!, _mapLng!)
-        : null;
-
-    final mainForm = Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          _buildCard('Car Content', [
-            const Text('Title', style: TextStyle(fontWeight: FontWeight.w500)),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _title,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Car model',
-              ),
-            ),
-            const SizedBox(height: 16),
-            _ContentTextEditor(
-              controller: _content,
-              label: 'Content',
-              hintText: 'Write a rich car description here...',
-              maxLines: 8,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Car Number',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _carNumber,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'License Plate',
-              ),
-            ),
-          ]),
-          _buildCard('Pricing', [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Daily Price',
-                        style: TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _price,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Sale Price',
-                        style: TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _salePrice,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ]),
-          _buildCard('Vehicle Specs', [
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _passenger,
-                    decoration: const InputDecoration(
-                      labelText: 'Passengers',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    controller: _door,
-                    decoration: const InputDecoration(
-                      labelText: 'Doors',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _baggage,
-                    decoration: const InputDecoration(
-                      labelText: 'Baggage',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _gearShift,
-                    decoration: const InputDecoration(
-                      labelText: 'Gear Shift',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: _gearOptions
-                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                        .toList(),
-                    onChanged: (v) => setState(() => _gearShift = v!),
-                  ),
-                ),
-              ],
-            ),
-          ]),
-          _buildCard('Location', [
-            SizedBox(
-              height: 300,
-              child: CarLocationMapPicker(
-                key: ValueKey('car_map_$_mapLat'),
-                initial: mapInitial,
-                onPick: (p) => setState(() {
-                  _mapLat = p.latitude;
-                  _mapLng = p.longitude;
-                }),
-              ),
-            ),
-          ]),
-          _buildCard('Feature Image', [
-            ImageUploadWidget(
-              initialImageUrl: _imageUrl,
-              initialImagePublicId: _imagePublicId,
-              onImageSelected: (u, i) => setState(() {
-                _imageUrl = u;
-                _imagePublicId = i;
-              }),
-            ),
-          ]),
-        ],
-      ),
-    );
-
-    final sidebar = Column(
-      children: [
-        _buildCard('Publish', [
-          RadioListTile<String>(
-            title: const Text('Publish'),
-            value: 'publish',
-            groupValue: _status,
-            onChanged: (v) => setState(() => _status = v!),
-            contentPadding: EdgeInsets.zero,
-          ),
-          RadioListTile<String>(
-            title: const Text('Draft'),
-            value: 'draft',
-            groupValue: _status,
-            onChanged: (v) => setState(() => _status = v!),
-            contentPadding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _loading ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: _loading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Text(widget.itemToEdit == null ? 'Add Car' : 'Update Car'),
-            ),
-          ),
-        ]),
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth > 900) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 7, child: mainForm),
-              const SizedBox(width: 24),
-              Expanded(flex: 3, child: sidebar),
-            ],
-          );
-        }
-        return Column(children: [mainForm, sidebar]);
-      },
-    );
-  }
-}

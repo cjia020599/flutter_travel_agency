@@ -1,6 +1,7 @@
 
 class TourBooking {
   final int id;
+  final int tourId;
   final String tourTitle;
   final String tourImageUrl;
   final double tourPrice;
@@ -11,6 +12,7 @@ class TourBooking {
 
   TourBooking({
     required this.id,
+    required this.tourId,
     required this.tourTitle,
     required this.tourImageUrl,
     required this.tourPrice,
@@ -23,6 +25,7 @@ class TourBooking {
   factory TourBooking.fromJson(Map<String, dynamic> json) {
     return TourBooking(
       id: json['id'] ?? 0,
+      tourId: json['tour']?['id'] ?? json['tourId'] ?? json['moduleId'] ?? 0,
       tourTitle: json['tour']?['title'] ?? json['tourTitle'] ?? '',
       tourImageUrl: json['tour']?['imageUrl'] ?? json['tourImageUrl'] ?? '',
       tourPrice: double.tryParse(json['tour']?['price']?.toString() ?? '0') ?? 0.0,

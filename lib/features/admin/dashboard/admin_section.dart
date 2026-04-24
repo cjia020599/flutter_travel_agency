@@ -1,0 +1,17 @@
+enum AdminSection {
+  dashboard,
+  users,
+  toursAll,
+  toursAdd,
+  tourCategories,
+  tourAttributes,
+  tourAvailability,
+  tourBookingCalendar,
+  tourRecovery,
+  carsAll,
+  carsAdd,
+  ratings,
+  chatbot,
+  reports,
+  settings,
+}

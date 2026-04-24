@@ -26,4 +26,20 @@ class ToursApi {
   static Future<void> delete(int id) async {
     return _client.delete('/api/tours/$id', auth: true);
   }
+
+  static Future<List<dynamic>> deletedTours() async {
+    final dynamic res = await _client.get('/api/tours/recovery/deleted', auth: true);
+    if (res is List) return List<dynamic>.from(res);
+    final data = res['data'];
+    if (data is List) return List<dynamic>.from(data);
+    return [];
+  }
+
+  static Future<Map<String, dynamic>> restoreTour(int id) async {
+    return _client.patch('/api/tours/recovery/$id/restore', {}, auth: true);
+  }
+
+  static Future<void> forceDeleteTour(int id) async {
+    await _client.delete('/api/tours/recovery/$id', auth: true);
+  }
 }
