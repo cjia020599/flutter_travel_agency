@@ -26,7 +26,8 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  final GlobalKey<AdminDashboardPageState> _adminKey = GlobalKey<AdminDashboardPageState>();
+  final GlobalKey<AdminDashboardPageState> _adminKey =
+      GlobalKey<AdminDashboardPageState>();
   Map<String, dynamic>? _profile;
   bool _loading = true;
   bool _isAdmin = false;
@@ -114,7 +115,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Future<void> _loadProfile() async {
     setState(() => _loading = true);
     try {
-      final results = await Future.wait([UserApi.getProfile(), UserApi.isAdmin()]);
+      final results = await Future.wait([
+        UserApi.getProfile(),
+        UserApi.isAdmin(),
+      ]);
       if (!mounted) return;
       final rawProfile = results[0] as Map<String, dynamic>;
       final resolvedProfile = _coerceProfile(rawProfile) ?? rawProfile;
@@ -169,14 +173,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
       final updated = await UserApi.updateProfile(payload);
       if (!mounted) return;
       final resolved = _coerceProfile(updated);
-      if (resolved != null && resolved.isNotEmpty && _looksLikeProfile(resolved)) {
+      if (resolved != null &&
+          resolved.isNotEmpty &&
+          _looksLikeProfile(resolved)) {
         _profile = resolved;
         _fillFromProfile(resolved);
       } else {
         await _loadProfile();
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Profile updated')));
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
@@ -214,9 +222,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
     await _loadBookings();
     final allBookings = [..._rentals, ..._tourBookings];
     if (allBookings.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No bookings found')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No bookings found')));
       return;
     }
     showDialog(
@@ -240,7 +248,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(Icons.directions_car, size: 60),
+                        errorBuilder: (_, _, _) =>
+                            const Icon(Icons.directions_car, size: 60),
                       ),
                     ),
                     title: Text(booking.carTitle),
@@ -250,7 +259,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         Text(
                           '${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}',
                         ),
-                        Text('Car Rental', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                        Text(
+                          'Car Rental',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                     trailing: booking.status != 'cancelled'
@@ -261,33 +276,47 @@ class _UserProfilePageState extends State<UserProfilePage> {
                                 context: context,
                                 builder: (context) => AlertDialog(
                                   title: const Text('Confirm Cancel'),
-                                  content: const Text('Are you sure you want to cancel this car rental booking? This action cannot be undone.'),
+                                  content: const Text(
+                                    'Are you sure you want to cancel this car rental booking? This action cannot be undone.',
+                                  ),
                                   actions: [
                                     TextButton(
-                                      onPressed: () => Navigator.pop(context, false),
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
                                       child: const Text('Cancel'),
                                     ),
                                     TextButton(
-                                      onPressed: () => Navigator.pop(context, true),
-                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.red,
+                                      ),
                                       child: const Text('Cancel Booking'),
                                     ),
                                   ],
                                 ),
                               );
                               if (confirmed == true) {
-                                final success = await CarRentalsApi.cancelRental(booking.id);
+                                final success =
+                                    await CarRentalsApi.cancelRental(
+                                      booking.id,
+                                    );
                                 if (success && mounted) {
                                   Navigator.pop(context);
                                   _showBookingsHistory();
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Car rental cancelled')),
+                                    const SnackBar(
+                                      content: Text('Car rental cancelled'),
+                                    ),
                                   );
                                 }
                               }
                             },
                           )
-                        : const Text('Cancelled', style: TextStyle(color: Colors.grey)),
+                        : const Text(
+                            'Cancelled',
+                            style: TextStyle(color: Colors.grey),
+                          ),
                   ),
                 );
               } else if (booking is TourBooking) {
@@ -300,7 +329,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(Icons.card_travel, size: 60),
+                        errorBuilder: (_, _, _) =>
+                            const Icon(Icons.card_travel, size: 60),
                       ),
                     ),
                     title: Text(booking.tourTitle),
@@ -310,7 +340,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         Text(
                           '${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}',
                         ),
-                        Text('Tour Booking', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                        Text(
+                          'Tour Booking',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                     trailing: booking.status != 'cancelled'
@@ -321,33 +357,47 @@ class _UserProfilePageState extends State<UserProfilePage> {
                                 context: context,
                                 builder: (context) => AlertDialog(
                                   title: const Text('Confirm Cancel'),
-                                  content: const Text('Are you sure you want to cancel this tour booking? This action cannot be undone.'),
+                                  content: const Text(
+                                    'Are you sure you want to cancel this tour booking? This action cannot be undone.',
+                                  ),
                                   actions: [
                                     TextButton(
-                                      onPressed: () => Navigator.pop(context, false),
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
                                       child: const Text('Cancel'),
                                     ),
                                     TextButton(
-                                      onPressed: () => Navigator.pop(context, true),
-                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.red,
+                                      ),
                                       child: const Text('Cancel Booking'),
                                     ),
                                   ],
                                 ),
                               );
                               if (confirmed == true) {
-                                final success = await TourBookingsApi.cancelBooking(booking.id);
+                                final success =
+                                    await TourBookingsApi.cancelBooking(
+                                      booking.id,
+                                    );
                                 if (success && mounted) {
                                   Navigator.pop(context);
                                   _showBookingsHistory();
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Tour booking cancelled')),
+                                    const SnackBar(
+                                      content: Text('Tour booking cancelled'),
+                                    ),
                                   );
                                 }
                               }
                             },
                           )
-                        : const Text('Cancelled', style: TextStyle(color: Colors.grey)),
+                        : const Text(
+                            'Cancelled',
+                            style: TextStyle(color: Colors.grey),
+                          ),
                   ),
                 );
               }
@@ -402,29 +452,30 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 980;
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildTopBar(isMobile: isMobile),
+        Expanded(
+          child: IndexedStack(
+            index: _activeSection == _ProfileSection.admin ? 1 : 0,
+            children: [_buildProfileContent(), _buildAdminContent()],
+          ),
+        ),
+      ],
+    );
+
     return Scaffold(
-      body: Row(
-        children: [
-          _buildSidebar(),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      drawer: isMobile ? Drawer(child: SafeArea(child: _buildSidebar())) : null,
+      body: isMobile
+          ? content
+          : Row(
               children: [
-                _buildTopBar(),
-                Expanded(
-                  child: IndexedStack(
-                    index: _activeSection == _ProfileSection.admin ? 1 : 0,
-                    children: [
-                      _buildProfileContent(),
-                      _buildAdminContent(),
-                    ],
-                  ),
-                ),
+                _buildSidebar(),
+                Expanded(child: content),
               ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -464,19 +515,50 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar({bool isMobile = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 24,
+        vertical: 12,
+      ),
       color: Colors.white,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(_pageTitle(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-          TextButton.icon(
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TravelHomePage())),
-            icon: const Icon(Icons.home),
-            label: const Text('Back to Home'),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isMobile)
+                Builder(
+                  builder: (drawerContext) => IconButton(
+                    onPressed: () => Scaffold.of(drawerContext).openDrawer(),
+                    icon: const Icon(Icons.menu),
+                  ),
+                ),
+              Text(
+                _pageTitle(),
+                style: TextStyle(
+                  fontSize: isMobile ? 18 : 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
+          if (!isMobile)
+            TextButton.icon(
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const TravelHomePage())),
+              icon: const Icon(Icons.home),
+              label: const Text('Back to Home'),
+            )
+          else
+            IconButton(
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const TravelHomePage())),
+              icon: const Icon(Icons.home),
+            ),
         ],
       ),
     );
@@ -487,8 +569,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final width = MediaQuery.of(context).size.width;
+    final isNarrow = width < 1100;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isNarrow ? 16 : 24),
       child: Form(
         key: _formKey,
         child: Column(
@@ -498,18 +582,70 @@ class _UserProfilePageState extends State<UserProfilePage> {
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                child: Text(_error!, style: TextStyle(color: Colors.red.shade800)),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Colors.red.shade800),
+                ),
               ),
             ],
             const SizedBox(height: 24),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _section(
-                    'Personal Information',
-                    [
+            if (isNarrow) ...[
+              _section('Personal Information', [
+                _field(_businessName, 'Business name', Icons.business),
+                _field(_username, 'User name *', Icons.person),
+                _field(_email, 'E-mail', Icons.email),
+                _field(_firstName, 'First name', Icons.person_outline),
+                _field(_lastName, 'Last name', Icons.person_outline),
+                _field(_phone, 'Phone Number', Icons.phone),
+                _field(_birthday, 'Birthday', Icons.calendar_today),
+                TextFormField(
+                  controller: _about,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'About Yourself',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 24),
+              _section('Location Information', [
+                _field(_address1, 'Address Line 1', Icons.location_on),
+                _field(_address2, 'Address Line 2', Icons.location_on),
+                _field(_city, 'City', Icons.location_city),
+                _field(_state, 'State', Icons.flag),
+                DropdownButtonFormField<String>(
+                  initialValue: _country,
+                  decoration: const InputDecoration(
+                    labelText: 'Country',
+                    border: OutlineInputBorder(),
+                  ),
+                  items:
+                      [
+                            'Philippines',
+                            'United States',
+                            'United Kingdom',
+                            'Japan',
+                            'France',
+                          ]
+                          .map(
+                            (c) => DropdownMenuItem(value: c, child: Text(c)),
+                          )
+                          .toList(),
+                  onChanged: (v) => setState(() => _country = v),
+                ),
+                _field(_zipCode, 'Zip Code', Icons.pin_drop),
+              ]),
+            ] else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _section('Personal Information', [
                       _field(_businessName, 'Business name', Icons.business),
                       _field(_username, 'User name *', Icons.person),
                       _field(_email, 'E-mail', Icons.email),
@@ -520,41 +656,59 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       TextFormField(
                         controller: _about,
                         maxLines: 4,
-                        decoration: const InputDecoration(labelText: 'About Yourself', border: OutlineInputBorder(), alignLabelWithHint: true),
+                        decoration: const InputDecoration(
+                          labelText: 'About Yourself',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
                       ),
-                    ],
+                    ]),
                   ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: _section(
-                    'Location Information',
-                    [
+                  const SizedBox(width: 24),
+                  Expanded(
+                    child: _section('Location Information', [
                       _field(_address1, 'Address Line 1', Icons.location_on),
                       _field(_address2, 'Address Line 2', Icons.location_on),
                       _field(_city, 'City', Icons.location_city),
                       _field(_state, 'State', Icons.flag),
                       DropdownButtonFormField<String>(
                         initialValue: _country,
-                        decoration: const InputDecoration(labelText: 'Country', border: OutlineInputBorder()),
-                        items: ['Philippines', 'United States', 'United Kingdom', 'Japan', 'France']
-                            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                            .toList(),
+                        decoration: const InputDecoration(
+                          labelText: 'Country',
+                          border: OutlineInputBorder(),
+                        ),
+                        items:
+                            [
+                                  'Philippines',
+                                  'United States',
+                                  'United Kingdom',
+                                  'Japan',
+                                  'France',
+                                ]
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(c),
+                                  ),
+                                )
+                                .toList(),
                         onChanged: (v) => setState(() => _country = v),
                       ),
                       _field(_zipCode, 'Zip Code', Icons.pin_drop),
-                    ],
+                    ]),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _save,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _primaryBlue,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 14,
+                ),
               ),
               child: const Text('Save Changes'),
             ),
@@ -582,9 +736,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _navBlue)),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: _navBlue,
+          ),
+        ),
         const SizedBox(height: 16),
-        ...children.map((c) => Padding(padding: const EdgeInsets.only(bottom: 16), child: c)),
+        ...children.map(
+          (c) => Padding(padding: const EdgeInsets.only(bottom: 16), child: c),
+        ),
       ],
     );
   }
@@ -623,10 +786,21 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _str(_profile?['businessName'] ?? _profile?['firstName'] ?? 'User'),
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                        _str(
+                          _profile?['businessName'] ??
+                              _profile?['firstName'] ??
+                              'User',
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
-                      Text(_str(_profile?['role'] ?? 'Member'), style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text(
+                        _str(_profile?['role'] ?? 'Member'),
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
@@ -647,7 +821,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
               Icons.people_outline,
               'Users',
               () => _openAdminSection(AdminSection.users),
-              isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.users,
+              isActive:
+                  _activeSection == _ProfileSection.admin &&
+                  _adminSection == AdminSection.users,
             ),
             _sideItem(
               Icons.tour,
@@ -660,49 +836,63 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 Icons.list_alt,
                 'All Tours',
                 () => _openAdminSection(AdminSection.toursAll),
-                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.toursAll,
+                isActive:
+                    _activeSection == _ProfileSection.admin &&
+                    _adminSection == AdminSection.toursAll,
                 isSubItem: true,
               ),
               _sideItem(
                 Icons.add_box_outlined,
                 'Add Tour',
                 () => _openAdminSection(AdminSection.toursAdd),
-                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.toursAdd,
+                isActive:
+                    _activeSection == _ProfileSection.admin &&
+                    _adminSection == AdminSection.toursAdd,
                 isSubItem: true,
               ),
               _sideItem(
                 Icons.category_outlined,
                 'Categories',
                 () => _openAdminSection(AdminSection.tourCategories),
-                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourCategories,
+                isActive:
+                    _activeSection == _ProfileSection.admin &&
+                    _adminSection == AdminSection.tourCategories,
                 isSubItem: true,
               ),
               _sideItem(
                 Icons.tune_outlined,
                 'Attributes',
                 () => _openAdminSection(AdminSection.tourAttributes),
-                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourAttributes,
+                isActive:
+                    _activeSection == _ProfileSection.admin &&
+                    _adminSection == AdminSection.tourAttributes,
                 isSubItem: true,
               ),
               _sideItem(
                 Icons.event_available_outlined,
                 'Availability',
                 () => _openAdminSection(AdminSection.tourAvailability),
-                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourAvailability,
+                isActive:
+                    _activeSection == _ProfileSection.admin &&
+                    _adminSection == AdminSection.tourAvailability,
                 isSubItem: true,
               ),
               _sideItem(
                 Icons.calendar_month_outlined,
                 'Booking Calendar',
                 () => _openAdminSection(AdminSection.tourBookingCalendar),
-                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourBookingCalendar,
+                isActive:
+                    _activeSection == _ProfileSection.admin &&
+                    _adminSection == AdminSection.tourBookingCalendar,
                 isSubItem: true,
               ),
               _sideItem(
                 Icons.restore_from_trash_outlined,
                 'Recovery',
                 () => _openAdminSection(AdminSection.tourRecovery),
-                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.tourRecovery,
+                isActive:
+                    _activeSection == _ProfileSection.admin &&
+                    _adminSection == AdminSection.tourRecovery,
                 isSubItem: true,
               ),
             ],
@@ -717,14 +907,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 Icons.list_alt,
                 'All Cars',
                 () => _openAdminSection(AdminSection.carsAll),
-                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.carsAll,
+                isActive:
+                    _activeSection == _ProfileSection.admin &&
+                    _adminSection == AdminSection.carsAll,
                 isSubItem: true,
               ),
               _sideItem(
                 Icons.add_box_outlined,
                 'Add new car',
                 () => _openAdminSection(AdminSection.carsAdd),
-                isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.carsAdd,
+                isActive:
+                    _activeSection == _ProfileSection.admin &&
+                    _adminSection == AdminSection.carsAdd,
                 isSubItem: true,
               ),
             ],
@@ -732,19 +926,25 @@ class _UserProfilePageState extends State<UserProfilePage> {
               Icons.chat_bubble_outline,
               'Chatbot Q&A',
               () => _openAdminSection(AdminSection.chatbot),
-              isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.chatbot,
+              isActive:
+                  _activeSection == _ProfileSection.admin &&
+                  _adminSection == AdminSection.chatbot,
             ),
             _sideItem(
               Icons.assessment_outlined,
               'Reports',
               () => _openAdminSection(AdminSection.reports),
-              isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.reports,
+              isActive:
+                  _activeSection == _ProfileSection.admin &&
+                  _adminSection == AdminSection.reports,
             ),
             _sideItem(
               Icons.settings_outlined,
               'Settings',
               () => _openAdminSection(AdminSection.settings),
-              isActive: _activeSection == _ProfileSection.admin && _adminSection == AdminSection.settings,
+              isActive:
+                  _activeSection == _ProfileSection.admin &&
+                  _adminSection == AdminSection.settings,
             ),
           ],
           const Spacer(),
@@ -759,7 +959,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 6),
       child: Text(
         label,
-        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -773,7 +978,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }) {
     return ListTile(
       leading: Icon(icon, color: Colors.white, size: isSubItem ? 18 : 20),
-      title: Text(label, style: TextStyle(color: Colors.white, fontSize: isSubItem ? 13 : 14)),
+      title: Text(
+        label,
+        style: TextStyle(color: Colors.white, fontSize: isSubItem ? 13 : 14),
+      ),
       tileColor: isActive ? Colors.white.withOpacity(0.12) : Colors.transparent,
       dense: isSubItem,
       contentPadding: EdgeInsets.only(left: isSubItem ? 40 : 16, right: 16),

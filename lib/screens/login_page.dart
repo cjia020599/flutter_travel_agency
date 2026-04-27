@@ -35,7 +35,10 @@ class _LoginDialogContentState extends State<LoginDialogContent> {
       _loading = true;
     });
     try {
-      await AuthApi.login(_emailController.text.trim(), _passwordController.text);
+      await AuthApi.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
       if (!mounted) return;
       Navigator.of(context).pop(context);
       widget.onSuccess?.call();
@@ -56,12 +59,14 @@ class _LoginDialogContentState extends State<LoginDialogContent> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isSmall = width < 600;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isSmall ? 16 : 24),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.8,
-          minWidth: 380,
+          maxWidth: isSmall ? width : width * 0.8,
+          minWidth: 0,
           maxHeight: 600,
         ),
         child: Form(
@@ -70,101 +75,124 @@ class _LoginDialogContentState extends State<LoginDialogContent> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-                  Icon(Icons.lock_outline, size: 56, color: _navBlue),
-                  const SizedBox(height: 24),
+              Icon(Icons.lock_outline, size: 56, color: _navBlue),
+              const SizedBox(height: 24),
+              Text(
+                'Sign In',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: _navBlue,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Enter your email and password',
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              if (_error != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: Colors.red.shade800, fontSize: 13),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  hintText: 'Enter your email',
+                  prefixIcon: Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Email is required' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  hintText: 'Enter your password',
+                  prefixIcon: Icon(Icons.lock_outline),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) =>
+                    v == null || v.isEmpty ? 'Password is required' : null,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _loading
+                    ? null
+                    : () {
+                        if (_formKey.currentState!.validate()) _submit();
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: _loading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Sign In'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
                   Text(
-                    'Sign In',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _navBlue),
-                    textAlign: TextAlign.center,
+                    "Don't have an account? ",
+                    style: TextStyle(color: Colors.grey[600]),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Enter your email and password',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-                  if (_error != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Text(_error!, style: TextStyle(color: Colors.red.shade800, fontSize: 13)),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      hintText: 'Enter your email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Email is required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      hintText: 'Enter your password',
-                      prefixIcon: Icon(Icons.lock_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) => v == null || v.isEmpty ? 'Password is required' : null,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _loading
-                        ? null
-                        : () {
-                            if (_formKey.currentState!.validate()) _submit();
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _primaryBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Sign In'),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text("Don't have an account? ", style: TextStyle(color: Colors.grey[600])),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.of(context).pop(context);
-                          // Open register dialog from parent context
-                          await showDialog(
-                            context: Navigator.of(context).context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Register'),
-                              content: const RegisterDialogContent(),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  child: const Text('Cancel'),
-                                ),
-                              ],
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop(context);
+                      // Open register dialog from parent context
+                      await showDialog(
+                        context: Navigator.of(context).context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Register'),
+                          content: const RegisterDialogContent(),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Cancel'),
                             ),
-                          );
-                        },
-                        child: const Text('Register'),
-                      ),
-                    ],
+                          ],
+                        ),
+                      );
+                    },
+                    child: const Text('Register'),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
-        );
+        ),
+      ),
+    );
   }
 }

@@ -49,6 +49,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
   RangeValues _priceRange = const RangeValues(50, 300);
 
   bool _isLoggedIn = false;
+  bool _authChecking = true;
   bool _isAdmin = false;
   String? _userDisplayName;
   List<dynamic> _tours = [];
@@ -103,10 +104,22 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
   Future<void> _loadData() async {
     final loggedIn = await ApiClient.instance.isLoggedIn;
+    if (!mounted) return;
+    setState(() {
+      _isLoggedIn = loggedIn;
+      _authChecking = false;
+      _userDisplayName = loggedIn ? (_userDisplayName ?? 'User') : null;
+    });
+
     Map<String, dynamic>? profile;
     if (loggedIn) {
       try {
         profile = await UserApi.getProfile();
+        if (mounted) {
+          setState(() {
+            _userDisplayName = _displayNameFromProfile(profile);
+          });
+        }
       } catch (_) {
         profile = null;
       }
@@ -117,12 +130,13 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final locations = await LookupsApi.locations();
     if (!mounted) return;
     setState(() {
-      _isLoggedIn = loggedIn;
       _isAdmin = isAdmin;
       _tours = tours;
       _cars = cars;
       _locations = locations;
-      _userDisplayName = _displayNameFromProfile(profile);
+      _userDisplayName = loggedIn
+          ? _displayNameFromProfile(profile)
+          : _userDisplayName;
     });
     await _loadRentals();
     await _syncNotifications();
@@ -139,16 +153,18 @@ class _TravelHomePageState extends State<TravelHomePage> {
       if (mounted) setState(() => _rentals = rentals);
     } catch (e) {
       if (mounted) setState(() => _rentals = []);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load rentals: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load rentals: $e')));
     }
   }
 
-  int get _unreadNotificationsCount => _notifications.where((n) => !n.isRead).length;
+  int get _unreadNotificationsCount =>
+      _notifications.where((n) => !n.isRead).length;
 
   String _displayNameFromProfile(Map<String, dynamic>? profile) {
-    final raw = profile?['firstName'] ??
+    final raw =
+        profile?['firstName'] ??
         profile?['name'] ??
         profile?['userName'] ??
         profile?['username'] ??
@@ -159,13 +175,14 @@ class _TravelHomePageState extends State<TravelHomePage> {
   }
 
   List<String> _locationOptions() {
-    final values = _locations
-        .map((loc) => (loc is Map ? loc['name'] : loc)?.toString() ?? '')
-        .where((name) => name.trim().isNotEmpty)
-        .map((name) => name.trim())
-        .toSet()
-        .toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final values =
+        _locations
+            .map((loc) => (loc is Map ? loc['name'] : loc)?.toString() ?? '')
+            .where((name) => name.trim().isNotEmpty)
+            .map((name) => name.trim())
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return values;
   }
 
@@ -261,7 +278,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
       setState(() => _notificationsLoading = true);
     }
     try {
-      final items = await NotificationsApi.list(page: 1, limit: 50, unreadOnly: false);
+      final items = await NotificationsApi.list(
+        page: 1,
+        limit: 50,
+        unreadOnly: false,
+      );
       items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (mounted) {
         setState(() {
@@ -282,11 +303,15 @@ class _TravelHomePageState extends State<TravelHomePage> {
   void _startNotificationsPolling() {
     _notificationsPollTimer?.cancel();
     if (!_isLoggedIn || !mounted) return;
-    _notificationsPollTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
+    _notificationsPollTimer = Timer.periodic(const Duration(seconds: 20), (
+      _,
+    ) async {
       if (!mounted || !_isLoggedIn) return;
       // If WS is quiet, poll to keep UI fresh.
       final lastWs = _lastWsMessageAt;
-      final tooQuiet = lastWs == null || DateTime.now().difference(lastWs) > const Duration(seconds: 30);
+      final tooQuiet =
+          lastWs == null ||
+          DateTime.now().difference(lastWs) > const Duration(seconds: 30);
       if (tooQuiet) {
         await _fetchNotifications();
       }
@@ -331,7 +356,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
           if (data is Map<String, dynamic>) {
             _handleIncomingNotification(NotificationItem.fromJson(data));
           } else if (data is Map) {
-            _handleIncomingNotification(NotificationItem.fromJson(Map<String, dynamic>.from(data)));
+            _handleIncomingNotification(
+              NotificationItem.fromJson(Map<String, dynamic>.from(data)),
+            );
           }
         } catch (_) {
           // ignore malformed messages
@@ -388,9 +415,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to mark read: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to mark read: $e')));
       }
     }
   }
@@ -437,7 +464,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
         );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
         return FadeTransition(
           opacity: curved,
           child: ScaleTransition(
@@ -449,9 +479,14 @@ class _TravelHomePageState extends State<TravelHomePage> {
     );
   }
 
-  String _ratingsKey(String moduleType, int moduleId) => '$moduleType:$moduleId';
+  String _ratingsKey(String moduleType, int moduleId) =>
+      '$moduleType:$moduleId';
 
-  void _updateAvgRatingFromList(String moduleType, int moduleId, List<dynamic> ratings) {
+  void _updateAvgRatingFromList(
+    String moduleType,
+    int moduleId,
+    List<dynamic> ratings,
+  ) {
     final key = _ratingsKey(moduleType, moduleId);
     if (ratings.isEmpty) {
       _avgRatingByKey.remove(key);
@@ -460,7 +495,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
     }
     final sum = ratings.fold<double>(
       0,
-      (a, r) => a + (double.tryParse((r is Map ? r['stars'] : null)?.toString() ?? '0') ?? 0),
+      (a, r) =>
+          a +
+          (double.tryParse((r is Map ? r['stars'] : null)?.toString() ?? '0') ??
+              0),
     );
     _avgRatingByKey[key] = sum / ratings.length;
     _ratingCountByKey[key] = ratings.length;
@@ -503,9 +541,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
     return reg;
   }
 
-  double? _avgRating(String moduleType, int id) => _avgRatingByKey[_ratingsKey(moduleType, id)];
+  double? _avgRating(String moduleType, int id) =>
+      _avgRatingByKey[_ratingsKey(moduleType, id)];
 
-  int? _ratingCount(String moduleType, int id) => _ratingCountByKey[_ratingsKey(moduleType, id)];
+  int? _ratingCount(String moduleType, int id) =>
+      _ratingCountByKey[_ratingsKey(moduleType, id)];
 
   int get _effectiveGuestCount {
     final raw = _filterGuestsController.text.trim();
@@ -570,10 +610,16 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
   bool _passesDateRange(Map<String, dynamic> item) {
     final from = _tryParseDateField(
-      item['availableFrom'] ?? item['available_from'] ?? item['startDate'] ?? item['start_date'],
+      item['availableFrom'] ??
+          item['available_from'] ??
+          item['startDate'] ??
+          item['start_date'],
     );
     final to = _tryParseDateField(
-      item['availableTo'] ?? item['available_to'] ?? item['endDate'] ?? item['end_date'],
+      item['availableTo'] ??
+          item['available_to'] ??
+          item['endDate'] ??
+          item['end_date'],
     );
     if (from == null && to == null) return true;
     final rs = _filterDateRange.start;
@@ -597,20 +643,28 @@ class _TravelHomePageState extends State<TravelHomePage> {
     return false;
   }
 
-  bool _passesPropertyFilters(Map<String, dynamic> item, {required bool isTour}) {
+  bool _passesPropertyFilters(
+    Map<String, dynamic> item, {
+    required bool isTour,
+  }) {
     if (isTour) {
       if (_tourAvailabilityFilters.isEmpty) return true;
       final a = item['availability']?.toString();
-      if (_tourAvailabilityFilters.contains('always') && a == 'always') return true;
-      if (_tourAvailabilityFilters.contains('fixed') && a == 'fixed') return true;
-      if (_tourAvailabilityFilters.contains('open_hours') && a == 'open_hours') return true;
+      if (_tourAvailabilityFilters.contains('always') && a == 'always')
+        return true;
+      if (_tourAvailabilityFilters.contains('fixed') && a == 'fixed')
+        return true;
+      if (_tourAvailabilityFilters.contains('open_hours') && a == 'open_hours')
+        return true;
       return false;
     }
 
     if (_carCapacityFilters.isEmpty) return true;
     final pass = int.tryParse(item['passenger']?.toString() ?? '') ?? 0;
-    if (_carCapacityFilters.contains('small') && pass >= 1 && pass <= 4) return true;
-    if (_carCapacityFilters.contains('medium') && pass >= 5 && pass <= 7) return true;
+    if (_carCapacityFilters.contains('small') && pass >= 1 && pass <= 4)
+      return true;
+    if (_carCapacityFilters.contains('medium') && pass >= 5 && pass <= 7)
+      return true;
     if (_carCapacityFilters.contains('large') && pass >= 8) return true;
     return false;
   }
@@ -618,7 +672,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
   List<dynamic> get _filteredTours {
     return _tours.where((raw) {
       final t = raw as Map<String, dynamic>;
-      final id = t['id'] is int ? t['id'] as int : int.tryParse(t['id']?.toString() ?? '') ?? 0;
+      final id = t['id'] is int
+          ? t['id'] as int
+          : int.tryParse(t['id']?.toString() ?? '') ?? 0;
       if (!_passesPrice(t)) return false;
       if (!_passesLocation(t, isTour: true)) return false;
       if (!_passesDateRange(t)) return false;
@@ -631,7 +687,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
   List<dynamic> get _filteredCars {
     return _cars.where((raw) {
       final c = raw as Map<String, dynamic>;
-      final id = c['id'] is int ? c['id'] as int : int.tryParse(c['id']?.toString() ?? '') ?? 0;
+      final id = c['id'] is int
+          ? c['id'] as int
+          : int.tryParse(c['id']?.toString() ?? '') ?? 0;
       if (!_passesPrice(c)) return false;
       if (!_passesLocation(c, isTour: false)) return false;
       if (!_passesGuests(c, isTour: false)) return false;
@@ -647,7 +705,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final today = DateTime(now.year, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _filterDateRange.start.isBefore(today) ? today : _filterDateRange.start,
+      initialDate: _filterDateRange.start.isBefore(today)
+          ? today
+          : _filterDateRange.start,
       firstDate: today,
       lastDate: today.add(const Duration(days: 730)),
     );
@@ -665,21 +725,30 @@ class _TravelHomePageState extends State<TravelHomePage> {
   Future<void> _pickFilterEndDate() async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final start = _filterDateRange.start.isBefore(today) ? today : _filterDateRange.start;
+    final start = _filterDateRange.start.isBefore(today)
+        ? today
+        : _filterDateRange.start;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _filterDateRange.end.isBefore(start) ? start.add(const Duration(days: 1)) : _filterDateRange.end,
+      initialDate: _filterDateRange.end.isBefore(start)
+          ? start.add(const Duration(days: 1))
+          : _filterDateRange.end,
       firstDate: start,
       lastDate: today.add(const Duration(days: 730)),
     );
     if (picked != null && mounted) {
-      setState(() => _filterDateRange = DateTimeRange(start: start, end: picked));
+      setState(
+        () => _filterDateRange = DateTimeRange(start: start, end: picked),
+      );
     }
   }
 
   Widget _filterStartDateField({
     double borderRadius = 8,
-    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(
+      horizontal: 12,
+      vertical: 14,
+    ),
     String label = 'Start date',
   }) {
     final fmt = DateFormat('MMM d, yyyy');
@@ -690,7 +759,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
         decoration: InputDecoration(
           labelText: label,
           suffixIcon: const Icon(Icons.calendar_today, size: 18),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(borderRadius),
+          ),
           contentPadding: contentPadding,
         ),
         child: Text(
@@ -705,7 +776,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
   Widget _filterEndDateField({
     double borderRadius = 8,
-    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(
+      horizontal: 12,
+      vertical: 14,
+    ),
     String label = 'End date',
   }) {
     final fmt = DateFormat('MMM d, yyyy');
@@ -716,7 +790,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
         decoration: InputDecoration(
           labelText: label,
           suffixIcon: const Icon(Icons.calendar_today, size: 18),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(borderRadius),
+          ),
           contentPadding: contentPadding,
         ),
         child: Text(
@@ -732,7 +808,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
   Widget _filterGuestsTextField({
     double? width,
     double borderRadius = 8,
-    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    EdgeInsetsGeometry contentPadding = const EdgeInsets.symmetric(
+      horizontal: 12,
+      vertical: 14,
+    ),
     String? labelText,
   }) {
     return SizedBox(
@@ -742,7 +821,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
         decoration: InputDecoration(
           labelText: labelText ?? 'Guests',
           hintText: 'Guests',
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(borderRadius)),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(borderRadius),
+          ),
           contentPadding: contentPadding,
         ),
         keyboardType: TextInputType.number,
@@ -779,8 +860,13 @@ class _TravelHomePageState extends State<TravelHomePage> {
       });
     }
     try {
-      final ratings = await RatingsApi.list(moduleType: moduleType, moduleId: moduleId);
-      print('DEBUG _loadRatingsFor($moduleType, $moduleId): Got ${ratings.length} ratings');
+      final ratings = await RatingsApi.list(
+        moduleType: moduleType,
+        moduleId: moduleId,
+      );
+      print(
+        'DEBUG _loadRatingsFor($moduleType, $moduleId): Got ${ratings.length} ratings',
+      );
       if (mounted) {
         setState(() {
           _ratingsByKey[key] = ratings;
@@ -929,18 +1015,20 @@ class _TravelHomePageState extends State<TravelHomePage> {
       final loadedRatings = await _loadRatingsFor(moduleType, moduleId);
       print('DEBUG: _loadRatingsFor returned ${loadedRatings.length} ratings');
       print('DEBUG: Loaded ratings: $loadedRatings');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(existing == null ? 'Rating added' : 'Rating updated')),
+          SnackBar(
+            content: Text(existing == null ? 'Rating added' : 'Rating updated'),
+          ),
         );
       }
     } catch (e) {
       print('DEBUG: Error in _upsertRating: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Rating save failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Rating save failed: $e')));
       }
     }
   }
@@ -961,7 +1049,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
         title: const Text('Delete Rating'),
         content: const Text('Are you sure you want to delete this rating?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -977,15 +1068,15 @@ class _TravelHomePageState extends State<TravelHomePage> {
       await RatingsApi.delete(ratingId);
       await _loadRatingsFor(moduleType, moduleId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rating deleted')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Rating deleted')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
       }
     }
   }
@@ -1000,17 +1091,24 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final avg = ratings.isEmpty
         ? 0.0
         : ratings
-                .map((r) => double.tryParse((r['stars'] ?? 0).toString()) ?? 0.0)
-                .reduce((a, b) => a + b) /
-            ratings.length;
-    final currentUserId = int.tryParse((_clientCurrentUserIdCached ?? '').toString());
+                  .map(
+                    (r) => double.tryParse((r['stars'] ?? 0).toString()) ?? 0.0,
+                  )
+                  .reduce((a, b) => a + b) /
+              ratings.length;
+    final currentUserId = int.tryParse(
+      (_clientCurrentUserIdCached ?? '').toString(),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Text('Ratings', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+            Text(
+              'Ratings',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+            ),
             const SizedBox(width: 8),
             if (ratings.isNotEmpty)
               Text(
@@ -1019,7 +1117,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
               ),
             const Spacer(),
             ElevatedButton.icon(
-              onPressed: () => _upsertRating(moduleType: moduleType, moduleId: moduleId),
+              onPressed: () =>
+                  _upsertRating(moduleType: moduleType, moduleId: moduleId),
               icon: const Icon(Icons.rate_review, size: 18),
               label: const Text('Add'),
             ),
@@ -1038,15 +1137,20 @@ class _TravelHomePageState extends State<TravelHomePage> {
             final ratingId = int.tryParse((r['id'] ?? '').toString());
             final stars = (r['stars'] ?? '').toString();
             final comment = (r['comment'] ?? '').toString();
-            final userName = (r['username'] ?? r['userName'] ?? (
-                    (r['user'] is Map && r['user']['name'] != null)
-                        ? r['user']['name']
-                        : ((r['user'] is Map && r['user']['email'] != null)
-                            ? r['user']['email']
-                            : 'User')))
-                .toString();
+            final userName =
+                (r['username'] ??
+                        r['userName'] ??
+                        ((r['user'] is Map && r['user']['name'] != null)
+                            ? r['user']['name']
+                            : ((r['user'] is Map && r['user']['email'] != null)
+                                  ? r['user']['email']
+                                  : 'User')))
+                    .toString();
             final ownerId = _extractUserId(r);
-            final isOwner = currentUserId != null && ownerId != null && ownerId == currentUserId;
+            final isOwner =
+                currentUserId != null &&
+                ownerId != null &&
+                ownerId == currentUserId;
 
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
@@ -1066,7 +1170,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                            icon: const Icon(
+                              Icons.delete,
+                              size: 20,
+                              color: Colors.red,
+                            ),
                             onPressed: () => _deleteRating(
                               moduleType: moduleType,
                               moduleId: moduleId,
@@ -1107,9 +1215,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
   Future<void> _showCarDetailsDialog(Map<String, dynamic> car) async {
     final carId = _itemId(car);
     if (carId == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid car ID')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invalid car ID')));
       return;
     }
 
@@ -1121,10 +1229,20 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final gear = car['gearShift']?.toString() ?? '-';
     final carDesc = car['description']?.toString().trim();
 
-    final startController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 1))));
-    final endController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 5))));
+    final startController = TextEditingController(
+      text: DateFormat(
+        'MMM dd, yyyy',
+      ).format(DateTime.now().add(const Duration(days: 1))),
+    );
+    final endController = TextEditingController(
+      text: DateFormat(
+        'MMM dd, yyyy',
+      ).format(DateTime.now().add(const Duration(days: 5))),
+    );
     final buyerNameController = TextEditingController();
-    final buyerEmailController = TextEditingController(text: 'test@example.com');
+    final buyerEmailController = TextEditingController(
+      text: 'test@example.com',
+    );
     final buyerPhoneController = TextEditingController(text: '+1234567890');
 
     await _loadRatingsFor('car', carId);
@@ -1154,7 +1272,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       errorBuilder: (_, _, _) => Container(
                         height: 180,
                         color: Colors.grey[300],
-                        child: const Icon(Icons.directions_car, size: 80, color: Colors.grey),
+                        child: const Icon(
+                          Icons.directions_car,
+                          size: 80,
+                          color: Colors.grey,
+                        ),
                       ),
                     ),
                   ),
@@ -1162,7 +1284,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   // Price
                   Text(
                     priceStr,
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _primaryBlue),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: _primaryBlue,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   // Details
@@ -1177,7 +1303,13 @@ class _TravelHomePageState extends State<TravelHomePage> {
                           _infoRow(Icons.speed, 'Gear Shift', gear),
                           if (carDesc != null && carDesc.isNotEmpty) ...[
                             const Divider(height: 24),
-                            Text(carDesc, style: TextStyle(color: Colors.grey[700], fontSize: 14)),
+                            Text(
+                              carDesc,
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 14,
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -1185,7 +1317,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   ),
                   const SizedBox(height: 16),
                   // Date Pickers (compact style)
-                  Text('Rental Dates:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  Text(
+                    'Rental Dates:',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -1200,18 +1335,31 @@ class _TravelHomePageState extends State<TravelHomePage> {
                               onPressed: () async {
                                 final picked = await showDatePicker(
                                   context: context,
-                                  initialDate: DateTime.now().add(const Duration(days: 1)),
-                                  firstDate: DateTime.now().add(const Duration(days: 1)),
-                                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                                  initialDate: DateTime.now().add(
+                                    const Duration(days: 1),
+                                  ),
+                                  firstDate: DateTime.now().add(
+                                    const Duration(days: 1),
+                                  ),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 365),
+                                  ),
                                 );
                                 if (picked != null) {
-                                  startController.text = DateFormat('MMM dd, yyyy').format(picked);
+                                  startController.text = DateFormat(
+                                    'MMM dd, yyyy',
+                                  ).format(picked);
                                   setDialogState(() {});
                                 }
                               },
                             ),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
                           ),
                           readOnly: true,
                         ),
@@ -1228,18 +1376,31 @@ class _TravelHomePageState extends State<TravelHomePage> {
                               onPressed: () async {
                                 final picked = await showDatePicker(
                                   context: context,
-                                  initialDate: DateTime.now().add(const Duration(days: 5)),
-                                  firstDate: DateTime.now().add(const Duration(days: 1)),
-                                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                                  initialDate: DateTime.now().add(
+                                    const Duration(days: 5),
+                                  ),
+                                  firstDate: DateTime.now().add(
+                                    const Duration(days: 1),
+                                  ),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 365),
+                                  ),
                                 );
                                 if (picked != null) {
-                                  endController.text = DateFormat('MMM dd, yyyy').format(picked);
+                                  endController.text = DateFormat(
+                                    'MMM dd, yyyy',
+                                  ).format(picked);
                                   setDialogState(() {});
                                 }
                               },
                             ),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
                           ),
                           readOnly: true,
                         ),
@@ -1261,9 +1422,13 @@ class _TravelHomePageState extends State<TravelHomePage> {
             ElevatedButton(
               onPressed: () async {
                 try {
-                  final startDate = DateFormat('MMM dd, yyyy').parse(startController.text);
-                  final endDate = DateFormat('MMM dd, yyyy').parse(endController.text);
-                  
+                  final startDate = DateFormat(
+                    'MMM dd, yyyy',
+                  ).parse(startController.text);
+                  final endDate = DateFormat(
+                    'MMM dd, yyyy',
+                  ).parse(endController.text);
+
                   final CreateRentalRequest request = CreateRentalRequest(
                     carId: carId,
                     startDate: startDate,
@@ -1275,7 +1440,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
                   final success = await CarRentalsApi.rentCar(request);
                   Navigator.pop(context);
-                  
+
                   if (success) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -1290,9 +1455,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
                     );
                   }
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -1309,9 +1474,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
   Future<void> _showMyRentals() async {
     if (_rentals.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No rentals found')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No rentals found')));
       return;
     }
 
@@ -1335,11 +1500,14 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       width: 60,
                       height: 60,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const Icon(Icons.directions_car, size: 60),
+                      errorBuilder: (_, _, _) =>
+                          const Icon(Icons.directions_car, size: 60),
                     ),
                   ),
                   title: Text(rental.carTitle),
-                  subtitle: Text('${DateFormat('MMM dd, yyyy').format(rental.startDate)} - ${DateFormat('MMM dd, yyyy').format(rental.endDate)}'),
+                  subtitle: Text(
+                    '${DateFormat('MMM dd, yyyy').format(rental.startDate)} - ${DateFormat('MMM dd, yyyy').format(rental.endDate)}',
+                  ),
                   trailing: rental.status != 'cancelled'
                       ? IconButton(
                           icon: const Icon(Icons.cancel, color: Colors.red),
@@ -1348,33 +1516,46 @@ class _TravelHomePageState extends State<TravelHomePage> {
                               context: context,
                               builder: (context) => AlertDialog(
                                 title: const Text('Confirm Cancel'),
-                                content: const Text('Are you sure you want to cancel this car rental booking? This action cannot be undone.'),
+                                content: const Text(
+                                  'Are you sure you want to cancel this car rental booking? This action cannot be undone.',
+                                ),
                                 actions: [
                                   TextButton(
-                                    onPressed: () => Navigator.pop(context, false),
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
                                     child: const Text('Cancel'),
                                   ),
                                   TextButton(
-                                    onPressed: () => Navigator.pop(context, true),
-                                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                    ),
                                     child: const Text('Cancel Booking'),
                                   ),
                                 ],
                               ),
                             );
                             if (confirmed == true) {
-                              final success = await CarRentalsApi.cancelRental(rental.id);
+                              final success = await CarRentalsApi.cancelRental(
+                                rental.id,
+                              );
                               if (success && mounted) {
                                 Navigator.pop(context);
                                 await _loadRentals();
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Rental cancelled')),
+                                  const SnackBar(
+                                    content: Text('Rental cancelled'),
+                                  ),
                                 );
                               }
                             }
                           },
                         )
-                      : const Text('Cancelled', style: TextStyle(color: Colors.grey)),
+                      : const Text(
+                          'Cancelled',
+                          style: TextStyle(color: Colors.grey),
+                        ),
                 ),
               );
             },
@@ -1393,9 +1574,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
   Future<void> _showTourDetailsDialog(Map<String, dynamic> tour) async {
     final tourId = _itemId(tour);
     if (tourId == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid tour ID')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invalid tour ID')));
       return;
     }
 
@@ -1405,10 +1586,20 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final imageUrl = _itemImageUrl(tour);
     final tourDesc = tour['description']?.toString().trim();
 
-    final startController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 1))));
-    final endController = TextEditingController(text: DateFormat('MMM dd, yyyy').format(DateTime.now().add(const Duration(days: 5))));
+    final startController = TextEditingController(
+      text: DateFormat(
+        'MMM dd, yyyy',
+      ).format(DateTime.now().add(const Duration(days: 1))),
+    );
+    final endController = TextEditingController(
+      text: DateFormat(
+        'MMM dd, yyyy',
+      ).format(DateTime.now().add(const Duration(days: 5))),
+    );
     final buyerNameController = TextEditingController(text: 'John Doe');
-    final buyerEmailController = TextEditingController(text: 'test@example.com');
+    final buyerEmailController = TextEditingController(
+      text: 'test@example.com',
+    );
     final buyerPhoneController = TextEditingController(text: '+1234567890');
 
     await _loadRatingsFor('tour', tourId);
@@ -1437,21 +1628,35 @@ class _TravelHomePageState extends State<TravelHomePage> {
                       errorBuilder: (_, _, _) => Container(
                         height: 180,
                         color: Colors.grey[300],
-                        child: const Icon(Icons.travel_explore, size: 80, color: Colors.grey),
+                        child: const Icon(
+                          Icons.travel_explore,
+                          size: 80,
+                          color: Colors.grey,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     priceStr,
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _primaryBlue),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: _primaryBlue,
+                    ),
                   ),
                   if (tourDesc != null && tourDesc.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text(tourDesc, style: TextStyle(color: Colors.grey[700], fontSize: 14)),
+                    Text(
+                      tourDesc,
+                      style: TextStyle(color: Colors.grey[700], fontSize: 14),
+                    ),
                   ],
                   const SizedBox(height: 16),
-                  Text('Tour Dates:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  Text(
+                    'Tour Dates:',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -1465,14 +1670,25 @@ class _TravelHomePageState extends State<TravelHomePage> {
                               onPressed: () async {
                                 final picked = await showDatePicker(
                                   context: context,
-                                  initialDate: DateTime.now().add(const Duration(days: 1)),
-                                  firstDate: DateTime.now().add(const Duration(days: 1)),
-                                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                                  initialDate: DateTime.now().add(
+                                    const Duration(days: 1),
+                                  ),
+                                  firstDate: DateTime.now().add(
+                                    const Duration(days: 1),
+                                  ),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 365),
+                                  ),
                                 );
-                                if (picked != null) startController.text = DateFormat('MMM dd, yyyy').format(picked);
+                                if (picked != null)
+                                  startController.text = DateFormat(
+                                    'MMM dd, yyyy',
+                                  ).format(picked);
                               },
                             ),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                           readOnly: true,
                         ),
@@ -1488,14 +1704,25 @@ class _TravelHomePageState extends State<TravelHomePage> {
                               onPressed: () async {
                                 final picked = await showDatePicker(
                                   context: context,
-                                  initialDate: DateTime.now().add(const Duration(days: 5)),
-                                  firstDate: DateTime.now().add(const Duration(days: 1)),
-                                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                                  initialDate: DateTime.now().add(
+                                    const Duration(days: 5),
+                                  ),
+                                  firstDate: DateTime.now().add(
+                                    const Duration(days: 1),
+                                  ),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 365),
+                                  ),
                                 );
-                                if (picked != null) endController.text = DateFormat('MMM dd, yyyy').format(picked);
+                                if (picked != null)
+                                  endController.text = DateFormat(
+                                    'MMM dd, yyyy',
+                                  ).format(picked);
                               },
                             ),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                           readOnly: true,
                         ),
@@ -1505,30 +1732,39 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   const SizedBox(height: 16),
                   _buildRatingsSection(moduleType: 'tour', moduleId: tourId),
                   const SizedBox(height: 24),
-                  Text('Buyer Information:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  Text(
+                    'Buyer Information:',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: buyerNameController,
                     decoration: InputDecoration(
                       labelText: 'Full Name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: buyerEmailController,
-                    decoration:  InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Email',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 12),
-    TextField(
+                  TextField(
                     controller: buyerPhoneController,
                     decoration: InputDecoration(
                       labelText: 'Phone',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     keyboardType: TextInputType.phone,
                   ),
@@ -1544,8 +1780,12 @@ class _TravelHomePageState extends State<TravelHomePage> {
             ElevatedButton(
               onPressed: () async {
                 try {
-                  final startDate = DateFormat('MMM dd, yyyy').parse(startController.text);
-                  final endDate = DateFormat('MMM dd, yyyy').parse(endController.text);
+                  final startDate = DateFormat(
+                    'MMM dd, yyyy',
+                  ).parse(startController.text);
+                  final endDate = DateFormat(
+                    'MMM dd, yyyy',
+                  ).parse(endController.text);
                   final request = CreateTourBookingRequest(
                     tourId: tourId,
                     startDate: startDate,
@@ -1558,7 +1798,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   Navigator.pop(context);
                   if (success) {
                     ScaffoldMessenger.of(context).showSnackBar(
-SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duration: Duration(seconds: 2)),
+                      SnackBar(
+                        content: Text('$title booked!'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 2),
+                      ),
                     );
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -1566,12 +1810,15 @@ SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duratio
                     );
                   }
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: _primaryBlue, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryBlue,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Book Now'),
             ),
           ],
@@ -1585,11 +1832,7 @@ SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duratio
     return Scaffold(
       backgroundColor: Colors.white,
       body: CustomScrollView(
-        slivers: [
-          _buildTopBar(),
-          _buildNavBar(),
-          ..._buildPageSlivers(),
-        ],
+        slivers: [_buildTopBar(), _buildNavBar(), ..._buildPageSlivers()],
       ),
       floatingActionButton: null,
     );
@@ -1601,65 +1844,124 @@ SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duratio
         return [
           SliverToBoxAdapter(child: _buildHero()),
           SliverToBoxAdapter(child: _buildCategories()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Featured', 'Hand-picked tours and cars.')),
+          SliverToBoxAdapter(
+            child: _buildSectionTitle(
+              'Featured',
+              'Hand-picked tours and cars.',
+            ),
+          ),
           SliverToBoxAdapter(child: _buildFeaturedPackages()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Our Tour Packages', 'Browse available tours.')),
+          SliverToBoxAdapter(
+            child: _buildSectionTitle(
+              'Our Tour Packages',
+              'Browse available tours.',
+            ),
+          ),
           SliverToBoxAdapter(child: _buildTourPackages()),
-          SliverToBoxAdapter(child: _buildSectionTitle('Our Cars', 'Browse available cars.')),
+          SliverToBoxAdapter(
+            child: _buildSectionTitle('Our Cars', 'Browse available cars.'),
+          ),
           SliverToBoxAdapter(child: _buildCarPackages()),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.tours:
         return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for tour', itemLabel: 'tours', items: _filteredTours, isTour: true)),
+          SliverToBoxAdapter(
+            child: _buildSearchListPage(
+              title: 'Search for tour',
+              itemLabel: 'tours',
+              items: _filteredTours,
+              isTour: true,
+            ),
+          ),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
       case _NavItem.cars:
         return [
-          SliverToBoxAdapter(child: _buildSearchListPage(title: 'Search for car', itemLabel: 'cars', items: _filteredCars, isTour: false)),
+          SliverToBoxAdapter(
+            child: _buildSearchListPage(
+              title: 'Search for car',
+              itemLabel: 'cars',
+              items: _filteredCars,
+              isTour: false,
+            ),
+          ),
           SliverToBoxAdapter(child: _buildFooter()),
         ];
     }
   }
 
   Widget _buildTopBar() {
+    final isMobile = MediaQuery.of(context).size.width < 700;
     return SliverToBoxAdapter(
       child: Container(
         color: _topBarGrey,
-        padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 16 : 48,
+          vertical: 10,
+        ),
         child: LayoutBuilder(
           builder: (context, _) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            return Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              runSpacing: 4,
               children: [
-                Row(
+                Wrap(
+                  spacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (_isLoggedIn) ...[
+                    if (_authChecking) ...[
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ] else if (_isLoggedIn) ...[
                       _buildNotificationBell(),
-                      const SizedBox(width: 6),
                       TextButton(
                         onPressed: () async {
-                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UserProfilePage()));
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const UserProfilePage(),
+                            ),
+                          );
                           _loadData();
                         },
                         child: Text(
                           'Hi ${_userDisplayName ?? 'User'}',
-                          style: TextStyle(color: Colors.grey[300], fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.grey[300],
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                       TextButton(
                         onPressed: () async {
                           await _confirmAndLogout();
                         },
-                        child: Text('Logout', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                        child: Text(
+                          'Logout',
+                          style: TextStyle(
+                            color: Colors.grey[300],
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
                     ] else ...[
                       TextButton(
                         onPressed: () async {
-showDialog(
+                          showDialog(
                             context: context,
                             builder: (context) => AlertDialog(
-                              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                              insetPadding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 40,
+                              ),
                               title: const Text('Sign In'),
                               content: LoginDialogContent(onSuccess: _loadData),
                               actions: [
@@ -1671,14 +1973,23 @@ showDialog(
                             ),
                           );
                         },
-                        child: Text('Sign In', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                        child: Text(
+                          'Sign In',
+                          style: TextStyle(
+                            color: Colors.grey[300],
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
                       TextButton(
                         onPressed: () async {
-await showDialog(
+                          await showDialog(
                             context: context,
                             builder: (context) => AlertDialog(
-                              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                              insetPadding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 40,
+                              ),
                               title: const Text('Register'),
                               content: const RegisterDialogContent(),
                               actions: [
@@ -1691,7 +2002,13 @@ await showDialog(
                           );
                           _loadData();
                         },
-                        child: Text('Register', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                        child: Text(
+                          'Register',
+                          style: TextStyle(
+                            color: Colors.grey[300],
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
                     ],
                   ],
@@ -1710,7 +2027,9 @@ await showDialog(
       dropdownColor: _topBarGrey,
       underline: const SizedBox(),
       style: TextStyle(color: Colors.grey[300], fontSize: 13),
-      items: options.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+      items: options
+          .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+          .toList(),
       onChanged: (_) {},
     );
   }
@@ -1737,7 +2056,11 @@ await showDialog(
               ),
               child: Text(
                 unread > 99 ? '99+' : unread.toString(),
-                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -1766,23 +2089,38 @@ await showDialog(
                 clipBehavior: Clip.none,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     decoration: const BoxDecoration(color: _navBlue),
                     child: Row(
                       children: [
-                        const Icon(Icons.notifications, color: Colors.white, size: 18),
+                        const Icon(
+                          Icons.notifications,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         const Expanded(
                           child: Text(
                             'Notifications',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                         if (_notificationsLoading)
                           const SizedBox(
                             width: 14,
                             height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
                           ),
                         IconButton(
                           onPressed: onClose,
@@ -1808,41 +2146,68 @@ await showDialog(
               ),
               Expanded(
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(panelRadius)),
+                  borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(panelRadius),
+                  ),
                   child: Container(
                     color: const Color(0xFFF8FAFC),
                     child: _notifications.isEmpty
-                        ? Center(child: Text(_notificationsLoading ? 'Loading...' : 'No notifications yet.'))
+                        ? Center(
+                            child: Text(
+                              _notificationsLoading
+                                  ? 'Loading...'
+                                  : 'No notifications yet.',
+                            ),
+                          )
                         : ListView.separated(
                             itemCount: _notifications.length,
-                            separatorBuilder: (_, _) => const Divider(height: 1),
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final n = _notifications[index];
-                              final time = DateFormat('MMM dd, yyyy  HH:mm').format(n.createdAt.toLocal());
+                              final time = DateFormat(
+                                'MMM dd, yyyy  HH:mm',
+                              ).format(n.createdAt.toLocal());
                               return Material(
-                                color: n.isRead ? Colors.transparent : const Color(0xFFFFF7ED),
+                                color: n.isRead
+                                    ? Colors.transparent
+                                    : const Color(0xFFFFF7ED),
                                 child: ListTile(
                                   leading: Icon(
-                                    n.isRead ? Icons.notifications_none : Icons.notifications_active,
+                                    n.isRead
+                                        ? Icons.notifications_none
+                                        : Icons.notifications_active,
                                     color: _navBlue,
                                   ),
                                   title: Text(
                                     n.title,
-                                    style: TextStyle(fontWeight: n.isRead ? FontWeight.w500 : FontWeight.w700),
+                                    style: TextStyle(
+                                      fontWeight: n.isRead
+                                          ? FontWeight.w500
+                                          : FontWeight.w700,
+                                    ),
                                   ),
                                   subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const SizedBox(height: 4),
                                       Text(n.message),
                                       const SizedBox(height: 6),
-                                      Text(time, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                                      Text(
+                                        time,
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 12,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                   trailing: n.isRead
                                       ? null
                                       : TextButton(
-                                          onPressed: () => _markNotificationRead(n),
+                                          onPressed: () =>
+                                              _markNotificationRead(n),
                                           child: const Text('Mark read'),
                                         ),
                                   onTap: () => _markNotificationRead(n),
@@ -1861,57 +2226,113 @@ await showDialog(
   }
 
   Widget _buildNavBar() {
+    final isMobile = MediaQuery.of(context).size.width < 700;
     return SliverToBoxAdapter(
       child: Container(
         color: _navBlue,
-        padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 14),
-        child: Row(
-          children: [
-            _buildLogo(),
-            const SizedBox(width: 48),
-            _NavLink(
-              label: 'Home',
-              isActive: _current == _NavItem.home,
-              onTap: () => setState(() => _current = _NavItem.home),
-            ),
-            _NavLink(
-              label: 'Tours',
-              isActive: _current == _NavItem.tours,
-              onTap: () => setState(() {
-                _current = _NavItem.tours;
-                _searchTabIndex = 0;
-              }),
-            ),
-            _NavLink(
-              label: 'Cars',
-              isActive: _current == _NavItem.cars,
-              onTap: () => setState(() {
-                _current = _NavItem.cars;
-                _searchTabIndex = 1;
-              }),
-            ),
-            const Spacer(),
-            // IconButton(icon: const Icon(Icons.search, color: Colors.white), onPressed: () {}),
-          ],
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 48,
+          vertical: isMobile ? 10 : 14,
+        ),
+        child: isMobile
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  _buildLogo(sizeOverride: 56),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _NavLink(
+                            label: 'Home',
+                            isActive: _current == _NavItem.home,
+                            onTap: () =>
+                                setState(() => _current = _NavItem.home),
+                            horizontalPadding: 0,
+                          ),
+                          _NavLink(
+                            label: 'Tours',
+                            isActive: _current == _NavItem.tours,
+                            onTap: () => setState(() {
+                              _current = _NavItem.tours;
+                              _searchTabIndex = 0;
+                            }),
+                            horizontalPadding: 0,
+                          ),
+                          _NavLink(
+                            label: 'Cars',
+                            isActive: _current == _NavItem.cars,
+                            onTap: () => setState(() {
+                              _current = _NavItem.cars;
+                              _searchTabIndex = 1;
+                            }),
+                            horizontalPadding: 0,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  _buildLogo(),
+                  const SizedBox(width: 48),
+                  _NavLink(
+                    label: 'Home',
+                    isActive: _current == _NavItem.home,
+                    onTap: () => setState(() => _current = _NavItem.home),
+                  ),
+                  _NavLink(
+                    label: 'Tours',
+                    isActive: _current == _NavItem.tours,
+                    onTap: () => setState(() {
+                      _current = _NavItem.tours;
+                      _searchTabIndex = 0;
+                    }),
+                  ),
+                  _NavLink(
+                    label: 'Cars',
+                    isActive: _current == _NavItem.cars,
+                    onTap: () => setState(() {
+                      _current = _NavItem.cars;
+                      _searchTabIndex = 1;
+                    }),
+                  ),
+                  const Spacer(),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildLogo({double? sizeOverride}) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    final size = sizeOverride ?? (isMobile ? 72.0 : 125.0);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Center(
+        child: ClipOval(
+          child: Image.network(
+            'https://res.cloudinary.com/das4hjjvf/image/upload/v1773481328/logo_transparent_bg_dfoqlw.webp',
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => Container(color: Colors.grey[400]),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildLogo() {
-    return SizedBox(
-      width: 125,
-      height: 125,
-      child:  Center(child: ClipOval(child: Image.network('https://res.cloudinary.com/das4hjjvf/image/upload/v1773481328/logo_transparent_bg_dfoqlw.webp', fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: Colors.grey[400]))),
-                  ),
-    );
-  }
-
   Widget _buildHero() {
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 700;
     return Stack(
       children: [
         Container(
-          height: 520,
+          height: isMobile ? 480 : 520,
           width: double.infinity,
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -1930,19 +2351,44 @@ await showDialog(
           ),
         ),
         Container(
-          height: 520,
+          height: isMobile ? 480 : 520,
           width: double.infinity,
-          decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black54])),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Colors.black54],
+            ),
+          ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(48, 100, 48, 0),
+          padding: EdgeInsets.fromLTRB(
+            isMobile ? 16 : 48,
+            isMobile ? 52 : 100,
+            isMobile ? 16 : 48,
+            0,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Hi there!', style: TextStyle(color: Colors.white, fontSize: 42, fontWeight: FontWeight.w300)),
+              Text(
+                'Hi there!',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isMobile ? 30 : 42,
+                  fontWeight: FontWeight.w300,
+                ),
+              ),
               const SizedBox(height: 8),
-              const Text("Let's explore the world together!", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 75),
+              Text(
+                "Let's explore the world together!",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isMobile ? 20 : 28,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: isMobile ? 28 : 75),
               _buildSearchWidget(),
               const SizedBox(height: 16),
             ],
@@ -1962,7 +2408,11 @@ await showDialog(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: const [
-              BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, 4)),
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
             ],
           ),
           child: Column(
@@ -1974,7 +2424,10 @@ await showDialog(
                   return GestureDetector(
                     onTap: () => setState(() => _searchTabIndex = i),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
                       margin: const EdgeInsets.only(right: 4),
                       decoration: BoxDecoration(
                         color: isActive ? _primaryBlue : Colors.transparent,
@@ -1984,7 +2437,9 @@ await showDialog(
                         _searchTabs[i],
                         style: TextStyle(
                           color: isActive ? Colors.white : Colors.grey[700],
-                          fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                          fontWeight: isActive
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                         ),
                       ),
                     ),
@@ -2021,8 +2476,13 @@ await showDialog(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primaryBlue,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ],
@@ -2054,8 +2514,13 @@ await showDialog(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _primaryBlue,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
                       ],
@@ -2070,14 +2535,30 @@ await showDialog(
   }
 
   Widget _buildSectionTitle(String title, String subtitle) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(48, 20, 48, 24),
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? 16 : 48,
+        20,
+        isMobile ? 16 : 48,
+        24,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _navBlue)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isMobile ? 22 : 28,
+              fontWeight: FontWeight.bold,
+              color: _navBlue,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text(subtitle, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+          Text(
+            subtitle,
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          ),
         ],
       ),
     );
@@ -2108,14 +2589,31 @@ await showDialog(
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        Text(desc, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                        Text(
+                          desc,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         Icon(icon, color: Colors.white54, size: 40),
                       ],
                     ),
-                    const Positioned(bottom: 0, right: 0, child: Icon(Icons.arrow_forward, color: Colors.white54)),
+                    const Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Icon(Icons.arrow_forward, color: Colors.white54),
+                    ),
                   ],
                 ),
               ),
@@ -2159,7 +2657,10 @@ await showDialog(
 
   Widget _buildTrendingPlaces() {
     if (_tours.isEmpty) {
-      return const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()));
+      return const Padding(
+        padding: EdgeInsets.all(48),
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
     return SizedBox(
       height: 320,
@@ -2176,7 +2677,17 @@ await showDialog(
           return Container(
             width: 280,
             margin: const EdgeInsets.only(right: 20),
-            decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0, 2))]),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2185,18 +2696,60 @@ await showDialog(
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(12)), child: Image.network('https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400', fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: Colors.grey[400]))),
-                      if (featured) Positioned(top: 12, left: 12, child: _tag('FEATURED', _saleRed)),
-                      Positioned(bottom: 12, left: 12, right: 12, child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, shadows: [Shadow(color: Colors.black54, blurRadius: 4)]))),
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(12),
+                        ),
+                        child: Image.network(
+                          'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400',
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) =>
+                              Container(color: Colors.grey[400]),
+                        ),
+                      ),
+                      if (featured)
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          child: _tag('FEATURED', _saleRed),
+                        ),
+                      Positioned(
+                        bottom: 12,
+                        left: 12,
+                        right: 12,
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            shadows: [
+                              Shadow(color: Colors.black54, blurRadius: 4),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text(priceStr, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                  ]),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        priceStr,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -2207,11 +2760,29 @@ await showDialog(
   }
 
   Widget _tag(String label, Color color) {
-    return Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)), child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
   }
 
   Widget _buildTopDestinations() {
-    if (_locations.isEmpty) return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()));
+    if (_locations.isEmpty)
+      return const SizedBox(
+        height: 120,
+        child: Center(child: CircularProgressIndicator()),
+      );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 48),
       child: GridView.count(
@@ -2222,17 +2793,70 @@ await showDialog(
         crossAxisSpacing: 16,
         childAspectRatio: 1.8,
         children: _locations.map<Widget>((loc) {
-          final name = (loc is Map ? loc['name'] : loc.toString()) ?? 'Destination';
+          final name =
+              (loc is Map ? loc['name'] : loc.toString()) ?? 'Destination';
           return Container(
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0, 2))]),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.network('https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400', fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(color: Colors.grey[400])),
-                  Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black54]))),
-                  Positioned(bottom: 16, left: 16, right: 16, child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(name.toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)), Text('Explore', style: TextStyle(color: Colors.white70, fontSize: 12))]), const Icon(Icons.arrow_forward, color: Colors.white)])),
+                  Image.network(
+                    'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) =>
+                        Container(color: Colors.grey[400]),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Colors.black54],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    right: 16,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            Text(
+                              'Explore',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Icon(Icons.arrow_forward, color: Colors.white),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2259,12 +2883,18 @@ await showDialog(
         : 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400';
     final Widget ratingSummary;
     if (moduleType == null || moduleId == null) {
-      ratingSummary = Text('No ratings yet', style: TextStyle(color: Colors.grey[600], fontSize: 13));
+      ratingSummary = Text(
+        'No ratings yet',
+        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+      );
     } else {
       final avg = _avgRating(moduleType, moduleId);
       final cnt = _ratingCount(moduleType, moduleId);
       if (avg == null || cnt == null || cnt == 0) {
-        ratingSummary = Text('No ratings yet', style: TextStyle(color: Colors.grey[600], fontSize: 13));
+        ratingSummary = Text(
+          'No ratings yet',
+          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+        );
       } else {
         ratingSummary = Row(
           children: [
@@ -2282,51 +2912,102 @@ await showDialog(
       }
     }
     final card = Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black, blurRadius: 10, offset: const Offset(0, 2))]),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black,
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Stack(
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
                 child: Container(
                   height: 160,
                   width: double.infinity,
                   color: Colors.grey[300],
-                  child: Image.network(resolvedImage, fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox()),
+                  child: Image.network(
+                    resolvedImage,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox(),
+                  ),
                 ),
               ),
-              if (saleTag != null) Positioned(top: 12, left: 12, child: _tag(saleTag, saleTag == 'HOT' ? _hotPurple : _saleRed)),
-              Positioned(bottom: 12, right: 12, child: CircleAvatar(backgroundColor: _primaryBlue, child: const Icon(Icons.check, color: Colors.white, size: 20))),
+              if (saleTag != null)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: _tag(
+                    saleTag,
+                    saleTag == 'HOT' ? _hotPurple : _saleRed,
+                  ),
+                ),
+              Positioned(
+                bottom: 12,
+                right: 12,
+                child: CircleAvatar(
+                  backgroundColor: _primaryBlue,
+                  child: const Icon(Icons.check, color: Colors.white, size: 20),
+                ),
+              ),
             ],
           ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 6),
-              Text(desc, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: ratingSummary),
-                  const SizedBox(width: 8),
-                  Text(price, style: const TextStyle(fontWeight: FontWeight.bold)),
-                ],
-              ),
-              if (buttonLabel != null) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: onTap ?? () {},
-                    child: Text(buttonLabel),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
                 ),
+                const SizedBox(height: 6),
+                Text(
+                  desc,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: ratingSummary),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        price,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  ],
+                ),
+                if (buttonLabel != null) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: onTap ?? () {},
+                      child: Text(buttonLabel),
+                    ),
+                  ),
+                ],
               ],
-            ]),
+            ),
           ),
         ],
       ),
@@ -2363,104 +3044,158 @@ await showDialog(
         ),
       );
     }
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 48),
-      child: GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 3,
-        mainAxisSpacing: 24,
-        crossAxisSpacing: 24,
-        childAspectRatio: 1.3,
-        children: entries.map<Widget>((e) {
-          final title = e.m['title']?.toString() ?? (e.isTour ? 'Tour' : 'Car');
-          final price = e.m['salePrice'] ?? e.m['price'];
-          final priceStr = _priceLabel(price, perPerson: e.isTour);
-          final descExtra = e.m['description']?.toString().trim();
-          final typeLine = e.isTour ? 'Tour package' : '${e.m['passenger'] ?? '-'} passengers · ${e.m['gearShift'] ?? '-'}';
-          final desc = (descExtra != null && descExtra.isNotEmpty) ? (e.isTour ? descExtra : '$typeLine\n$descExtra') : typeLine;
-          final id = e.m['id'] is int ? e.m['id'] as int : int.tryParse(e.m['id']?.toString() ?? '') ?? 0;
-          return _buildCard(
-            saleTag: 'FEATURED',
-            title: title,
-            price: priceStr.isEmpty ? '—' : priceStr,
-            desc: desc,
-            moduleType: e.isTour ? 'tour' : 'car',
-            moduleId: id,
-            buttonLabel: 'View Details',
-            imageUrl: _itemImageUrl(e.m),
-            onTap: () => e.isTour ? _showTourDetailsDialog(e.m) : _showCarDetailsDialog(e.m),
-          );
-        }).toList(),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final isMobile = width < 600;
+        final cols = isMobile ? 1 : 3;
+        final aspect = isMobile ? 1.15 : 1.3;
+        final padding = EdgeInsets.symmetric(horizontal: isMobile ? 16 : 48);
+
+        return Padding(
+          padding: padding,
+          child: GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: cols,
+            mainAxisSpacing: isMobile ? 14 : 24,
+            crossAxisSpacing: isMobile ? 14 : 24,
+            childAspectRatio: aspect,
+            children: entries.map<Widget>((e) {
+              final title =
+                  e.m['title']?.toString() ?? (e.isTour ? 'Tour' : 'Car');
+              final price = e.m['salePrice'] ?? e.m['price'];
+              final priceStr = _priceLabel(price, perPerson: e.isTour);
+              final descExtra = e.m['description']?.toString().trim();
+              final typeLine = e.isTour
+                  ? 'Tour package'
+                  : '${e.m['passenger'] ?? '-'} passengers · ${e.m['gearShift'] ?? '-'}';
+              final desc = (descExtra != null && descExtra.isNotEmpty)
+                  ? (e.isTour ? descExtra : '$typeLine\n$descExtra')
+                  : typeLine;
+              final id = e.m['id'] is int
+                  ? e.m['id'] as int
+                  : int.tryParse(e.m['id']?.toString() ?? '') ?? 0;
+              return _buildCard(
+                saleTag: 'FEATURED',
+                title: title,
+                price: priceStr.isEmpty ? '—' : priceStr,
+                desc: desc,
+                moduleType: e.isTour ? 'tour' : 'car',
+                moduleId: id,
+                buttonLabel: 'View Details',
+                imageUrl: _itemImageUrl(e.m),
+                onTap: () => e.isTour
+                    ? _showTourDetailsDialog(e.m)
+                    : _showCarDetailsDialog(e.m),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildTourPackages() {
-    if (_tours.isEmpty) return const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()));
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 48),
-      child: GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 3,
-        mainAxisSpacing: 24,
-        crossAxisSpacing: 24,
-        childAspectRatio: 1.3,
-        children: _tours.map<Widget>((t) {
-          final m = t as Map<String, dynamic>;
-          final title = m['title']?.toString() ?? 'Tour';
-          final price = m['salePrice'] ?? m['price'];
-          final priceStr = _priceLabel(price, perPerson: true);
-          final desc = m['description']?.toString().trim();
-          final id = m['id'] is int ? m['id'] as int : int.tryParse(m['id']?.toString() ?? '') ?? 0;
-          return _buildCard(
-            title: title,
-            price: priceStr.isEmpty ? '—' : priceStr,
-            desc: (desc != null && desc.isNotEmpty) ? desc : 'Tour package',
-            moduleType: 'tour',
-            moduleId: id,
-            buttonLabel: 'View Details',
-            imageUrl: _itemImageUrl(m),
-            onTap: () => _showTourDetailsDialog(m),
-          );
-        }).toList(),
-      ),
+    if (_tours.isEmpty)
+      return const Padding(
+        padding: EdgeInsets.all(48),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final isMobile = width < 600;
+        final cols = isMobile ? 1 : 3;
+        final aspect = isMobile ? 1.15 : 1.3;
+        final padding = EdgeInsets.symmetric(horizontal: isMobile ? 16 : 48);
+
+        return Padding(
+          padding: padding,
+          child: GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: cols,
+            mainAxisSpacing: isMobile ? 14 : 24,
+            crossAxisSpacing: isMobile ? 14 : 24,
+            childAspectRatio: aspect,
+            children: _tours.map<Widget>((t) {
+              final m = t as Map<String, dynamic>;
+              final title = m['title']?.toString() ?? 'Tour';
+              final price = m['salePrice'] ?? m['price'];
+              final priceStr = _priceLabel(price, perPerson: true);
+              final desc = m['description']?.toString().trim();
+              final id = m['id'] is int
+                  ? m['id'] as int
+                  : int.tryParse(m['id']?.toString() ?? '') ?? 0;
+              return _buildCard(
+                title: title,
+                price: priceStr.isEmpty ? '—' : priceStr,
+                desc: (desc != null && desc.isNotEmpty) ? desc : 'Tour package',
+                moduleType: 'tour',
+                moduleId: id,
+                buttonLabel: 'View Details',
+                imageUrl: _itemImageUrl(m),
+                onTap: () => _showTourDetailsDialog(m),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildCarPackages() {
-    if (_cars.isEmpty) return const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()));
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 48),
-      child: GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 3,
-        mainAxisSpacing: 24,
-        crossAxisSpacing: 24,
-        childAspectRatio: 1.3,
-        children: _cars.map<Widget>((c) {
-          final m = c as Map<String, dynamic>;
-          final title = m['title']?.toString() ?? 'Car';
-          final price = m['salePrice'] ?? m['price'];
-          final priceStr = _priceLabel(price, perPerson: false);
-          final descExtra = m['description']?.toString().trim();
-          final line = '${m['passenger'] ?? '-'} passengers · ${m['gearShift'] ?? '-'}';
-          final desc = (descExtra != null && descExtra.isNotEmpty) ? '$line\n$descExtra' : line;
-          final id = m['id'] is int ? m['id'] as int : int.tryParse(m['id']?.toString() ?? '') ?? 0;
-          return _buildCard(
-            title: title,
-            price: priceStr.isEmpty ? '—' : priceStr,
-            desc: desc,
-            moduleType: 'car',
-            moduleId: id,
-            buttonLabel: 'View Details',
-            imageUrl: _itemImageUrl(m),
-            onTap: () => _showCarDetailsDialog(m),
-          );
-        }).toList(),
-      ),
+    if (_cars.isEmpty)
+      return const Padding(
+        padding: EdgeInsets.all(48),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final isMobile = width < 600;
+        final cols = isMobile ? 1 : 3;
+        final aspect = isMobile ? 1.15 : 1.3;
+        final padding = EdgeInsets.symmetric(horizontal: isMobile ? 16 : 48);
+
+        return Padding(
+          padding: padding,
+          child: GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: cols,
+            mainAxisSpacing: isMobile ? 14 : 24,
+            crossAxisSpacing: isMobile ? 14 : 24,
+            childAspectRatio: aspect,
+            children: _cars.map<Widget>((c) {
+              final m = c as Map<String, dynamic>;
+              final title = m['title']?.toString() ?? 'Car';
+              final price = m['salePrice'] ?? m['price'];
+              final priceStr = _priceLabel(price, perPerson: false);
+              final descExtra = m['description']?.toString().trim();
+              final line =
+                  '${m['passenger'] ?? '-'} passengers · ${m['gearShift'] ?? '-'}';
+              final desc = (descExtra != null && descExtra.isNotEmpty)
+                  ? '$line\n$descExtra'
+                  : line;
+              final id = m['id'] is int
+                  ? m['id'] as int
+                  : int.tryParse(m['id']?.toString() ?? '') ?? 0;
+              return _buildCard(
+                title: title,
+                price: priceStr.isEmpty ? '—' : priceStr,
+                desc: desc,
+                moduleType: 'car',
+                moduleId: id,
+                buttonLabel: 'View Details',
+                imageUrl: _itemImageUrl(m),
+                onTap: () => _showCarDetailsDialog(m),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
@@ -2475,7 +3210,11 @@ await showDialog(
         crossAxisSpacing: 24,
         childAspectRatio: 1,
         children: List.generate(8, (i) {
-          return _buildCard(title: '${7 - (i % 3)} Days In Switzerland', price: '${_peso}70 / person', buttonLabel: null);
+          return _buildCard(
+            title: '${7 - (i % 3)} Days In Switzerland',
+            price: '${_peso}70 / person',
+            buttonLabel: null,
+          );
         }),
       ),
     );
@@ -2492,7 +3231,13 @@ await showDialog(
         crossAxisSpacing: 24,
         childAspectRatio: 1.4,
         children: List.generate(6, (i) {
-          return _buildCard(saleTag: 'HOT', title: 'Amazing Event in Paris', desc: 'Lorem ipsum dolor sit amet.', price: '${_peso}120', buttonLabel: null);
+          return _buildCard(
+            saleTag: 'HOT',
+            title: 'Amazing Event in Paris',
+            desc: 'Lorem ipsum dolor sit amet.',
+            price: '${_peso}120',
+            buttonLabel: null,
+          );
         }),
       ),
     );
@@ -2510,25 +3255,64 @@ await showDialog(
         childAspectRatio: 1.2,
         children: List.generate(6, (_) {
           return Container(
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black, blurRadius: 10, offset: const Offset(0, 2))]),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black,
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: Container(height: 180, width: double.infinity, color: Colors.grey[300], child: Image.network('https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400', fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox())),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
+                  child: Container(
+                    height: 180,
+                    width: double.infinity,
+                    color: Colors.grey[300],
+                    child: Image.network(
+                      'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const SizedBox(),
+                    ),
+                  ),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('Adventure Trip (Tour)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 6),
-                    Text('Lorem ipsum dolor sit amet, consectetur adipiscing elit.', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                    const SizedBox(height: 8),
-                    Text('22 March 2026', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                    const SizedBox(height: 8),
-                    TextButton(onPressed: () {}, child: const Text('Read More')),
-                  ]),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Adventure Trip (Tour)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '22 March 2026',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () {},
+                        child: const Text('Read More'),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -2538,7 +3322,12 @@ await showDialog(
     );
   }
 
-  Widget _buildSearchListPage({required String title, required String itemLabel, required List<dynamic> items, required bool isTour}) {
+  Widget _buildSearchListPage({
+    required String title,
+    required String itemLabel,
+    required List<dynamic> items,
+    required bool isTour,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2603,7 +3392,10 @@ await showDialog(
                 labelText: 'Location',
                 hintText: 'Where are you going?',
                 borderRadius: 4,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               );
               final dateFieldsRow = Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -2611,21 +3403,30 @@ await showDialog(
                   Expanded(
                     child: _filterStartDateField(
                       borderRadius: 4,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _filterEndDateField(
                       borderRadius: 4,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ],
               );
               final guestsField = _filterGuestsTextField(
                 borderRadius: 4,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               );
               final searchBtn = SizedBox(
                 height: 48,
@@ -2671,22 +3472,178 @@ await showDialog(
           ),
         ),
         // Filter + results
-        Padding(
-          padding: const EdgeInsets.fromLTRB(48, 16, 48, 48),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(width: 260, child: _buildHotelFilterCard(isTour: isTour)),
-              const SizedBox(width: 24),
-              Expanded(child: _buildResultList(itemLabel: itemLabel, items: items, isTour: isTour)),
-            ],
-          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth > 980;
+            final isMobile = constraints.maxWidth < 700;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                isWide ? 48 : 16,
+                16,
+                isWide ? 48 : 16,
+                48,
+              ),
+              child: isWide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 260,
+                          child: _buildHotelFilterCard(isTour: isTour),
+                        ),
+                        const SizedBox(width: 24),
+                        Expanded(
+                          child: _buildResultList(
+                            itemLabel: itemLabel,
+                            items: items,
+                            isTour: isTour,
+                          ),
+                        ),
+                      ],
+                    )
+                  : isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${items.length} $itemLabel found',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                  color: _navBlue,
+                                ),
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                showModalBottomSheet<void>(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (sheetContext) => SafeArea(
+                                    child: DraggableScrollableSheet(
+                                      initialChildSize: 0.75,
+                                      maxChildSize: 0.95,
+                                      minChildSize: 0.45,
+                                      expand: false,
+                                      builder: (_, scrollController) {
+                                        return Container(
+                                          decoration: const BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.vertical(
+                                              top: Radius.circular(16),
+                                            ),
+                                          ),
+                                          child: SingleChildScrollView(
+                                            controller: scrollController,
+                                            padding: const EdgeInsets.fromLTRB(
+                                              16,
+                                              16,
+                                              16,
+                                              24,
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                Center(
+                                                  child: Container(
+                                                    width: 44,
+                                                    height: 4,
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey[400],
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            999,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                Text(
+                                                  isTour
+                                                      ? 'Filter Tours'
+                                                      : 'Filter Cars',
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: _navBlue,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                _buildHotelFilterCard(
+                                                  isTour: isTour,
+                                                ),
+                                                const SizedBox(height: 12),
+                                                SizedBox(
+                                                  width: double.infinity,
+                                                  child: ElevatedButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(
+                                                          sheetContext,
+                                                        ).pop(),
+                                                    style:
+                                                        ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              _primaryBlue,
+                                                          foregroundColor:
+                                                              Colors.white,
+                                                        ),
+                                                    child: const Text(
+                                                      'Apply Filters',
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.tune, size: 18),
+                              label: const Text('Filters'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _buildResultList(
+                          itemLabel: itemLabel,
+                          items: items,
+                          isTour: isTour,
+                          showHeader: false,
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildHotelFilterCard(isTour: isTour),
+                        const SizedBox(height: 16),
+                        _buildResultList(
+                          itemLabel: itemLabel,
+                          items: items,
+                          isTour: isTour,
+                        ),
+                      ],
+                    ),
+            );
+          },
         ),
       ],
     );
   }
 
-  Widget _filterCheckboxRow(String label, bool value, ValueChanged<bool?> onChanged) {
+  Widget _filterCheckboxRow(
+    String label,
+    bool value,
+    ValueChanged<bool?> onChanged,
+  ) {
     return Row(
       children: [
         Checkbox(value: value, onChanged: onChanged, activeColor: _primaryBlue),
@@ -2708,9 +3665,19 @@ await showDialog(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Filter by', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _navBlue)),
+          const Text(
+            'Filter by',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: _navBlue,
+            ),
+          ),
           const SizedBox(height: 16),
-          const Text('Filter Price', style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text(
+            'Filter Price',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           RangeSlider(
             values: RangeValues(
@@ -2719,17 +3686,29 @@ await showDialog(
             ),
             min: 0,
             max: 2000,
-            labels: RangeLabels('$_peso${_priceRange.start.round()}', '$_peso${_priceRange.end.round()}'),
+            labels: RangeLabels(
+              '$_peso${_priceRange.start.round()}',
+              '$_peso${_priceRange.end.round()}',
+            ),
             activeColor: _primaryBlue,
             onChanged: (values) {
               setState(() => _priceRange = values);
             },
           ),
           const SizedBox(height: 4),
-          Text('Price: $_peso${_priceRange.start.round()} - $_peso${_priceRange.end.round()}', style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+          Text(
+            'Price: $_peso${_priceRange.start.round()} - $_peso${_priceRange.end.round()}',
+            style: TextStyle(color: Colors.grey[700], fontSize: 12),
+          ),
           const Divider(height: 32),
-          const Text('Star rating', style: TextStyle(fontWeight: FontWeight.w600)),
-          Text('Filter by average star rating (1–5)', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+          const Text(
+            'Star rating',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          Text(
+            'Filter by average star rating (1–5)',
+            style: TextStyle(color: Colors.grey[600], fontSize: 11),
+          ),
           const SizedBox(height: 8),
           _filterCheckboxRow('5 star', _starFilters.contains('5'), (v) {
             setState(() {
@@ -2778,100 +3757,166 @@ await showDialog(
           }),
           const Divider(height: 32),
           if (isTour) ...[
-            const Text('Tour availability', style: TextStyle(fontWeight: FontWeight.w600)),
-            Text('Filter tours by availability type', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+            const Text(
+              'Tour availability',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              'Filter tours by availability type',
+              style: TextStyle(color: Colors.grey[600], fontSize: 11),
+            ),
             const SizedBox(height: 8),
-            _filterCheckboxRow('Always open', _tourAvailabilityFilters.contains('always'), (v) {
-              setState(() {
-                if (v == true) {
-                  _tourAvailabilityFilters.add('always');
-                } else {
-                  _tourAvailabilityFilters.remove('always');
-                }
-              });
-            }),
-            _filterCheckboxRow('Fixed dates', _tourAvailabilityFilters.contains('fixed'), (v) {
-              setState(() {
-                if (v == true) {
-                  _tourAvailabilityFilters.add('fixed');
-                } else {
-                  _tourAvailabilityFilters.remove('fixed');
-                }
-              });
-            }),
-            _filterCheckboxRow('Open hours', _tourAvailabilityFilters.contains('open_hours'), (v) {
-              setState(() {
-                if (v == true) {
-                  _tourAvailabilityFilters.add('open_hours');
-                } else {
-                  _tourAvailabilityFilters.remove('open_hours');
-                }
-              });
-            }),
+            _filterCheckboxRow(
+              'Always open',
+              _tourAvailabilityFilters.contains('always'),
+              (v) {
+                setState(() {
+                  if (v == true) {
+                    _tourAvailabilityFilters.add('always');
+                  } else {
+                    _tourAvailabilityFilters.remove('always');
+                  }
+                });
+              },
+            ),
+            _filterCheckboxRow(
+              'Fixed dates',
+              _tourAvailabilityFilters.contains('fixed'),
+              (v) {
+                setState(() {
+                  if (v == true) {
+                    _tourAvailabilityFilters.add('fixed');
+                  } else {
+                    _tourAvailabilityFilters.remove('fixed');
+                  }
+                });
+              },
+            ),
+            _filterCheckboxRow(
+              'Open hours',
+              _tourAvailabilityFilters.contains('open_hours'),
+              (v) {
+                setState(() {
+                  if (v == true) {
+                    _tourAvailabilityFilters.add('open_hours');
+                  } else {
+                    _tourAvailabilityFilters.remove('open_hours');
+                  }
+                });
+              },
+            ),
           ] else ...[
-            const Text('Passenger capacity', style: TextStyle(fontWeight: FontWeight.w600)),
-            Text('Filter cars by their passenger capacity', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+            const Text(
+              'Passenger capacity',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              'Filter cars by their passenger capacity',
+              style: TextStyle(color: Colors.grey[600], fontSize: 11),
+            ),
             const SizedBox(height: 8),
-            _filterCheckboxRow('Small (1-4)', _carCapacityFilters.contains('small'), (v) {
-              setState(() {
-                if (v == true) {
-                  _carCapacityFilters.add('small');
-                } else {
-                  _carCapacityFilters.remove('small');
-                }
-              });
-            }),
-            _filterCheckboxRow('Medium (5-7)', _carCapacityFilters.contains('medium'), (v) {
-              setState(() {
-                if (v == true) {
-                  _carCapacityFilters.add('medium');
-                } else {
-                  _carCapacityFilters.remove('medium');
-                }
-              });
-            }),
-            _filterCheckboxRow('Large (8+)', _carCapacityFilters.contains('large'), (v) {
-              setState(() {
-                if (v == true) {
-                  _carCapacityFilters.add('large');
-                } else {
-                  _carCapacityFilters.remove('large');
-                }
-              });
-            }),
-          ]
+            _filterCheckboxRow(
+              'Small (1-4)',
+              _carCapacityFilters.contains('small'),
+              (v) {
+                setState(() {
+                  if (v == true) {
+                    _carCapacityFilters.add('small');
+                  } else {
+                    _carCapacityFilters.remove('small');
+                  }
+                });
+              },
+            ),
+            _filterCheckboxRow(
+              'Medium (5-7)',
+              _carCapacityFilters.contains('medium'),
+              (v) {
+                setState(() {
+                  if (v == true) {
+                    _carCapacityFilters.add('medium');
+                  } else {
+                    _carCapacityFilters.remove('medium');
+                  }
+                });
+              },
+            ),
+            _filterCheckboxRow(
+              'Large (8+)',
+              _carCapacityFilters.contains('large'),
+              (v) {
+                setState(() {
+                  if (v == true) {
+                    _carCapacityFilters.add('large');
+                  } else {
+                    _carCapacityFilters.remove('large');
+                  }
+                });
+              },
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildResultList({required String itemLabel, required List<dynamic> items, required bool isTour}) {
+  Widget _buildResultList({
+    required String itemLabel,
+    required List<dynamic> items,
+    required bool isTour,
+    bool showHeader = true,
+  }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 700;
+    final crossAxisCount = isMobile ? 1 : 3;
+    final childAspectRatio = isMobile ? 1.45 : 0.9;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '${items.length} $itemLabel found',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: _navBlue),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
+        if (showHeader)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${items.length} $itemLabel found',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: _navBlue,
+                ),
+              ),
+            ],
+          ),
+        if (showHeader) const SizedBox(height: 12),
         items.isEmpty
-            ? const Padding(padding: EdgeInsets.all(48), child: Center(child: Text('No items found.')))
+            ? const Padding(
+                padding: EdgeInsets.all(48),
+                child: Center(child: Text('No items found.')),
+              )
             : GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 3,
+                crossAxisCount: crossAxisCount,
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 16,
-                childAspectRatio: 0.9,
-                children: List.generate(items.length, (index) => InkWell(
-                  onTap: () => isTour ? _showTourDetailsDialog(items[index] as Map<String, dynamic>) : _showCarDetailsDialog(items[index] as Map<String, dynamic>),
-                  child: _buildResultCard(items[index] as Map<String, dynamic>, isTour),
-                )),
+                childAspectRatio: childAspectRatio,
+                children: List.generate(
+                  items.length,
+                  (index) => InkWell(
+                    onTap: () => isTour
+                        ? _showTourDetailsDialog(
+                            items[index] as Map<String, dynamic>,
+                          )
+                        : _showCarDetailsDialog(
+                            items[index] as Map<String, dynamic>,
+                          ),
+                    child: _buildResultCard(
+                      items[index] as Map<String, dynamic>,
+                      isTour,
+                    ),
+                  ),
+                ),
               ),
       ],
     );
@@ -2882,7 +3927,9 @@ await showDialog(
     final price = item['salePrice'] ?? item['price'];
     final priceStr = _priceLabel(price, perPerson: isTour);
     final featured = _itemIsFeatured(item);
-    final id = item['id'] is int ? item['id'] as int : int.tryParse(item['id']?.toString() ?? '') ?? 0;
+    final id = item['id'] is int
+        ? item['id'] as int
+        : int.tryParse(item['id']?.toString() ?? '') ?? 0;
     final mt = isTour ? 'tour' : 'car';
     final avg = _avgRating(mt, id);
     final cnt = _ratingCount(mt, id);
@@ -2904,14 +3951,17 @@ await showDialog(
           Stack(
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(8),
+                ),
                 child: SizedBox(
                   height: 140,
                   width: double.infinity,
                   child: Image.network(
                     _itemImageUrl(item),
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Container(color: Colors.grey[300]),
+                    errorBuilder: (_, _, _) =>
+                        Container(color: Colors.grey[300]),
                   ),
                 ),
               ),
@@ -2920,33 +3970,70 @@ await showDialog(
                   top: 8,
                   left: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: _saleRed, borderRadius: BorderRadius.circular(4)),
-                    child: const Text('Featured', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _saleRed,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Featured',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
             ],
           ),
           Padding(
             padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 4),
-                  if (isTour)
-                    Text('Tour', style: TextStyle(color: Colors.grey[600], fontSize: 12))
-                  else
-                    Text('${item['passenger'] ?? '-'} passengers · ${item['gearShift'] ?? '-'}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                  const SizedBox(height: 4),
-                  Text(ratingLine, style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-                  const SizedBox(height: 8),
-                  Text(
-                    priceStr.isEmpty ? '—' : 'from $priceStr',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 4),
+                if (isTour)
+                  Text(
+                    'Tour',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  )
+                else
+                  Text(
+                    '${item['passenger'] ?? '-'} passengers · ${item['gearShift'] ?? '-'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                const SizedBox(height: 4),
+                Text(
+                  ratingLine,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  priceStr.isEmpty ? '—' : 'from $priceStr',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -2957,19 +4044,57 @@ await showDialog(
     return Container(
       margin: const EdgeInsets.fromLTRB(48, 48, 48, 0),
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
-      decoration: BoxDecoration(color: _accentOrange.withOpacity(0.9), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: _accentOrange.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Know your city?', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)), const SizedBox(height: 8), Text('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut elit tellus', style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14))]),
-          ElevatedButton(onPressed: () {}, style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: _navBlue, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), child: const Text('Learn More')),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Know your city?',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut elit tellus',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          ElevatedButton(
+            onPressed: () {},
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: _navBlue,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Learn More'),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildRatings() {
-    final guides = [('Irvin Deo', 'Sample Rating'), ('Jane Smith', 'Sample Rating'), ('John Doe', 'Sample Rating')];
+    final guides = [
+      ('Irvin Deo', 'Sample Rating'),
+      ('Jane Smith', 'Sample Rating'),
+      ('John Doe', 'Sample Rating'),
+    ];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 48),
       child: Row(
@@ -2979,15 +4104,50 @@ await showDialog(
             child: Container(
               margin: const EdgeInsets.only(right: 24),
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black, blurRadius: 10, offset: const Offset(0, 2))]),
-              child: Column(children: [
-                CircleAvatar(radius: 48, backgroundColor: Colors.grey[300], child: Text(name[0], style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold))),
-                const SizedBox(height: 16),
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                Text(role, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                const SizedBox(height: 8),
-                Text('Lorem ipsum dolor sit amet, consectetur adipiscing elit.', style: TextStyle(color: Colors.grey[500], fontSize: 12), textAlign: TextAlign.center),
-              ]),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black,
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 48,
+                    backgroundColor: Colors.grey[300],
+                    child: Text(
+                      name[0],
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  Text(
+                    role,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           );
         }).toList(),
@@ -3004,11 +4164,45 @@ await showDialog(
         children: [
           Icon(Icons.mail_outline, size: 32, color: _navBlue),
           const SizedBox(width: 16),
-          const Text('Join Our Newsletter', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _navBlue)),
+          const Text(
+            'Join Our Newsletter',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: _navBlue,
+            ),
+          ),
           const SizedBox(width: 32),
-          Expanded(child: TextField(decoration: InputDecoration(hintText: 'Enter your email', filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14)))),
+          Expanded(
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Enter your email',
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
+              ),
+            ),
+          ),
           const SizedBox(width: 12),
-          ElevatedButton(onPressed: () {}, style: ElevatedButton.styleFrom(backgroundColor: _navBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), child: const Text('Subscribe')),
+          ElevatedButton(
+            onPressed: () {},
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _navBlue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Subscribe'),
+          ),
         ],
       ),
     );
@@ -3030,20 +4224,45 @@ await showDialog(
                   children: [
                     _buildLogo(),
                     const SizedBox(height: 16),
-                    Text('Tours and car rentals for your next trip.', style: TextStyle(color: Colors.grey[300], fontSize: 14)),
+                    Text(
+                      'Tours and car rentals for your next trip.',
+                      style: TextStyle(color: Colors.grey[300], fontSize: 14),
+                    ),
                     const SizedBox(height: 16),
-                    Text('Copyright © 2026 Company Name, All Rights Reserved.', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                    Text(
+                      'Copyright © 2026 Company Name, All Rights Reserved.',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    ),
                   ],
                 ),
               ),
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Contact Information', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  Text('+1 (800) 283 0000', style: TextStyle(color: Colors.grey[300], fontSize: 14)),
-                  Text('info@domain.com', style: TextStyle(color: Colors.grey[300], fontSize: 14)),
-                  Text('123 Street, City, Country', style: TextStyle(color: Colors.grey[300], fontSize: 14)),
-                ]),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Contact Information',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '+1 (800) 283 0000',
+                      style: TextStyle(color: Colors.grey[300], fontSize: 14),
+                    ),
+                    Text(
+                      'info@domain.com',
+                      style: TextStyle(color: Colors.grey[300], fontSize: 14),
+                    ),
+                    Text(
+                      '123 Street, City, Country',
+                      style: TextStyle(color: Colors.grey[300], fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -3060,17 +4279,19 @@ class _NavLink extends StatelessWidget {
     required this.label,
     required this.isActive,
     required this.onTap,
+    this.horizontalPadding = 12,
   });
 
   final String label;
   final bool isActive;
   final VoidCallback onTap;
+  final double horizontalPadding;
 
   @override
   Widget build(BuildContext context) {
     final color = isActive ? _accentOrange : Colors.white;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       child: TextButton(
         onPressed: onTap,
         child: Text(
@@ -3085,5 +4306,3 @@ class _NavLink extends StatelessWidget {
     );
   }
 }
-
-

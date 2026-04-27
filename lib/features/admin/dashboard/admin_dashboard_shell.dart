@@ -38,18 +38,26 @@ class AdminDashboardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 1024;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (showHeader) _buildHeader(),
+        if (showHeader) _buildHeader(isMobile: isMobile),
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isMobile ? 16 : 24),
             child: child,
           ),
         ),
       ],
     );
+
+    if (showSidebar && isMobile) {
+      return Scaffold(
+        drawer: Drawer(child: SafeArea(child: _buildSidebar())),
+        body: content,
+      );
+    }
 
     return Row(
       children: [
@@ -59,9 +67,12 @@ class AdminDashboardShell extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader({required bool isMobile}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 24,
+        vertical: 12,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -74,6 +85,13 @@ class AdminDashboardShell extends StatelessWidget {
       ),
       child: Row(
         children: [
+          if (isMobile && showSidebar)
+            Builder(
+              builder: (drawerContext) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () => Scaffold.of(drawerContext).openDrawer(),
+              ),
+            ),
           if (showBackButton)
             IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack)
           else

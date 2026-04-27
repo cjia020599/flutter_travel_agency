@@ -44,12 +44,12 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
       return;
     }
     print('Form valid - calling API');
-    
+
     setState(() {
       _error = null;
       _loading = true;
     });
-    
+
     try {
       print('Calling AuthApi.register...');
       await AuthApi.register(
@@ -61,12 +61,12 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
         role: _role,
       );
       print('API call completed successfully');
-      
+
       if (!mounted) {
         print('Widget unmounted - exiting');
         return;
       }
-      
+
       Navigator.of(context).pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -97,12 +97,14 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final isSmall = width < 700;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isSmall ? 16 : 24),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.8,
-          minWidth: 450,
+          maxWidth: isSmall ? width : width * 0.8,
+          minWidth: 0,
           maxHeight: 700,
         ),
         child: Form(
@@ -140,38 +142,64 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
                 ),
                 const SizedBox(height: 16),
               ],
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _firstNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'First name *',
-                        border: OutlineInputBorder(),
-                      ),
-                validator: (v) {
-                  final trimmed = v?.trim();
-                  if (trimmed == null || trimmed.isEmpty) return 'Required';
-                  if (trimmed.length < 3) return 'At least 3 characters';
-                  return null;
-                },
-
-                    ),
+              if (isSmall) ...[
+                TextFormField(
+                  controller: _firstNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'First name *',
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _lastNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Last name *',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Required' : null,
-                    ),
+                  validator: (v) {
+                    final trimmed = v?.trim();
+                    if (trimmed == null || trimmed.isEmpty) return 'Required';
+                    if (trimmed.length < 3) return 'At least 3 characters';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _lastNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Last name *',
+                    border: OutlineInputBorder(),
                   ),
-                ],
-              ),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+              ] else
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _firstNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'First name *',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (v) {
+                          final trimmed = v?.trim();
+                          if (trimmed == null || trimmed.isEmpty)
+                            return 'Required';
+                          if (trimmed.length < 3)
+                            return 'At least 3 characters';
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _lastNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Last name *',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (v) =>
+                            v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                    ),
+                  ],
+                ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _usernameController,
@@ -197,7 +225,10 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
                 validator: (v) {
                   final trimmed = v?.trim();
                   if (trimmed == null || trimmed.isEmpty) return 'Required';
-                  if (!RegExp(r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(trimmed)) return 'Enter a valid email';
+                  if (!RegExp(
+                    r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$',
+                  ).hasMatch(trimmed))
+                    return 'Enter a valid email';
                   return null;
                 },
               ),
