@@ -75,6 +75,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   bool _loadingRatings = false;
   String _toursSearchQuery = '';
   String _carsSearchQuery = '';
+  final TextEditingController _usersSearchController = TextEditingController();
   bool _showToursAdvancedFilters = false;
   bool _showCarsAdvancedFilters = false;
   String _toursBulkAction = 'delete';
@@ -1013,9 +1014,40 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     if (_loadingUsers) return const Center(child: CircularProgressIndicator());
     if (_usersError != null) return Center(child: Text(_usersError!));
     if (_users.isEmpty) return const Center(child: Text('No users found.'));
+    final query = _usersSearchController.text.trim().toLowerCase();
+    final users = _users.where((u) {
+      final m = u as Map<String, dynamic>;
+      final id = (m['id'] ?? '').toString().toLowerCase();
+      final name =
+          '${m['firstName'] ?? ''} ${m['lastName'] ?? ''} ${m['userName'] ?? m['username'] ?? ''}'
+              .toLowerCase();
+      final email = (m['email'] ?? '').toString().toLowerCase();
+      final role = (m['roleName'] ?? m['roleCode'] ?? m['roleId'] ?? '').toString().toLowerCase();
+      return query.isEmpty || id.contains(query) || name.contains(query) || email.contains(query) || role.contains(query);
+    }).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _usersSearchController,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Search users...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -1033,10 +1065,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 DataColumn(label: Text('Role')),
                 DataColumn(label: Text('Actions')),
               ],
-              rows: _users.map<DataRow>((u) {
+              rows: users.map<DataRow>((u) {
             final m = u as Map<String, dynamic>;
             final id = m['id']?.toString() ?? '';
-            final name = m['userName'] ?? m['username'] ?? '';
+            final firstName = (m['firstName'] ?? '').toString();
+            final lastName = (m['lastName'] ?? '').toString();
+            final userName = (m['userName'] ?? m['username'] ?? '').toString();
+            final name = ('$firstName $lastName').trim().isEmpty ? userName : ('$firstName $lastName').trim();
             final email = m['email'] ?? '';
 
             String role = '';
@@ -1072,26 +1107,50 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             final isSelf = id == _currentUserId;
                 return DataRow(
                   cells: [
-                    DataCell(Text(id)),
-                    DataCell(Text(name?.toString() ?? '')),
-                    DataCell(Text(email?.toString() ?? '')),
-                    DataCell(Text(role)),
+                    DataCell(SizedBox(width: 70, child: Text(id))),
+                    DataCell(SizedBox(width: 170, child: Text(name, overflow: TextOverflow.ellipsis))),
+                    DataCell(SizedBox(width: 220, child: Text(email?.toString() ?? '', overflow: TextOverflow.ellipsis))),
                     DataCell(
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => _showEditUserDialog(m),
-                            tooltip: 'Edit User',
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: role == 'Administrator'
+                              ? const Color(0xFFDBEAFE)
+                              : role == 'Vendor'
+                                  ? const Color(0xFFFFEDD5)
+                                  : const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          role,
+                          style: TextStyle(
+                            color: role == 'Administrator'
+                                ? const Color(0xFF1E3A8A)
+                                : role == 'Vendor'
+                                    ? const Color(0xFF9A3412)
+                                    : const Color(0xFF166534),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete),
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      SizedBox(
+                        width: 180,
+                        child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          TextButton.icon(
+                            icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF1D4ED8)),
+                            label: const Text('Edit', style: TextStyle(color: Color(0xFF1D4ED8))),
+                            onPressed: () => _showEditUserDialog(m),
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFDC2626)),
+                            label: const Text('Delete', style: TextStyle(color: Color(0xFFDC2626))),
                             onPressed: isSelf ? null : () => _deleteUser(id),
-                            tooltip: isSelf
-                                ? 'Cannot delete yourself'
-                                : 'Delete User',
                           ),
                         ],
+                      ),
                       ),
                     ),
                   ],
@@ -1100,6 +1159,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             ),
           ),
         ),
+        const SizedBox(height: 8),
+        Text('Showing ${users.length} of ${_users.length} users'),
       ],
     );
   }
@@ -2737,6 +2798,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
 
   @override
   void dispose() {
+    _usersSearchController.dispose();
     _adminFirstNameController.dispose();
     _adminLastNameController.dispose();
     _adminUsernameController.dispose();

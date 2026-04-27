@@ -158,6 +158,86 @@ class _TravelHomePageState extends State<TravelHomePage> {
     return value;
   }
 
+  List<String> _locationOptions() {
+    final values = _locations
+        .map((loc) => (loc is Map ? loc['name'] : loc)?.toString() ?? '')
+        .where((name) => name.trim().isNotEmpty)
+        .map((name) => name.trim())
+        .toSet()
+        .toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return values;
+  }
+
+  Widget _buildLocationDropdownField({
+    required String hintText,
+    String? labelText,
+    EdgeInsets? contentPadding,
+    double borderRadius = 8,
+  }) {
+    final options = _locationOptions();
+    return Autocomplete<String>(
+      optionsBuilder: (value) {
+        final query = value.text.trim().toLowerCase();
+        if (query.isEmpty) return options;
+        return options.where((name) => name.toLowerCase().contains(query));
+      },
+      onSelected: (value) {
+        _locationQueryController.text = value;
+      },
+      fieldViewBuilder: (context, textController, focusNode, onSubmitted) {
+        if (textController.text != _locationQueryController.text) {
+          textController.text = _locationQueryController.text;
+          textController.selection = TextSelection.collapsed(
+            offset: textController.text.length,
+          );
+        }
+        return TextField(
+          controller: textController,
+          focusNode: focusNode,
+          onChanged: (value) {
+            if (_locationQueryController.text != value) {
+              _locationQueryController.text = value;
+            }
+          },
+          decoration: InputDecoration(
+            labelText: labelText,
+            hintText: hintText,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(borderRadius),
+            ),
+            contentPadding:
+                contentPadding ??
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmAndLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await AuthApi.logout();
+    _loadData();
+  }
+
   Future<void> _syncNotifications() async {
     if (!_isLoggedIn) {
       _disconnectNotifications();
@@ -1569,8 +1649,7 @@ SnackBar(content: Text('$title booked!'), backgroundColor: Colors.green, duratio
                       ),
                       TextButton(
                         onPressed: () async {
-                          await AuthApi.logout();
-                          _loadData();
+                          await _confirmAndLogout();
                         },
                         child: Text('Logout', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
                       ),
@@ -1917,13 +1996,8 @@ await showDialog(
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: _locationQueryController,
-                        decoration: InputDecoration(
-                          hintText: 'Where are you going?',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        ),
+                      child: _buildLocationDropdownField(
+                        hintText: 'Where are you going?',
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1957,13 +2031,8 @@ await showDialog(
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextField(
-                      controller: _locationQueryController,
-                      decoration: InputDecoration(
-                        hintText: 'Where are you going?',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      ),
+                    _buildLocationDropdownField(
+                      hintText: 'Where are you going?',
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -2530,14 +2599,11 @@ await showDialog(
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth > 900;
-              final locationField = TextField(
-                controller: _locationQueryController,
-                decoration: InputDecoration(
-                  labelText: 'Location',
-                  hintText: 'Where are you going?',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
+              final locationField = _buildLocationDropdownField(
+                labelText: 'Location',
+                hintText: 'Where are you going?',
+                borderRadius: 4,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               );
               final dateFieldsRow = Row(
                 crossAxisAlignment: CrossAxisAlignment.end,

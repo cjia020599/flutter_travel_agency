@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_travel_agency/api/cars_api.dart';
+import 'package:flutter_travel_agency/api/lookups_api.dart';
 import 'package:flutter_travel_agency/features/admin/car_management/mappers/car_mapper.dart';
 import 'package:flutter_travel_agency/features/admin/car_management/models/car_draft.dart';
 import 'package:flutter_travel_agency/features/admin/car_management/validators/car_payload_validator.dart';
@@ -35,6 +36,8 @@ class _CarFormPageState extends State<CarFormPage> {
   String _status = 'publish';
   double? _mapLat;
   double? _mapLng;
+  String? _locationId;
+  List<Map<String, dynamic>> _locationRows = [];
   String? _imageUrl;
   String? _imagePublicId;
   bool _loading = false;
@@ -57,6 +60,7 @@ class _CarFormPageState extends State<CarFormPage> {
       _status = draft.status;
       _mapLat = draft.mapLat;
       _mapLng = draft.mapLng;
+      _locationId = draft.locationId;
       _imageUrl = draft.imageUrl;
       _imagePublicId = draft.imagePublicId;
     }
@@ -64,6 +68,19 @@ class _CarFormPageState extends State<CarFormPage> {
       _slug.text = _slugify(_title.text);
     }
     _title.addListener(_syncSlugFromTitle);
+    _loadLookups();
+  }
+
+  Future<void> _loadLookups() async {
+    try {
+      final locations = await LookupsApi.locations();
+      if (!mounted) return;
+      setState(() {
+        _locationRows = locations
+            .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e))
+            .toList();
+      });
+    } catch (_) {}
   }
 
   @override
@@ -101,6 +118,7 @@ class _CarFormPageState extends State<CarFormPage> {
       status: _status,
       mapLat: _mapLat,
       mapLng: _mapLng,
+      locationId: _locationId,
       imageUrl: _imageUrl,
       imagePublicId: _imagePublicId,
     );
@@ -199,6 +217,21 @@ class _CarFormPageState extends State<CarFormPage> {
             ]),
           ]),
           _card('Location', [
+            DropdownButtonFormField<String?>(
+              initialValue: _locationId,
+              decoration: const InputDecoration(labelText: 'Location', border: OutlineInputBorder()),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('-- Please Select --')),
+                ..._locationRows.map(
+                  (l) => DropdownMenuItem(
+                    value: l['id']?.toString(),
+                    child: Text(l['name']?.toString() ?? ''),
+                  ),
+                ),
+              ],
+              onChanged: (v) => setState(() => _locationId = v),
+            ),
+            const SizedBox(height: 16),
             SizedBox(
               height: 300,
               child: CarLocationMapPicker(

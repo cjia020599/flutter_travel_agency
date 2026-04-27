@@ -14,6 +14,7 @@ class CarDraft {
     this.status = 'publish',
     this.mapLat,
     this.mapLng,
+    this.locationId,
     this.imageUrl,
     this.imagePublicId,
   });
@@ -32,6 +33,7 @@ class CarDraft {
   final String status;
   final double? mapLat;
   final double? mapLng;
+  final String? locationId;
   final String? imageUrl;
   final String? imagePublicId;
 }

@@ -19,6 +19,7 @@ class CarMapper {
           : 'publish',
       mapLat: double.tryParse((item['mapLat'] ?? '').toString()),
       mapLng: double.tryParse((item['mapLng'] ?? '').toString()),
+      locationId: (item['locationId'] ?? item['location']?['id'])?.toString(),
       imageUrl: item['imageUrl']?.toString(),
       imagePublicId: item['imagePublicId']?.toString(),
     );
@@ -44,6 +45,9 @@ class CarMapper {
       'content': draft.content.trim(),
       'status': draft.status,
     };
+    if (draft.locationId != null && draft.locationId!.isNotEmpty) {
+      body['locationId'] = int.tryParse(draft.locationId!) ?? draft.locationId;
+    }
     body.removeWhere((key, value) => value == null || value == '');
     return body;
   }
