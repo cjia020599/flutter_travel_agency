@@ -59,9 +59,6 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
         role: _role,
-        businessName: _role == 'vendor'
-            ? _businessNameController.text.trim()
-            : null,
       );
       print('API call completed successfully');
       
@@ -223,27 +220,14 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
                   border: OutlineInputBorder(),
                 ),
                 items: const [
-                  DropdownMenuItem(value: 'customer', child: Text('Customer')),
-                  DropdownMenuItem(value: 'vendor', child: Text('Vendor')),
+                  DropdownMenuItem(value: 'customer', child: Text('User')),
+                  DropdownMenuItem(
+                    value: 'administrator',
+                    child: Text('Administrator'),
+                  ),
                 ],
                 onChanged: (v) => setState(() => _role = v ?? 'customer'),
               ),
-              if (_role == 'vendor') ...[
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _businessNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Business name *',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (v) {
-                    if (_role == 'vendor' && (v?.trim().isEmpty ?? true)) {
-                      return 'Business name is required for vendors';
-                    }
-                    return null;
-                  },
-                ),
-              ],
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _loading ? null : () => _submit(),

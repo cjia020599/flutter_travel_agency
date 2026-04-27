@@ -2344,7 +2344,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   final body = {
                     'firstName': firstName.text.trim(),
                     'lastName': lastName.text.trim(),
-                    'userName': username.text.trim(),
+                    'username': username.text.trim(),
                     'email': email.text.trim(),
                     if (role.isNotEmpty) 'role': role,
                   };
