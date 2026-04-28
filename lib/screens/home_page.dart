@@ -1962,7 +1962,6 @@ class _TravelHomePageState extends State<TravelHomePage> {
                                 horizontal: 20,
                                 vertical: 40,
                               ),
-                              title: const Text('Sign In'),
                               content: LoginDialogContent(onSuccess: _loadData),
                               actions: [
                                 TextButton(
@@ -1990,7 +1989,6 @@ class _TravelHomePageState extends State<TravelHomePage> {
                                 horizontal: 20,
                                 vertical: 40,
                               ),
-                              title: const Text('Register'),
                               content: const RegisterDialogContent(),
                               actions: [
                                 TextButton(

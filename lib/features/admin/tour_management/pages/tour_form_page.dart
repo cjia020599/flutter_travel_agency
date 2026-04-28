@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_travel_agency/api/lookups_api.dart';
 import 'package:flutter_travel_agency/api/tours_api.dart';
@@ -6,6 +8,7 @@ import 'package:flutter_travel_agency/features/admin/tour_management/mappers/tou
 import 'package:flutter_travel_agency/features/admin/tour_management/models/tour_draft.dart';
 import 'package:flutter_travel_agency/features/admin/tour_management/validators/tour_payload_validator.dart';
 import 'package:flutter_travel_agency/features/admin/shared/widgets/admin_rich_text_editor.dart';
+import 'package:flutter_travel_agency/services/image_upload_service.dart';
 import 'package:flutter_travel_agency/widgets/car_location_map_picker.dart';
 import 'package:flutter_travel_agency/widgets/image_upload_widget.dart';
 
@@ -21,6 +24,9 @@ class TourFormPage extends StatefulWidget {
 
 class _TourFormPageState extends State<TourFormPage> {
   final _formKey = GlobalKey<FormState>();
+  static final _moneyInputFormatter = FilteringTextInputFormatter.allow(
+    RegExp(r'^\d*\.?\d{0,2}$'),
+  );
   static const _availabilityOptions = <MapEntry<String, String>>[
     MapEntry('always', 'Always available'),
   ];
@@ -41,6 +47,7 @@ class _TourFormPageState extends State<TourFormPage> {
   String? _bannerImageUrl;
   String? _bannerImagePublicId;
   final List<String> _galleryUrls = [];
+  bool _galleryUploading = false;
   bool _loading = false;
   String _status = 'publish';
   String _availability = 'always';
@@ -119,13 +126,22 @@ class _TourFormPageState extends State<TourFormPage> {
       if (!mounted) return;
       setState(() {
         _locationRows = locations
-            .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e))
+            .map(
+              (e) =>
+                  e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e),
+            )
             .toList();
         _categoryRows = categories
-            .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e))
+            .map(
+              (e) =>
+                  e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e),
+            )
             .toList();
         _attributeRows = attributes
-            .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e))
+            .map(
+              (e) =>
+                  e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e),
+            )
             .toList();
       });
     } catch (_) {}
@@ -157,6 +173,61 @@ class _TourFormPageState extends State<TourFormPage> {
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
         .replaceAll(RegExp(r'^-+|-+$'), '');
+  }
+
+  Future<void> _pickAndUploadGalleryImages() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowMultiple: true,
+      withData: true,
+      allowedExtensions: const ['png', 'jpg', 'jpeg', 'gif', 'webp'],
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    setState(() => _galleryUploading = true);
+    final uploadedUrls = <String>[];
+    final failedFiles = <String>[];
+
+    for (final file in result.files) {
+      try {
+        final upload = await ImageUploadService.uploadImage(file);
+        final url = (upload['url'] ?? '').trim();
+        if (url.isNotEmpty) {
+          uploadedUrls.add(url);
+        } else {
+          failedFiles.add(file.name);
+        }
+      } catch (_) {
+        failedFiles.add(file.name);
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _galleryUploading = false;
+      _galleryUrls.addAll(uploadedUrls);
+      _galleryUrls.retainWhere((e) => e.trim().isNotEmpty);
+    });
+
+    final uploadedCount = uploadedUrls.length;
+    final failedCount = failedFiles.length;
+    if (uploadedCount > 0 && failedCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Uploaded $uploadedCount image(s) to gallery.')),
+      );
+    } else if (uploadedCount > 0 && failedCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Uploaded $uploadedCount image(s), $failedCount failed.',
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No images were uploaded.')));
+    }
   }
 
   TourDraft _buildDraft() {
@@ -206,9 +277,9 @@ class _TourFormPageState extends State<TourFormPage> {
     final draft = _buildDraft();
     final errors = TourPayloadValidator.validate(draft);
     if (errors.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errors.first)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(errors.first)));
       return;
     }
 
@@ -223,13 +294,17 @@ class _TourFormPageState extends State<TourFormPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(widget.itemToEdit != null ? 'Tour updated' : 'Tour created'),
+          content: Text(
+            widget.itemToEdit != null ? 'Tour updated' : 'Tour created',
+          ),
         ),
       );
       widget.onCreated();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -248,7 +323,10 @@ class _TourFormPageState extends State<TourFormPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
             const Divider(height: 28),
             ...children,
           ],
@@ -314,7 +392,9 @@ class _TourFormPageState extends State<TourFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final mapInitial = (_mapLat != null && _mapLng != null) ? LatLng(_mapLat!, _mapLng!) : null;
+    final mapInitial = (_mapLat != null && _mapLng != null)
+        ? LatLng(_mapLat!, _mapLng!)
+        : null;
     final selectedAttributes = _attributeRows.where((row) {
       final id = (row['id'] ?? '').toString();
       return _selectedAttributeIds.contains(id);
@@ -329,7 +409,10 @@ class _TourFormPageState extends State<TourFormPage> {
             const SizedBox(height: 8),
             TextFormField(
               controller: _title,
-              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Tour Name'),
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Tour Name',
+              ),
               validator: (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null,
               onChanged: (_) {
                 _generateSlug();
@@ -344,9 +427,15 @@ class _TourFormPageState extends State<TourFormPage> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String?>(
               initialValue: _categoryId,
-              decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Category',
+                border: OutlineInputBorder(),
+              ),
               items: [
-                const DropdownMenuItem(value: null, child: Text('-- Please Select --')),
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('-- Please Select --'),
+                ),
                 ..._categoryRows.map(
                   (row) => DropdownMenuItem(
                     value: row['id']?.toString(),
@@ -388,7 +477,8 @@ class _TourFormPageState extends State<TourFormPage> {
                                     subtitle: Text(
                                       'Order: ${(row['positionOrder'] ?? 0).toString()}',
                                     ),
-                                    controlAffinity: ListTileControlAffinity.leading,
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
                                     contentPadding: EdgeInsets.zero,
                                   );
                                 },
@@ -431,7 +521,9 @@ class _TourFormPageState extends State<TourFormPage> {
                                 label: Text((row['name'] ?? '').toString()),
                                 onDeleted: () {
                                   setState(() {
-                                    _selectedAttributeIds.remove((row['id'] ?? '').toString());
+                                    _selectedAttributeIds.remove(
+                                      (row['id'] ?? '').toString(),
+                                    );
                                   });
                                 },
                               ),
@@ -478,29 +570,40 @@ class _TourFormPageState extends State<TourFormPage> {
           _dynamicRows(
             title: 'FAQs',
             rows: _faqs,
-            onAdd: () => setState(() => _faqs.add({'title': '', 'content': ''})),
+            onAdd: () =>
+                setState(() => _faqs.add({'title': '', 'content': ''})),
           ),
           _dynamicRows(
             title: 'Include',
             rows: _includeItems,
-            onAdd: () => setState(() => _includeItems.add({'title': '', 'content': ''})),
+            onAdd: () =>
+                setState(() => _includeItems.add({'title': '', 'content': ''})),
           ),
           _dynamicRows(
             title: 'Exclude',
             rows: _excludeItems,
-            onAdd: () => setState(() => _excludeItems.add({'title': '', 'content': ''})),
+            onAdd: () =>
+                setState(() => _excludeItems.add({'title': '', 'content': ''})),
           ),
           _dynamicRows(
             title: 'Itinerary',
             rows: _itineraryItems,
-            onAdd: () => setState(() => _itineraryItems.add({'title': '', 'content': ''})),
+            onAdd: () => setState(
+              () => _itineraryItems.add({'title': '', 'content': ''}),
+            ),
           ),
           _card('Tour Locations', [
             DropdownButtonFormField<String?>(
               initialValue: _locationId,
-              decoration: const InputDecoration(labelText: 'Location', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Location',
+                border: OutlineInputBorder(),
+              ),
               items: [
-                const DropdownMenuItem(value: null, child: Text('-- Please Select --')),
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('-- Please Select --'),
+                ),
                 ..._locationRows.map(
                   (l) => DropdownMenuItem(
                     value: l['id']?.toString(),
@@ -542,13 +645,16 @@ class _TourFormPageState extends State<TourFormPage> {
           _dynamicRows(
             title: 'Surroundings Health',
             rows: _surroundingsHealth,
-            onAdd: () => setState(() => _surroundingsHealth.add({'title': '', 'content': ''})),
+            onAdd: () => setState(
+              () => _surroundingsHealth.add({'title': '', 'content': ''}),
+            ),
           ),
           _dynamicRows(
             title: 'Surroundings Transportation',
             rows: _surroundingsTransportation,
             onAdd: () => setState(
-              () => _surroundingsTransportation.add({'title': '', 'content': ''}),
+              () =>
+                  _surroundingsTransportation.add({'title': '', 'content': ''}),
             ),
           ),
           _card('Pricing', [
@@ -557,17 +663,30 @@ class _TourFormPageState extends State<TourFormPage> {
                 Expanded(
                   child: TextFormField(
                     controller: _price,
-                    decoration: const InputDecoration(labelText: 'Price', border: OutlineInputBorder()),
-                    keyboardType: TextInputType.number,
-                    validator: (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null,
+                    decoration: const InputDecoration(
+                      labelText: 'Price',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [_moneyInputFormatter],
+                    validator: (v) =>
+                        (v?.trim().isEmpty ?? true) ? 'Required' : null,
                   ),
                 ),
                 const SizedBox(width: 20),
                 Expanded(
                   child: TextFormField(
                     controller: _salePrice,
-                    decoration: const InputDecoration(labelText: 'Sale Price', border: OutlineInputBorder()),
-                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Sale Price',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [_moneyInputFormatter],
                   ),
                 ),
               ],
@@ -593,7 +712,10 @@ class _TourFormPageState extends State<TourFormPage> {
               }),
             ),
             const SizedBox(height: 14),
-            const Text('Gallery', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text(
+              'Gallery',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -604,17 +726,32 @@ class _TourFormPageState extends State<TourFormPage> {
                   .map(
                     (e) => Chip(
                       label: Text('Image ${e.key + 1}'),
-                      onDeleted: () => setState(() => _galleryUrls.removeAt(e.key)),
+                      onDeleted: () =>
+                          setState(() => _galleryUrls.removeAt(e.key)),
                     ),
                   )
                   .toList(),
             ),
             const SizedBox(height: 10),
-            ImageUploadWidget(
-              onImageSelected: (url, _) {
-                if (url == null || url.isEmpty) return;
-                setState(() => _galleryUrls.add(url));
-              },
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _galleryUploading
+                    ? null
+                    : _pickAndUploadGalleryImages,
+                icon: _galleryUploading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.collections),
+                label: Text(
+                  _galleryUploading
+                      ? 'Uploading gallery...'
+                      : 'Upload Gallery Images',
+                ),
+              ),
             ),
           ]),
           _card('Search Engine', [
@@ -670,7 +807,10 @@ class _TourFormPageState extends State<TourFormPage> {
                   ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
                     )
                   : const Text('Save Changes'),
             ),
@@ -700,9 +840,14 @@ class _TourFormPageState extends State<TourFormPage> {
           ),
           DropdownButtonFormField<String>(
             initialValue: _availability,
-            decoration: const InputDecoration(labelText: 'Default State', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: 'Default State',
+              border: OutlineInputBorder(),
+            ),
             items: _availabilityOptions
-                .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                .map(
+                  (e) => DropdownMenuItem(value: e.key, child: Text(e.value)),
+                )
                 .toList(),
             onChanged: (v) => setState(() => _availability = v ?? 'always'),
           ),

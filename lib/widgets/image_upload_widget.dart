@@ -51,6 +51,7 @@ class _ImageUploadWidgetState extends State<ImageUploadWidget> {
           'WEBP',
         ],
         allowMultiple: false,
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -59,15 +60,15 @@ class _ImageUploadWidgetState extends State<ImageUploadWidget> {
         final uploadResult = await ImageUploadService.uploadImage(
           result.files.first,
         );
-        if (uploadResult == null) {
-          throw Exception('Upload service returned null');
-        }
-
         setState(() {
           _isUploading = false;
           _imageUrl = uploadResult['url'];
           _imagePublicId = uploadResult['publicId'];
         });
+
+        if ((_imageUrl ?? '').isEmpty) {
+          throw Exception('Upload completed but no image URL returned.');
+        }
 
         widget.onImageSelected(_imageUrl, _imagePublicId);
       }

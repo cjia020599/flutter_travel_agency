@@ -6,41 +6,55 @@ import 'api_client.dart';
 class UploadApi {
   static final _client = ApiClient.instance;
 
-  static Future<Map<String, dynamic>> uploadImage(PlatformFile file) async {
-    print('=== UPLOAD DEBUG ===');
-    print('File: ${file.name} (${file.extension}) size: ${file.size} bytes: ${file.bytes != null}');
-    
+  static Future<Map<String, dynamic>> _uploadWithField(
+    PlatformFile file,
+    String fieldName,
+  ) async {
     final ext = file.extension?.toLowerCase() ?? '';
-    final mimeType = switch(ext) {
+    final mimeType = switch (ext) {
       'png' => 'image/png',
       'jpg' || 'jpeg' => 'image/jpeg',
       'gif' => 'image/gif',
       'webp' => 'image/webp',
       _ => 'application/octet-stream',
     };
-    
-    print('MIME: $mimeType field: images');
-    
-    final bytes = file.bytes ?? <int>[];
-    print('Bytes length: ${bytes.length}');
 
-    final multipartFile = http.MultipartFile.fromBytes(
-      'images',
-      bytes,
-      filename: file.name,
-      contentType: MediaType.parse(mimeType),
-    );
+    final http.MultipartFile multipartFile;
+    if (file.bytes != null && file.bytes!.isNotEmpty) {
+      multipartFile = http.MultipartFile.fromBytes(
+        fieldName,
+        file.bytes!,
+        filename: file.name,
+        contentType: MediaType.parse(mimeType),
+      );
+    } else if ((file.path ?? '').isNotEmpty) {
+      multipartFile = await http.MultipartFile.fromPath(
+        fieldName,
+        file.path!,
+        filename: file.name,
+        contentType: MediaType.parse(mimeType),
+      );
+    } else {
+      throw Exception(
+        'Selected file has no uploadable bytes/path. Re-select the file and try again.',
+      );
+    }
 
-    print('Created MultipartFile ready');
-
-    final response = await _client.postMultipart(
+    return _client.postMultipart(
       '/api/upload/image',
       files: [multipartFile],
       auth: true,
     );
+  }
 
-    print('=== UPLOAD RESULT === $response');
-    return response;
+  static Future<Map<String, dynamic>> uploadImage(PlatformFile file) async {
+    try {
+      // Most backend routes expect "images".
+      return await _uploadWithField(file, 'images');
+    } on ApiException {
+      // Fallback for APIs expecting "image".
+      return _uploadWithField(file, 'image');
+    }
   }
 
   static Future<bool> deleteImage(String publicId) async {

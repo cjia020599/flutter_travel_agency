@@ -1,80 +1,70 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import 'package:file_picker/file_picker.dart';
-import '../api/api_client.dart';
+import '../api/upload_api.dart';
 
 class ImageUploadService {
-  static Future<Map<String, String?>?> uploadImage(PlatformFile file) async {
-    try {
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl/api/upload/image'),
-      );
+  static Map<String, String?> _extractUploadResult(Map<String, dynamic> raw) {
+    String? readUrl(Map<String, dynamic> source) {
+      return source['url']?.toString() ??
+          source['secure_url']?.toString() ??
+          source['imageUrl']?.toString();
+    }
 
-      // Add auth header
-      final token = await ApiClient.instance.getToken();
-      if (token != null) {
-        request.headers['Authorization'] = 'Bearer $token';
+    String? readPublicId(Map<String, dynamic> source) {
+      return source['publicId']?.toString() ??
+          source['public_id']?.toString() ??
+          source['imagePublicId']?.toString();
+    }
+
+    final directUrl = readUrl(raw);
+    final directPublicId = readPublicId(raw);
+    if ((directUrl ?? '').isNotEmpty || (directPublicId ?? '').isNotEmpty) {
+      return {'url': directUrl, 'publicId': directPublicId};
+    }
+
+    final data = raw['data'];
+    if (data is Map<String, dynamic>) {
+      final url = readUrl(data);
+      final publicId = readPublicId(data);
+      if ((url ?? '').isNotEmpty || (publicId ?? '').isNotEmpty) {
+        return {'url': url, 'publicId': publicId};
       }
+    }
 
-      // Debug info for web upload
-      print('Uploading file: name=${file.name}, size=${file.size}, extension=${file.extension}');
-
-      // Add the file with explicit content type (important for web upload)
-      final ext = file.extension?.toLowerCase();
-      final mimeType = <String, String>{
-        'png': 'image/png',
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'gif': 'image/gif',
-        'webp': 'image/webp',
-      }[ext ?? ''] ?? 'application/octet-stream';
-
-      // Some backends accept 'file' instead of 'image'. If your backend expects a different key, switch here.
-      request.files.add(
-        http.MultipartFile.fromBytes(
-'images', // Backend expects 'images' per feedback
-          file.bytes!,
-          filename: file.name,
-          contentType: MediaType(mimeType.split('/')[0], mimeType.split('/')[1]),
-        ),
-      );
-
-      var response = await request.send();
-      var responseData = await response.stream.bytesToString();
-
-      print('Image upload response status=${response.statusCode}, body=$responseData');
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        var jsonResponse = json.decode(responseData);
-        return {
-          'url': jsonResponse['url'] as String?,
-          'publicId': jsonResponse['publicId'] as String?,
-        };
-      } else {
-        throw Exception('Upload failed: ${response.statusCode} - $responseData');
-      }
-    } catch (e) {
-      print('Upload error: $e');
+    dynamic firstFromList(dynamic value) {
+      if (value is List && value.isNotEmpty) return value.first;
       return null;
     }
+
+    final first =
+        firstFromList(raw['images']) ??
+        firstFromList(raw['files']) ??
+        firstFromList(raw['data']);
+    if (first is Map) {
+      final map = first.map((key, value) => MapEntry(key.toString(), value));
+      final url = readUrl(map);
+      final publicId = readPublicId(map);
+      if ((url ?? '').isNotEmpty || (publicId ?? '').isNotEmpty) {
+        return {'url': url, 'publicId': publicId};
+      }
+    }
+
+    throw Exception(
+      'Upload response is missing image URL/publicId. Response: $raw',
+    );
+  }
+
+  static Future<Map<String, String?>> uploadImage(PlatformFile file) async {
+    if (file.bytes == null || file.bytes!.isEmpty) {
+      throw Exception('Selected file has no bytes to upload.');
+    }
+
+    final response = await UploadApi.uploadImage(file);
+    return _extractUploadResult(response);
   }
 
   static Future<bool> deleteImage(String publicId) async {
     try {
-      final token = await ApiClient.instance.getToken();
-      final headers = <String, String>{};
-      if (token != null) {
-        headers['Authorization'] = 'Bearer $token';
-      }
-
-      final response = await http.delete(
-        Uri.parse('$baseUrl/api/upload/image/$publicId'),
-        headers: headers,
-      );
-
-      return response.statusCode == 200;
+      return await UploadApi.deleteImage(publicId);
     } catch (e) {
       print('Delete error: $e');
       return false;

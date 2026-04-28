@@ -17,7 +17,8 @@ class CarDraft {
     this.locationId,
     this.imageUrl,
     this.imagePublicId,
-  });
+    List<String>? gallery,
+  }) : gallery = gallery ?? [];
 
   final dynamic id;
   final String title;
@@ -36,4 +37,5 @@ class CarDraft {
   final String? locationId;
   final String? imageUrl;
   final String? imagePublicId;
+  final List<String> gallery;
 }

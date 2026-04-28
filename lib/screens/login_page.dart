@@ -61,135 +61,139 @@ class _LoginDialogContentState extends State<LoginDialogContent> {
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final isSmall = width < 600;
+    final dialogMaxWidth = isSmall ? width - 32 : 420.0;
     return SingleChildScrollView(
       padding: EdgeInsets.all(isSmall ? 16 : 24),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: isSmall ? width : width * 0.8,
-          minWidth: 0,
-          maxHeight: 600,
-        ),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.lock_outline, size: 56, color: _navBlue),
-              const SizedBox(height: 24),
-              Text(
-                'Sign In',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: _navBlue,
+      child: SizedBox(
+        width: dialogMaxWidth.clamp(280.0, 420.0),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: dialogMaxWidth, maxHeight: 600),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Icon(Icons.lock_outline, size: 56, color: _navBlue),
+                const SizedBox(height: 24),
+                Text(
+                  'Sign In',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: _navBlue,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Enter your email and password',
-                style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              if (_error != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
+                const SizedBox(height: 8),
+                Text(
+                  'Enter your email and password',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                if (_error != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Colors.red.shade800,
+                        fontSize: 13,
+                      ),
+                    ),
                   ),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(color: Colors.red.shade800, fontSize: 13),
+                  const SizedBox(height: 16),
+                ],
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    hintText: 'Enter your email',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
                   ),
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Email is required'
+                      : null,
                 ),
                 const SizedBox(height: 16),
-              ],
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  hintText: 'Enter your email',
-                  prefixIcon: Icon(Icons.email_outlined),
-                  border: OutlineInputBorder(),
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    hintText: 'Enter your password',
+                    prefixIcon: Icon(Icons.lock_outline),
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Password is required' : null,
                 ),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Email is required' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  hintText: 'Enter your password',
-                  prefixIcon: Icon(Icons.lock_outline),
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _loading
+                      ? null
+                      : () {
+                          if (_formKey.currentState!.validate()) _submit();
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primaryBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: _loading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Sign In'),
                 ),
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Password is required' : null,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _loading
-                    ? null
-                    : () {
-                        if (_formKey.currentState!.validate()) _submit();
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Don't have an account? ",
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop(context);
+                        // Open register dialog from parent context
+                        await showDialog(
+                          context: Navigator.of(context).context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Register'),
+                            content: const RegisterDialogContent(),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                child: const Text('Cancel'),
+                              ),
+                            ],
+                          ),
+                        );
                       },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _primaryBlue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                      child: const Text('Register'),
+                    ),
+                  ],
                 ),
-                child: _loading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Sign In'),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Don't have an account? ",
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop(context);
-                      // Open register dialog from parent context
-                      await showDialog(
-                        context: Navigator.of(context).context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Register'),
-                          content: const RegisterDialogContent(),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              child: const Text('Cancel'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    child: const Text('Register'),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

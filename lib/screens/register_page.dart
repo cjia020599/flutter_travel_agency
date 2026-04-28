@@ -99,54 +99,114 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final isSmall = width < 700;
+    final dialogMaxWidth = isSmall ? width - 32 : 560.0;
     return SingleChildScrollView(
       padding: EdgeInsets.all(isSmall ? 16 : 24),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: isSmall ? width : width * 0.8,
-          minWidth: 0,
-          maxHeight: 700,
-        ),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Register',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: _navBlue,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Create a new account',
-                style: TextStyle(color: Colors.grey[600], fontSize: 14),
-              ),
-              const SizedBox(height: 24),
-              if (_error != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(color: Colors.red.shade800, fontSize: 13),
+      child: SizedBox(
+        width: dialogMaxWidth.clamp(300.0, 560.0),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: dialogMaxWidth, maxHeight: 700),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Register',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: _navBlue,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  'Create a new account',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                ),
+                const SizedBox(height: 24),
+                if (_error != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Colors.red.shade800,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (isSmall) ...[
+                  TextFormField(
+                    controller: _firstNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'First name *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) {
+                      final trimmed = v?.trim();
+                      if (trimmed == null || trimmed.isEmpty) return 'Required';
+                      if (trimmed.length < 3) return 'At least 3 characters';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _lastNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Last name *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Required' : null,
+                  ),
+                ] else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _firstNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'First name *',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (v) {
+                            final trimmed = v?.trim();
+                            if (trimmed == null || trimmed.isEmpty)
+                              return 'Required';
+                            if (trimmed.length < 3)
+                              return 'At least 3 characters';
+                            return null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _lastNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Last name *',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (v) =>
+                              v == null || v.trim().isEmpty ? 'Required' : null,
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 16),
-              ],
-              if (isSmall) ...[
                 TextFormField(
-                  controller: _firstNameController,
+                  controller: _usernameController,
                   decoration: const InputDecoration(
-                    labelText: 'First name *',
+                    labelText: 'User name *',
                     border: OutlineInputBorder(),
                   ),
                   validator: (v) {
@@ -156,162 +216,106 @@ class _RegisterDialogContentState extends State<RegisterDialogContent> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 TextFormField(
-                  controller: _lastNameController,
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
-                    labelText: 'Last name *',
+                    labelText: 'E-mail *',
                     border: OutlineInputBorder(),
                   ),
-                  validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Required' : null,
+                  validator: (v) {
+                    final trimmed = v?.trim();
+                    if (trimmed == null || trimmed.isEmpty) return 'Required';
+                    if (!RegExp(
+                      r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$',
+                    ).hasMatch(trimmed))
+                      return 'Enter a valid email';
+                    return null;
+                  },
                 ),
-              ] else
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _firstNameController,
-                        decoration: const InputDecoration(
-                          labelText: 'First name *',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (v) {
-                          final trimmed = v?.trim();
-                          if (trimmed == null || trimmed.isEmpty)
-                            return 'Required';
-                          if (trimmed.length < 3)
-                            return 'At least 3 characters';
-                          return null;
-                        },
-                      ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password *',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => v == null || v.length < 6
+                      ? 'At least 6 characters'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: _role,
+                  decoration: const InputDecoration(
+                    labelText: 'Role *',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'customer', child: Text('User')),
+                    DropdownMenuItem(
+                      value: 'administrator',
+                      child: Text('Administrator'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _lastNameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Last name *',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (v) =>
-                            v == null || v.trim().isEmpty ? 'Required' : null,
-                      ),
+                  ],
+                  onChanged: (v) => setState(() => _role = v ?? 'customer'),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _loading ? null : () => _submit(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primaryBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: _loading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Register'),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Already have an account? ',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop(context);
+                        // Open signin dialog from parent context
+                        await showDialog(
+                          context: Navigator.of(context).context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Sign In'),
+                            content: const LoginDialogContent(),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                child: const Text('Cancel'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      child: const Text('Sign In'),
                     ),
                   ],
                 ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'User name *',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final trimmed = v?.trim();
-                  if (trimmed == null || trimmed.isEmpty) return 'Required';
-                  if (trimmed.length < 3) return 'At least 3 characters';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'E-mail *',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final trimmed = v?.trim();
-                  if (trimmed == null || trimmed.isEmpty) return 'Required';
-                  if (!RegExp(
-                    r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$',
-                  ).hasMatch(trimmed))
-                    return 'Enter a valid email';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password *',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    v == null || v.length < 6 ? 'At least 6 characters' : null,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _role,
-                decoration: const InputDecoration(
-                  labelText: 'Role *',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'customer', child: Text('User')),
-                  DropdownMenuItem(
-                    value: 'administrator',
-                    child: Text('Administrator'),
-                  ),
-                ],
-                onChanged: (v) => setState(() => _role = v ?? 'customer'),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _loading ? null : () => _submit(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _primaryBlue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: _loading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Register'),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Already have an account? ',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop(context);
-                      // Open signin dialog from parent context
-                      await showDialog(
-                        context: Navigator.of(context).context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Sign In'),
-                          content: const LoginDialogContent(),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              child: const Text('Cancel'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    child: const Text('Sign In'),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

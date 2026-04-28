@@ -1,6 +1,13 @@
 import 'package:flutter_travel_agency/features/admin/tour_management/models/tour_draft.dart';
 
 class TourMapper {
+  static String _normalizeMoney(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return '0.00';
+    if (value.contains('.')) return value;
+    return '$value.00';
+  }
+
   static TourDraft fromApi(Map<String, dynamic> item) {
     List<Map<String, String>> parsePairs(dynamic source) {
       if (source is! List) return [];
@@ -17,19 +24,26 @@ class TourMapper {
 
     List<String> parseGallery(dynamic source) {
       if (source is! List) return [];
-      return source.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      return source
+          .map((e) => e.toString())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
 
     List<String> parseAttributeIds(Map<String, dynamic> source) {
       final direct = source['attributeIds'];
       if (direct is List) {
-        return direct.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+        return direct
+            .map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toList();
       }
       final attrs = source['attributes'];
       if (attrs is List) {
         return attrs
             .map((e) {
-              if (e is Map) return (e['id'] ?? e['attributeId'])?.toString() ?? '';
+              if (e is Map)
+                return (e['id'] ?? e['attributeId'])?.toString() ?? '';
               return '';
             })
             .where((e) => e.isNotEmpty)
@@ -46,22 +60,27 @@ class TourMapper {
       slug: (item['slug'] ?? '').toString(),
       price: (item['price'] ?? '').toString(),
       salePrice: (item['salePrice'] ?? '').toString(),
-      realTourAddress:
-          (item['realTourAddress'] ?? item['address'] ?? '').toString(),
+      realTourAddress: (item['realTourAddress'] ?? item['address'] ?? '')
+          .toString(),
       imageUrl: item['imageUrl']?.toString(),
       imagePublicId: item['imagePublicId']?.toString(),
-      bannerImageUrl: (item['bannerImageUrl'] ?? item['bannerImage'])?.toString(),
+      bannerImageUrl: (item['bannerImageUrl'] ?? item['bannerImage'])
+          ?.toString(),
       bannerImagePublicId: item['bannerImagePublicId']?.toString(),
       status: (item['status']?.toString().toLowerCase() == 'draft')
           ? 'draft'
           : 'publish',
       availability: (item['availability'] ?? 'always').toString(),
       isFeatured: item['isFeatured'] == true || item['featured'] == true,
-      serviceFeeEnabled: item['serviceFeeEnabled'] == true || item['enableServiceFee'] == true,
-      fixedDateEnabled: item['fixedDateEnabled'] == true || item['enableFixedDate'] == true,
-      openHoursEnabled: item['openHoursEnabled'] == true || item['enableOpenHours'] == true,
+      serviceFeeEnabled:
+          item['serviceFeeEnabled'] == true || item['enableServiceFee'] == true,
+      fixedDateEnabled:
+          item['fixedDateEnabled'] == true || item['enableFixedDate'] == true,
+      openHoursEnabled:
+          item['openHoursEnabled'] == true || item['enableOpenHours'] == true,
       metaTitle: (item['metaTitle'] ?? item['seoTitle'] ?? '').toString(),
-      metaDescription: (item['metaDescription'] ?? item['seoDescription'] ?? '').toString(),
+      metaDescription: (item['metaDescription'] ?? item['seoDescription'] ?? '')
+          .toString(),
       mapLat: double.tryParse((item['mapLat'] ?? '').toString()),
       mapLng: double.tryParse((item['mapLng'] ?? '').toString()),
       locationId: (item['locationId'] ?? (loc is Map ? loc['id'] : loc))
@@ -77,7 +96,9 @@ class TourMapper {
       itineraryItems: parsePairs(item['itinerary']),
       surroundingsEducation: parsePairs(item['surroundingsEducation']),
       surroundingsHealth: parsePairs(item['surroundingsHealth']),
-      surroundingsTransportation: parsePairs(item['surroundingsTransportation']),
+      surroundingsTransportation: parsePairs(
+        item['surroundingsTransportation'],
+      ),
       gallery: parseGallery(item['gallery']),
     );
   }
@@ -87,8 +108,8 @@ class TourMapper {
       'title': draft.title.trim(),
       'name': draft.title.trim(),
       'slug': draft.slug.trim(),
-      'price': draft.price.trim().isEmpty ? '0' : draft.price.trim(),
-      'salePrice': draft.salePrice.trim().isEmpty ? '0' : draft.salePrice.trim(),
+      'price': _normalizeMoney(draft.price),
+      'salePrice': _normalizeMoney(draft.salePrice),
       'realTourAddress': draft.realTourAddress.trim(),
       'address': draft.realTourAddress.trim(),
       'mapLat': draft.mapLat?.toString(),
