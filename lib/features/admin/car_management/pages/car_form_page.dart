@@ -51,6 +51,42 @@ class _CarFormPageState extends State<CarFormPage> {
   bool _loading = false;
   String? _submitNotice;
 
+  List<Map<String, dynamic>> _dedupeRowsById(Iterable<dynamic> rows) {
+    final seen = <String>{};
+    final result = <Map<String, dynamic>>[];
+    for (final raw in rows) {
+      final row = raw is Map<String, dynamic>
+          ? raw
+          : Map<String, dynamic>.from(raw as Map);
+      final id = (row['id'] ?? row['slug'] ?? row['name'] ?? '').toString();
+      if (id.isEmpty || seen.add(id)) {
+        result.add(row);
+      }
+    }
+    return result;
+  }
+
+  List<DropdownMenuItem<String?>> _buildLocationItems() {
+    final items = <DropdownMenuItem<String?>>[
+      const DropdownMenuItem(
+        value: null,
+        child: Text('-- Please Select --'),
+      ),
+    ];
+    final seenIds = <String>{};
+    for (final row in _locationRows) {
+      final id = (row['id'] ?? '').toString().trim();
+      if (id.isEmpty || !seenIds.add(id)) continue;
+      items.add(
+        DropdownMenuItem<String?>(
+          value: id,
+          child: Text(row['name']?.toString() ?? ''),
+        ),
+      );
+    }
+    return items;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -90,12 +126,7 @@ class _CarFormPageState extends State<CarFormPage> {
       final locations = await LookupsApi.locations();
       if (!mounted) return;
       setState(() {
-        _locationRows = locations
-            .map(
-              (e) =>
-                  e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e),
-            )
-            .toList();
+        _locationRows = _dedupeRowsById(locations);
       });
     } catch (_) {}
   }
@@ -274,6 +305,16 @@ class _CarFormPageState extends State<CarFormPage> {
     final mapInitial = (_mapLat != null && _mapLng != null)
         ? LatLng(_mapLat!, _mapLng!)
         : null;
+    final locationItems = _buildLocationItems();
+    final availableLocationIds = locationItems
+        .map((e) => e.value)
+        .whereType<String>()
+        .toSet();
+    final selectedLocationValue = (_locationId != null &&
+            availableLocationIds.contains(_locationId))
+        ? _locationId
+        : null;
+
     final main = Form(
       key: _formKey,
       child: Column(
@@ -389,23 +430,12 @@ class _CarFormPageState extends State<CarFormPage> {
           ]),
           _card('Location', [
             DropdownButtonFormField<String?>(
-              initialValue: _locationId,
+              initialValue: selectedLocationValue,
               decoration: const InputDecoration(
                 labelText: 'Location',
                 border: OutlineInputBorder(),
               ),
-              items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('-- Please Select --'),
-                ),
-                ..._locationRows.map(
-                  (l) => DropdownMenuItem(
-                    value: l['id']?.toString(),
-                    child: Text(l['name']?.toString() ?? ''),
-                  ),
-                ),
-              ],
+              items: locationItems,
               onChanged: (v) => setState(() => _locationId = v),
             ),
             const SizedBox(height: 16),

@@ -75,6 +75,46 @@ class _TourFormPageState extends State<TourFormPage> {
   List<Map<String, String>> _surroundingsHealth = [];
   List<Map<String, String>> _surroundingsTransportation = [];
 
+  List<Map<String, dynamic>> _dedupeRowsById(Iterable<dynamic> rows) {
+    final seen = <String>{};
+    final result = <Map<String, dynamic>>[];
+    for (final raw in rows) {
+      final row = raw is Map<String, dynamic>
+          ? raw
+          : Map<String, dynamic>.from(raw as Map);
+      final id = (row['id'] ?? row['slug'] ?? row['name'] ?? '').toString();
+      if (id.isEmpty || seen.add(id)) {
+        result.add(row);
+      }
+    }
+    return result;
+  }
+
+  List<DropdownMenuItem<String?>> _buildDropdownItems({
+    required List<Map<String, dynamic>> rows,
+    required String fallbackLabel,
+  }) {
+    final items = <DropdownMenuItem<String?>>[
+      const DropdownMenuItem(
+        value: null,
+        child: Text('-- Please Select --'),
+      ),
+    ];
+    final seenIds = <String>{};
+    for (final row in rows) {
+      final id = (row['id'] ?? '').toString().trim();
+      if (id.isEmpty || !seenIds.add(id)) continue;
+      final label = (row['name'] ?? row['title'] ?? fallbackLabel).toString();
+      items.add(
+        DropdownMenuItem<String?>(
+          value: id,
+          child: Text(label),
+        ),
+      );
+    }
+    return items;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -129,24 +169,9 @@ class _TourFormPageState extends State<TourFormPage> {
       final attributes = await LookupsApi.attributes();
       if (!mounted) return;
       setState(() {
-        _locationRows = locations
-            .map(
-              (e) =>
-                  e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e),
-            )
-            .toList();
-        _categoryRows = categories
-            .map(
-              (e) =>
-                  e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e),
-            )
-            .toList();
-        _attributeRows = attributes
-            .map(
-              (e) =>
-                  e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e),
-            )
-            .toList();
+        _locationRows = _dedupeRowsById(locations);
+        _categoryRows = _dedupeRowsById(categories);
+        _attributeRows = _dedupeRowsById(attributes);
       });
     } catch (_) {}
   }
@@ -419,6 +444,31 @@ class _TourFormPageState extends State<TourFormPage> {
       return _selectedAttributeIds.contains(id);
     }).toList();
 
+    final categoryItems = _buildDropdownItems(
+      rows: _categoryRows,
+      fallbackLabel: 'Category',
+    );
+    final locationItems = _buildDropdownItems(
+      rows: _locationRows,
+      fallbackLabel: 'Location',
+    );
+    final availableCategoryIds = categoryItems
+        .map((e) => e.value)
+        .whereType<String>()
+        .toSet();
+    final availableLocationIds = locationItems
+        .map((e) => e.value)
+        .whereType<String>()
+        .toSet();
+    final selectedCategoryValue = (_categoryId != null &&
+            availableCategoryIds.contains(_categoryId))
+        ? _categoryId
+        : null;
+    final selectedLocationValue = (_locationId != null &&
+            availableLocationIds.contains(_locationId))
+        ? _locationId
+        : null;
+
     final mainForm = Form(
       key: _formKey,
       child: Column(
@@ -445,23 +495,12 @@ class _TourFormPageState extends State<TourFormPage> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String?>(
-              initialValue: _categoryId,
+              initialValue: selectedCategoryValue,
               decoration: const InputDecoration(
                 labelText: 'Category',
                 border: OutlineInputBorder(),
               ),
-              items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('-- Please Select --'),
-                ),
-                ..._categoryRows.map(
-                  (row) => DropdownMenuItem(
-                    value: row['id']?.toString(),
-                    child: Text((row['name'] ?? row['title'] ?? '').toString()),
-                  ),
-                ),
-              ],
+              items: categoryItems,
               onChanged: (v) => setState(() => _categoryId = v),
             ),
             const SizedBox(height: 16),
@@ -623,23 +662,12 @@ class _TourFormPageState extends State<TourFormPage> {
           ),
           _card('Tour Locations', [
             DropdownButtonFormField<String?>(
-              initialValue: _locationId,
+              initialValue: selectedLocationValue,
               decoration: const InputDecoration(
                 labelText: 'Location',
                 border: OutlineInputBorder(),
               ),
-              items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('-- Please Select --'),
-                ),
-                ..._locationRows.map(
-                  (l) => DropdownMenuItem(
-                    value: l['id']?.toString(),
-                    child: Text(l['name']?.toString() ?? ''),
-                  ),
-                ),
-              ],
+              items: locationItems,
               onChanged: (v) => setState(() => _locationId = v),
             ),
             const SizedBox(height: 20),
