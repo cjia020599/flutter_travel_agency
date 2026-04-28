@@ -27,6 +27,9 @@ class _TourFormPageState extends State<TourFormPage> {
   static final _moneyInputFormatter = FilteringTextInputFormatter.allow(
     RegExp(r'^\d*\.?\d{0,2}$'),
   );
+  static final _wholeNumberInputFormatter = FilteringTextInputFormatter.allow(
+    RegExp(r'^\d*$'),
+  );
   static const _availabilityOptions = <MapEntry<String, String>>[
     MapEntry('always', 'Always available'),
   ];
@@ -539,9 +542,13 @@ class _TourFormPageState extends State<TourFormPage> {
                   child: TextFormField(
                     controller: _duration,
                     decoration: const InputDecoration(
-                      labelText: 'Duration',
+                      labelText: 'Duration (hours)',
+                      hintText: 'e.g. 22',
+                      helperText: 'Enter a number only',
                       border: OutlineInputBorder(),
                     ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [_wholeNumberInputFormatter],
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -550,8 +557,11 @@ class _TourFormPageState extends State<TourFormPage> {
                     controller: _minPeople,
                     decoration: const InputDecoration(
                       labelText: 'Tour Min People',
+                      hintText: 'e.g. 1',
                       border: OutlineInputBorder(),
                     ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [_wholeNumberInputFormatter],
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -560,8 +570,11 @@ class _TourFormPageState extends State<TourFormPage> {
                     controller: _maxPeople,
                     decoration: const InputDecoration(
                       labelText: 'Tour Max People',
+                      hintText: 'e.g. 10',
                       border: OutlineInputBorder(),
                     ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [_wholeNumberInputFormatter],
                   ),
                 ),
               ],

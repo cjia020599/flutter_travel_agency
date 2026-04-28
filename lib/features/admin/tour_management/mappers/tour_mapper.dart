@@ -1,6 +1,12 @@
 import 'package:flutter_travel_agency/features/admin/tour_management/models/tour_draft.dart';
 
 class TourMapper {
+  static int? _parseOptionalInt(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) return null;
+    return int.tryParse(value);
+  }
+
   static String _normalizeMoney(String raw) {
     final value = raw.trim();
     if (value.isEmpty) return '0.00';
@@ -128,9 +134,9 @@ class TourMapper {
       'openHoursEnabled': draft.openHoursEnabled,
       'metaTitle': draft.metaTitle.trim(),
       'metaDescription': draft.metaDescription.trim(),
-      'duration': draft.duration.trim(),
-      'minPeople': draft.minPeople.trim(),
-      'maxPeople': draft.maxPeople.trim(),
+      'duration': _parseOptionalInt(draft.duration),
+      'minPeople': _parseOptionalInt(draft.minPeople),
+      'maxPeople': _parseOptionalInt(draft.maxPeople),
       'faqs': draft.faqs,
       'include': draft.includeItems,
       'exclude': draft.excludeItems,
