@@ -58,6 +58,20 @@ class TourMapper {
       return [];
     }
 
+    List<Map<String, String>> parseSurroundingsGroup(
+      Map<String, dynamic> source, {
+      required String directKey,
+      required String nestedKey,
+    }) {
+      final direct = parsePairs(source[directKey]);
+      if (direct.isNotEmpty) return direct;
+      final surroundings = source['surroundings'];
+      if (surroundings is Map) {
+        return parsePairs(surroundings[nestedKey]);
+      }
+      return [];
+    }
+
     final loc = item['location'];
     return TourDraft(
       id: item['id'],
@@ -66,7 +80,10 @@ class TourMapper {
       slug: (item['slug'] ?? '').toString(),
       price: (item['price'] ?? '').toString(),
       salePrice: (item['salePrice'] ?? '').toString(),
-      realTourAddress: (item['realTourAddress'] ?? item['address'] ?? '')
+      realTourAddress: (item['realTourAddress'] ??
+              item['realAddress'] ??
+              item['address'] ??
+              '')
           .toString(),
       imageUrl: item['imageUrl']?.toString(),
       imagePublicId: item['imagePublicId']?.toString(),
@@ -100,10 +117,20 @@ class TourMapper {
       includeItems: parsePairs(item['include']),
       excludeItems: parsePairs(item['exclude']),
       itineraryItems: parsePairs(item['itinerary']),
-      surroundingsEducation: parsePairs(item['surroundingsEducation']),
-      surroundingsHealth: parsePairs(item['surroundingsHealth']),
-      surroundingsTransportation: parsePairs(
-        item['surroundingsTransportation'],
+      surroundingsEducation: parseSurroundingsGroup(
+        item,
+        directKey: 'surroundingsEducation',
+        nestedKey: 'education',
+      ),
+      surroundingsHealth: parseSurroundingsGroup(
+        item,
+        directKey: 'surroundingsHealth',
+        nestedKey: 'health',
+      ),
+      surroundingsTransportation: parseSurroundingsGroup(
+        item,
+        directKey: 'surroundingsTransportation',
+        nestedKey: 'transportation',
       ),
       gallery: parseGallery(item['gallery']),
     );
@@ -117,6 +144,7 @@ class TourMapper {
       'price': _normalizeMoney(draft.price),
       'salePrice': _normalizeMoney(draft.salePrice),
       'realTourAddress': draft.realTourAddress.trim(),
+      'realAddress': draft.realTourAddress.trim(),
       'address': draft.realTourAddress.trim(),
       'mapLat': draft.mapLat?.toString(),
       'mapLng': draft.mapLng?.toString(),
@@ -144,6 +172,11 @@ class TourMapper {
       'surroundingsEducation': draft.surroundingsEducation,
       'surroundingsHealth': draft.surroundingsHealth,
       'surroundingsTransportation': draft.surroundingsTransportation,
+      'surroundings': {
+        'education': draft.surroundingsEducation,
+        'health': draft.surroundingsHealth,
+        'transportation': draft.surroundingsTransportation,
+      },
       'gallery': draft.gallery,
     };
     if (draft.locationId != null && draft.locationId!.isNotEmpty) {
