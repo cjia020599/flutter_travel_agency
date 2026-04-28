@@ -52,6 +52,7 @@ class _TourFormPageState extends State<TourFormPage> {
   final List<String> _galleryUrls = [];
   bool _galleryUploading = false;
   bool _loading = false;
+  String? _submitNotice;
   String _status = 'publish';
   String _availability = 'always';
   bool _isFeatured = false;
@@ -274,12 +275,21 @@ class _TourFormPageState extends State<TourFormPage> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    setState(() => _submitNotice = null);
+    if (!_formKey.currentState!.validate()) {
+      setState(() {
+        _submitNotice = 'Please complete all required fields before saving.';
+      });
+      return;
+    }
     if (_slug.text.trim().isEmpty) _generateSlug();
 
     final draft = _buildDraft();
     final errors = TourPayloadValidator.validate(draft);
     if (errors.isNotEmpty) {
+      setState(() {
+        _submitNotice = errors.first;
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(errors.first)));
@@ -294,6 +304,9 @@ class _TourFormPageState extends State<TourFormPage> {
       } else {
         await ToursApi.create(body);
       }
+      if (mounted) {
+        setState(() => _submitNotice = null);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -305,6 +318,9 @@ class _TourFormPageState extends State<TourFormPage> {
       widget.onCreated();
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        _submitNotice = 'Unable to save right now. Please try again.';
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -828,6 +844,17 @@ class _TourFormPageState extends State<TourFormPage> {
                   : const Text('Save Changes'),
             ),
           ),
+          if (_submitNotice != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _submitNotice!,
+              style: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ]),
         _card('Tour Featured', [
           CheckboxListTile(

@@ -49,6 +49,7 @@ class _CarFormPageState extends State<CarFormPage> {
   final List<String> _galleryUrls = [];
   bool _galleryUploading = false;
   bool _loading = false;
+  String? _submitNotice;
 
   @override
   void initState() {
@@ -115,7 +116,13 @@ class _CarFormPageState extends State<CarFormPage> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    setState(() => _submitNotice = null);
+    if (!_formKey.currentState!.validate()) {
+      setState(() {
+        _submitNotice = 'Please complete all required fields before saving.';
+      });
+      return;
+    }
     if (_slug.text.trim().isEmpty) {
       _slug.text = _slugify(_title.text);
     }
@@ -141,6 +148,9 @@ class _CarFormPageState extends State<CarFormPage> {
     );
     final errors = CarPayloadValidator.validate(draft);
     if (errors.isNotEmpty) {
+      setState(() {
+        _submitNotice = errors.first;
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(errors.first)));
@@ -154,9 +164,15 @@ class _CarFormPageState extends State<CarFormPage> {
       } else {
         await CarsApi.create(body);
       }
+      if (mounted) {
+        setState(() => _submitNotice = null);
+      }
       widget.onCreated();
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        _submitNotice = 'Unable to save right now. Please try again.';
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -502,6 +518,17 @@ class _CarFormPageState extends State<CarFormPage> {
               : Text(widget.itemToEdit == null ? 'Add Car' : 'Update Car'),
         ),
       ),
+      if (_submitNotice != null) ...[
+        const SizedBox(height: 10),
+        Text(
+          _submitNotice!,
+          style: const TextStyle(
+            color: Colors.redAccent,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     ]);
     return LayoutBuilder(
       builder: (context, constraints) {
