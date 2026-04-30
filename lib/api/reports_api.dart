@@ -26,6 +26,11 @@ class ReportsApi {
     return data is List ? data : [];
   }
 
+  static Future<Map<String, dynamic>> dashboard({bool auth = true}) async {
+    final res = await _client.get('/api/reports/dashboard', auth: auth);
+    return res;
+  }
+
   static Future<void> refreshAll() async {
     // Parallel fetch all reports
     await Future.wait([
@@ -33,6 +38,7 @@ class ReportsApi {
       cars(),
       bookings(),
       locations(),
+      dashboard(),
     ]);
   }
 }

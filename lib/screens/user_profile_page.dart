@@ -50,7 +50,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   late List<CarRental> _rentals = [];
   late List<TourBooking> _tourBookings = [];
   _ProfileSection _activeSection = _ProfileSection.profile;
-  AdminSection _adminSection = AdminSection.users;
+  AdminSection _adminSection = AdminSection.dashboard;
   bool _adminToursExpanded = true;
   bool _adminCarsExpanded = false;
 
@@ -127,6 +127,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
         _fillFromProfile(resolvedProfile);
       }
       _isAdmin = results[1] as bool;
+      if (_isAdmin) {
+        _activeSection = _ProfileSection.admin;
+        _adminSection = AdminSection.dashboard;
+      }
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
         await AuthApi.logout();
@@ -817,6 +821,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
           if (_isAdmin) ...[
             const SizedBox(height: 12),
             _sideHeader('Admin'),
+            _sideItem(
+              Icons.dashboard_outlined,
+              'Dashboard',
+              () => _openAdminSection(AdminSection.dashboard),
+              isActive:
+                  _activeSection == _ProfileSection.admin &&
+                  _adminSection == AdminSection.dashboard,
+            ),
             _sideItem(
               Icons.people_outline,
               'Users',

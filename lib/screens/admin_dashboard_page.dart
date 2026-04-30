@@ -66,6 +66,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   String? _usersError;
   Map<String, dynamic> _reportsData = {};
   bool _loadingReports = false;
+  Map<String, dynamic> _dashboardData = {};
+  bool _loadingDashboard = false;
   List<dynamic> _chatQuestions = [];
   bool _loadingChatQuestions = false;
   String? _chatError;
@@ -125,7 +127,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       _checkingAdmin = false;
       _currentUserId = userId;
     });
-    await _loadData();
+    await Future.wait([_loadData(), _loadDashboard()]);
   }
 
   List<dynamic> _getFilteredTours() {
@@ -477,7 +479,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   void _loadForSection(AdminSection section) {
-    if (section == AdminSection.users) {
+    if (section == AdminSection.dashboard) {
+      _loadDashboard();
+    } else if (section == AdminSection.users) {
       _loadUsers();
     } else if (section == AdminSection.reports) {
       _loadReports();
@@ -863,6 +867,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
 
     String count(dynamic v) {
       if (v == null) return '0';
+      if (v is Map && v['items'] is List) {
+        return (v['items'] as List).length.toString();
+      }
       if (v is List) return v.length.toString();
       if (v is Map) return v.length.toString();
       return v.toString();
@@ -952,23 +959,131 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildDashboardContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Welcome to the admin dashboard.',
-          style: TextStyle(fontSize: 16, color: Colors.black87),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            _statCard('Tours', '${_tours.length}', Icons.tour),
-            const SizedBox(width: 16),
-            _statCard('Cars', '${_cars.length}', Icons.directions_car),
-          ],
-        ),
-      ],
+    if (_loadingDashboard && _dashboardData.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final metrics = (_dashboardData['metrics'] as Map?)?.cast<String, dynamic>() ??
+        <String, dynamic>{};
+    final chart = (_dashboardData['chart'] as List?)?.cast<dynamic>() ?? const [];
+    final recentBookings =
+        (_dashboardData['recentBookings'] as List?)?.cast<dynamic>() ?? const [];
+    final width = MediaQuery.of(context).size.width;
+    final isNarrow = width < 1100;
+    final isMobile = width < 700;
+    final cards = [
+      _dashboardMetricCard(
+        label: 'Revenue',
+        value: _formatPeso((metrics['revenue'] as num?)?.toDouble() ?? 0),
+        subtitle: 'Total revenue',
+        icon: Icons.shopping_cart_checkout,
+        color: const Color(0xFF7C8CE6),
+      ),
+      _dashboardMetricCard(
+        label: 'Earning',
+        value: _formatPeso((metrics['earning'] as num?)?.toDouble() ?? 0),
+        subtitle: 'Total earning',
+        icon: Icons.card_giftcard,
+        color: const Color(0xFFEC6BA7),
+      ),
+      _dashboardMetricCard(
+        label: 'Bookings',
+        value: '${metrics['bookings'] ?? 0}',
+        subtitle: 'Total bookings',
+        icon: Icons.book_online,
+        color: const Color(0xFF44C0E8),
+      ),
+      _dashboardMetricCard(
+        label: 'Services',
+        value: '${metrics['services'] ?? 0}',
+        subtitle: 'Total bookable services',
+        icon: Icons.bolt,
+        color: const Color(0xFF73CB5C),
+      ),
+    ];
+
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFF3F4F8),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'WELCOME SCHOOL!',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (isNarrow)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cardWidth = isMobile
+                    ? constraints.maxWidth
+                    : ((constraints.maxWidth - 12) / 2).clamp(220.0, 420.0);
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: cards
+                      .map((card) => SizedBox(width: cardWidth, child: card))
+                      .toList(),
+                );
+              },
+            )
+          else
+            Row(
+              children: [
+                Expanded(child: cards[0]),
+                const SizedBox(width: 12),
+                Expanded(child: cards[1]),
+                const SizedBox(width: 12),
+                Expanded(child: cards[2]),
+                const SizedBox(width: 12),
+                Expanded(child: cards[3]),
+              ],
+            ),
+          const SizedBox(height: 14),
+          if (isNarrow) ...[
+            _dashboardChartCard(chart),
+            const SizedBox(height: 14),
+            _dashboardRecentBookingsCard(recentBookings),
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _dashboardChartCard(chart, panelHeight: 360)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: _dashboardRecentBookingsCard(
+                    recentBookings,
+                    panelHeight: 360,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _loadDashboard() async {
+    if (_loadingDashboard) return;
+    setState(() => _loadingDashboard = true);
+    try {
+      final data = await ReportsApi.dashboard();
+      if (!mounted) return;
+      setState(() => _dashboardData = data);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load dashboard: $e')));
+    } finally {
+      if (mounted) setState(() => _loadingDashboard = false);
+    }
   }
 
   Widget _statCard(String label, String value, IconData icon) {
@@ -1010,6 +1125,430 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
+  Widget _dashboardMetricCard({
+    required String label,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      height: 112,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          CircleAvatar(
+            backgroundColor: Colors.white24,
+            child: Icon(icon, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dashboardChartCard(List<dynamic> chartData, {double? panelHeight}) {
+    final hasBoundedHeight = panelHeight != null;
+    final values = chartData
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+    final maxRevenue = values.fold<double>(
+      0,
+      (max, row) => ((row['revenue'] as num?)?.toDouble() ?? 0) > max
+          ? ((row['revenue'] as num?)?.toDouble() ?? 0)
+          : max,
+    );
+    final maxEarning = values.fold<double>(
+      0,
+      (max, row) => ((row['earning'] as num?)?.toDouble() ?? 0) > max
+          ? ((row['earning'] as num?)?.toDouble() ?? 0)
+          : max,
+    );
+    final maxValue = [maxRevenue, maxEarning, 1.0].reduce((a, b) => a > b ? a : b);
+
+    return SizedBox(
+      height: panelHeight,
+      child: Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Earning statistics',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calendar_month, size: 14, color: Colors.black54),
+                    SizedBox(width: 6),
+                    Text('Last 7 days', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (values.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Text('No chart data yet'),
+            )
+          else
+            if (hasBoundedHeight)
+              Expanded(
+                child: SizedBox(
+                  height: 250,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: values.map((row) {
+                  final revenue = (row['revenue'] as num?)?.toDouble() ?? 0;
+                  final earning = (row['earning'] as num?)?.toDouble() ?? 0;
+                  final dateRaw = row['date']?.toString() ?? '';
+                  final dateLabel = dateRaw.length >= 10 ? dateRaw.substring(5) : dateRaw;
+                  final revenueHeight = (revenue / maxValue) * 160;
+                  final earningHeight = (earning / maxValue) * 160;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 220),
+                                    width: 10,
+                                    height: revenueHeight.clamp(2, 180),
+                                    color: const Color(0xFF7C8CE6),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 220),
+                                    width: 10,
+                                    height: earningHeight.clamp(2, 180),
+                                    color: const Color(0xFFEC6BA7),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            dateLabel,
+                            style: const TextStyle(fontSize: 11, color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                    }).toList(),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 250,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: values.map((row) {
+                    final revenue = (row['revenue'] as num?)?.toDouble() ?? 0;
+                    final earning = (row['earning'] as num?)?.toDouble() ?? 0;
+                    final dateRaw = row['date']?.toString() ?? '';
+                    final dateLabel = dateRaw.length >= 10 ? dateRaw.substring(5) : dateRaw;
+                    final revenueHeight = (revenue / maxValue) * 160;
+                    final earningHeight = (earning / maxValue) * 160;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.bottomCenter,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    AnimatedContainer(
+                                      duration: const Duration(milliseconds: 220),
+                                      width: 10,
+                                      height: revenueHeight.clamp(2, 180),
+                                      color: const Color(0xFF7C8CE6),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    AnimatedContainer(
+                                      duration: const Duration(milliseconds: 220),
+                                      width: 10,
+                                      height: earningHeight.clamp(2, 180),
+                                      color: const Color(0xFFEC6BA7),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              dateLabel,
+                              style: const TextStyle(fontSize: 11, color: Colors.black54),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+          const SizedBox(height: 10),
+          const Row(
+            children: [
+              _LegendDot(color: Color(0xFF7C8CE6), label: 'Total Revenue'),
+              SizedBox(width: 16),
+              _LegendDot(color: Color(0xFFEC6BA7), label: 'Total Earning'),
+            ],
+          ),
+        ],
+      ),
+      ),
+    );
+  }
+
+  Widget _dashboardRecentBookingsCard(
+    List<dynamic> recentBookings, {
+    double? panelHeight,
+  }) {
+    final hasBoundedHeight = panelHeight != null;
+    final rows = recentBookings
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+    return SizedBox(
+      height: panelHeight,
+      child: Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Recent Bookings',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              TextButton(
+                onPressed: () => setSection(AdminSection.reports),
+                child: const Text('More'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (rows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Text('No recent bookings'),
+            )
+          else
+            if (hasBoundedHeight)
+              Expanded(
+                child: SingleChildScrollView(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('#')),
+                        DataColumn(label: Text('Item')),
+                        DataColumn(label: Text('Total')),
+                        DataColumn(label: Text('Paid')),
+                        DataColumn(label: Text('Status')),
+                        DataColumn(label: Text('Created At')),
+                      ],
+                      rows: rows.map((row) {
+                        final status = (row['status'] ?? '').toString();
+                        final createdAt = row['createdAt']?.toString() ?? '';
+                        final date = createdAt.isEmpty
+                            ? '-'
+                            : DateFormat('MM/dd/yyyy').format(DateTime.parse(createdAt));
+                        return DataRow(
+                          cells: [
+                            DataCell(Text('#${row['id'] ?? '-'}')),
+                            DataCell(
+                              SizedBox(
+                                width: 180,
+                                child: Text(
+                                  (row['item'] ?? '-').toString(),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            DataCell(Text(_formatPeso((row['total'] as num?)?.toDouble() ?? 0))),
+                            DataCell(Text(_formatPeso((row['paid'] as num?)?.toDouble() ?? 0))),
+                            DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: status.toLowerCase() == 'cancelled'
+                                      ? const Color(0xFFFEE2E2)
+                                      : const Color(0xFFE0F2FE),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  status.isEmpty ? 'unknown' : status,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: status.toLowerCase() == 'cancelled'
+                                        ? const Color(0xFF991B1B)
+                                        : const Color(0xFF0C4A6E),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(Text(date)),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 280,
+                child: SingleChildScrollView(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('#')),
+                  DataColumn(label: Text('Item')),
+                  DataColumn(label: Text('Total')),
+                  DataColumn(label: Text('Paid')),
+                  DataColumn(label: Text('Status')),
+                  DataColumn(label: Text('Created At')),
+                ],
+                rows: rows.map((row) {
+                  final status = (row['status'] ?? '').toString();
+                  final createdAt = row['createdAt']?.toString() ?? '';
+                  final date = createdAt.isEmpty
+                      ? '-'
+                      : DateFormat('MM/dd/yyyy').format(DateTime.parse(createdAt));
+                  return DataRow(
+                    cells: [
+                      DataCell(Text('#${row['id'] ?? '-'}')),
+                      DataCell(
+                        SizedBox(
+                          width: 180,
+                          child: Text(
+                            (row['item'] ?? '-').toString(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      DataCell(Text(_formatPeso((row['total'] as num?)?.toDouble() ?? 0))),
+                      DataCell(Text(_formatPeso((row['paid'] as num?)?.toDouble() ?? 0))),
+                      DataCell(
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: status.toLowerCase() == 'cancelled'
+                                ? const Color(0xFFFEE2E2)
+                                : const Color(0xFFE0F2FE),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            status.isEmpty ? 'unknown' : status,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: status.toLowerCase() == 'cancelled'
+                                  ? const Color(0xFF991B1B)
+                                  : const Color(0xFF0C4A6E),
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataCell(Text(date)),
+                    ],
+                  );
+                }).toList(),
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      ),
+      ),
+    );
+  }
+
+  String _formatPeso(double amount) => '₱${amount.toStringAsFixed(2)}';
+
   Widget _buildUsersList() {
     if (_loadingUsers) return const Center(child: CircularProgressIndicator());
     if (_usersError != null) return Center(child: Text(_usersError!));
@@ -1022,8 +1561,14 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           '${m['firstName'] ?? ''} ${m['lastName'] ?? ''} ${m['userName'] ?? m['username'] ?? ''}'
               .toLowerCase();
       final email = (m['email'] ?? '').toString().toLowerCase();
-      final role = (m['roleName'] ?? m['roleCode'] ?? m['roleId'] ?? '').toString().toLowerCase();
-      return query.isEmpty || id.contains(query) || name.contains(query) || email.contains(query) || role.contains(query);
+      final role = (m['roleName'] ?? m['roleCode'] ?? m['roleId'] ?? '')
+          .toString()
+          .toLowerCase();
+      return query.isEmpty ||
+          id.contains(query) ||
+          name.contains(query) ||
+          email.contains(query) ||
+          role.contains(query);
     }).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1037,8 +1582,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.search),
                   hintText: 'Search users...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   isDense: true,
                   filled: true,
                   fillColor: Colors.white,
@@ -1066,59 +1616,78 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 DataColumn(label: Text('Actions')),
               ],
               rows: users.map<DataRow>((u) {
-            final m = u as Map<String, dynamic>;
-            final id = m['id']?.toString() ?? '';
-            final firstName = (m['firstName'] ?? '').toString();
-            final lastName = (m['lastName'] ?? '').toString();
-            final userName = (m['userName'] ?? m['username'] ?? '').toString();
-            final name = ('$firstName $lastName').trim().isEmpty ? userName : ('$firstName $lastName').trim();
-            final email = m['email'] ?? '';
+                final m = u as Map<String, dynamic>;
+                final id = m['id']?.toString() ?? '';
+                final firstName = (m['firstName'] ?? '').toString();
+                final lastName = (m['lastName'] ?? '').toString();
+                final userName = (m['userName'] ?? m['username'] ?? '')
+                    .toString();
+                final name = ('$firstName $lastName').trim().isEmpty
+                    ? userName
+                    : ('$firstName $lastName').trim();
+                final email = m['email'] ?? '';
 
-            String role = '';
-            final roleCandidates = [
-              m['role'],
-              m['roles'],
-              m['roleName'],
-              m['userType'],
-              m['type'],
-              m['role_id'],
-              m['roleId'],
-            ];
-            for (final candidate in roleCandidates) {
-              if (candidate == null) continue;
-              if (candidate is String && candidate.isNotEmpty) {
-                role = candidate;
-                break;
-              }
-              if (candidate is List && candidate.isNotEmpty) {
-                role = candidate.first.toString();
-                break;
-              }
-            }
+                String role = '';
+                final roleCandidates = [
+                  m['role'],
+                  m['roles'],
+                  m['roleName'],
+                  m['userType'],
+                  m['type'],
+                  m['role_id'],
+                  m['roleId'],
+                ];
+                for (final candidate in roleCandidates) {
+                  if (candidate == null) continue;
+                  if (candidate is String && candidate.isNotEmpty) {
+                    role = candidate;
+                    break;
+                  }
+                  if (candidate is List && candidate.isNotEmpty) {
+                    role = candidate.first.toString();
+                    break;
+                  }
+                }
 
-            role = role.toString().toLowerCase();
-            if (role == 'customer') role = 'Customer';
-            if (role == 'vendor') role = 'Vendor';
-            if (role == 'administrator' || role == 'admin') {
-              role = 'Administrator';
-            }
-            if (role.isEmpty) role = 'Unknown';
+                role = role.toString().toLowerCase();
+                if (role == 'customer') role = 'Customer';
+                if (role == 'vendor') role = 'Vendor';
+                if (role == 'administrator' || role == 'admin') {
+                  role = 'Administrator';
+                }
+                if (role.isEmpty) role = 'Unknown';
 
-            final isSelf = id == _currentUserId;
+                final isSelf = id == _currentUserId;
                 return DataRow(
                   cells: [
                     DataCell(SizedBox(width: 70, child: Text(id))),
-                    DataCell(SizedBox(width: 170, child: Text(name, overflow: TextOverflow.ellipsis))),
-                    DataCell(SizedBox(width: 220, child: Text(email?.toString() ?? '', overflow: TextOverflow.ellipsis))),
+                    DataCell(
+                      SizedBox(
+                        width: 170,
+                        child: Text(name, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                    DataCell(
+                      SizedBox(
+                        width: 220,
+                        child: Text(
+                          email?.toString() ?? '',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                     DataCell(
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: role == 'Administrator'
                               ? const Color(0xFFDBEAFE)
                               : role == 'Vendor'
-                                  ? const Color(0xFFFFEDD5)
-                                  : const Color(0xFFDCFCE7),
+                              ? const Color(0xFFFFEDD5)
+                              : const Color(0xFFDCFCE7),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
@@ -1127,8 +1696,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                             color: role == 'Administrator'
                                 ? const Color(0xFF1E3A8A)
                                 : role == 'Vendor'
-                                    ? const Color(0xFF9A3412)
-                                    : const Color(0xFF166534),
+                                ? const Color(0xFF9A3412)
+                                : const Color(0xFF166534),
                           ),
                         ),
                       ),
@@ -1137,20 +1706,34 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                       SizedBox(
                         width: 180,
                         child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          TextButton.icon(
-                            icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF1D4ED8)),
-                            label: const Text('Edit', style: TextStyle(color: Color(0xFF1D4ED8))),
-                            onPressed: () => _showEditUserDialog(m),
-                          ),
-                          TextButton.icon(
-                            icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFDC2626)),
-                            label: const Text('Delete', style: TextStyle(color: Color(0xFFDC2626))),
-                            onPressed: isSelf ? null : () => _deleteUser(id),
-                          ),
-                        ],
-                      ),
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            TextButton.icon(
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                size: 16,
+                                color: Color(0xFF1D4ED8),
+                              ),
+                              label: const Text(
+                                'Edit',
+                                style: TextStyle(color: Color(0xFF1D4ED8)),
+                              ),
+                              onPressed: () => _showEditUserDialog(m),
+                            ),
+                            TextButton.icon(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 16,
+                                color: Color(0xFFDC2626),
+                              ),
+                              label: const Text(
+                                'Delete',
+                                style: TextStyle(color: Color(0xFFDC2626)),
+                              ),
+                              onPressed: isSelf ? null : () => _deleteUser(id),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -1211,7 +1794,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                       '';
                 } else {
                   userName =
-                      m['userName']?.toString() ?? m['username']?.toString() ?? '';
+                      m['userName']?.toString() ??
+                      m['username']?.toString() ??
+                      '';
                 }
                 if (userName.isEmpty) userName = 'Unknown';
                 return DataRow(
@@ -1263,8 +1848,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         () => _showToursAdvancedFilters = !_showToursAdvancedFilters,
       ),
       onBulkActionChanged: (value) => setState(() => _toursBulkAction = value),
-      onAuthorFilterChanged: (value) => setState(() => _toursAuthorFilter = value),
-      onStatusFilterChanged: (value) => setState(() => _toursStatusFilter = value),
+      onAuthorFilterChanged: (value) =>
+          setState(() => _toursAuthorFilter = value),
+      onStatusFilterChanged: (value) =>
+          setState(() => _toursStatusFilter = value),
       onApplyBulkAction: _deleteSelectedTours,
       onSelectAll: _selectAllTours,
       onToggleSelection: _toggleTourSelection,
@@ -1305,12 +1892,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       authorFilter: _carsAuthorFilter,
       statusFilter: _carsStatusFilter,
       onSearchChanged: (value) => setState(() => _carsSearchQuery = value),
-      onToggleAdvancedFilters: () => setState(
-        () => _showCarsAdvancedFilters = !_showCarsAdvancedFilters,
-      ),
+      onToggleAdvancedFilters: () =>
+          setState(() => _showCarsAdvancedFilters = !_showCarsAdvancedFilters),
       onBulkActionChanged: (value) => setState(() => _carsBulkAction = value),
-      onAuthorFilterChanged: (value) => setState(() => _carsAuthorFilter = value),
-      onStatusFilterChanged: (value) => setState(() => _carsStatusFilter = value),
+      onAuthorFilterChanged: (value) =>
+          setState(() => _carsAuthorFilter = value),
+      onStatusFilterChanged: (value) =>
+          setState(() => _carsStatusFilter = value),
       onApplyBulkAction: _deleteSelectedCars,
       onSelectAll: _selectAllCars,
       onToggleSelection: _toggleCarSelection,
@@ -1842,106 +2430,83 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           profile['username'] ??
           profile['firstName'] ??
           'Admin';
-      final userEmail = profile['email'] ?? 'admin@example.com';
+      final bookingReport = _reportsData['bookings'];
+      final lines = _extractBookingSalesLines(bookingReport);
+      final totals = _bookingTotals(lines);
+      final taxRate = _extractBookingTaxRate(bookingReport);
       final now = DateTime.now();
-      final formatter = DateFormat('MMMM dd, yyyy \'at\' h:mm a');
+      final dateLabel = DateFormat('MMMM dd, yyyy').format(now);
+      final pdfBaseFont = await PdfGoogleFonts.notoSansRegular();
+      final pdfBoldFont = await PdfGoogleFonts.notoSansBold();
       final pdf = pw.Document();
 
       pdf.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat.a4,
+          pageTheme: pw.PageTheme(
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(24),
+            theme: pw.ThemeData.withFont(base: pdfBaseFont, bold: pdfBoldFont),
+          ),
           build: (pw.Context context) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Container(
-                padding: const pw.EdgeInsets.all(20),
-                decoration: pw.BoxDecoration(
-                  color: PdfColor.fromHex('#1E3A5F'),
-                  borderRadius: pw.BorderRadius.circular(8),
-                ),
-                child: pw.Column(
-                  children: [
-                    pw.Text(
-                      'Travelista Adventures Reports',
-                      style: pw.TextStyle(
-                        fontSize: 28,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.white,
-                      ),
-                    ),
-                    pw.SizedBox(height: 8),
-                    pw.Text(
-                      'Comprehensive Dashboard Summary',
-                      style: pw.TextStyle(
-                        fontSize: 16,
-                        color: PdfColors.grey200,
-                      ),
-                    ),
-                  ],
+              pw.Text(
+                'TRAVELISTA ADVENTURES',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                  letterSpacing: 0.4,
                 ),
               ),
-              pw.SizedBox(height: 20),
-              pw.Container(
-                margin: const pw.EdgeInsets.symmetric(horizontal: 40),
-                padding: const pw.EdgeInsets.all(16),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.grey200,
-                  borderRadius: pw.BorderRadius.circular(8),
-                  border: pw.Border.all(color: PdfColors.grey300),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.center,
-                  children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'BASIC DAILY SALES REPORT',
+                style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      _pdfLabelValue('Sales Person', userName.toString()),
+                      pw.SizedBox(height: 6),
+                      _pdfLabelValue('Date', dateLabel),
+                    ],
+                  ),
+                  pw.Container(
+                    width: 210,
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.grey400),
+                      borderRadius: pw.BorderRadius.circular(4),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                       children: [
-                        pw.Text(
-                          'Printed by: $userName',
-                          style: pw.TextStyle(
-                            fontSize: 14,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
+                        _pdfSummaryLine('Sales Amount', totals.amount),
                         pw.SizedBox(height: 4),
-                        pw.Text(
-                          userEmail,
-                          style: pw.TextStyle(
-                            fontSize: 12,
-                            color: PdfColors.grey700,
-                          ),
-                        ),
-                        pw.SizedBox(height: 4),
-                        pw.Text(
-                          'Generated: ${formatter.format(now)}',
-                          style: pw.TextStyle(
-                            fontSize: 12,
-                            color: PdfColors.grey600,
-                          ),
+                        _pdfSummaryLine('Sales Tax', totals.tax),
+                        pw.Divider(color: PdfColors.grey500),
+                        _pdfSummaryLine(
+                          'Sales Total',
+                          totals.total,
+                          bold: true,
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              pw.SizedBox(height: 30),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
-                children: _buildPdfStatCards(_reportsData),
-              ),
-              pw.SizedBox(height: 30),
-              ..._buildPdfDataTables(_reportsData),
+              pw.SizedBox(height: 14),
+              _buildBookingSalesPdfTable(lines, taxRate),
               pw.Spacer(),
               pw.Container(
-                alignment: pw.Alignment.center,
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.grey100,
-                  border: pw.Border(
-                    top: pw.BorderSide(color: PdfColors.grey300),
-                  ),
-                ),
+                alignment: pw.Alignment.centerRight,
                 child: pw.Text(
-                  'Page ${context.pageNumber} | Travel Agency Admin System v1.0',
+                  'Generated ${DateFormat('yyyy-MM-dd HH:mm').format(now)}',
                   style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
                 ),
               ),
@@ -1952,7 +2517,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       await Printing.sharePdf(
         bytes: await pdf.save(),
         filename:
-            'travel-agency-reports-${DateFormat('yyyy-MM-dd-HHmmss').format(now)}.pdf',
+            'travelista-adventures-sales-report-${DateFormat('yyyy-MM-dd-HHmmss').format(now)}.pdf',
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1975,196 +2540,192 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     }
   }
 
-  List<pw.Widget> _buildPdfStatCards(Map<String, dynamic> data) {
-    final stats = {
-      'Tours': data['tours'],
-      'Cars': data['cars'],
-      'Bookings': data['bookings'],
-      'Locations': data['locations'],
-    };
-    return stats.entries.map((e) {
-      final count = _pdfCount(e.value);
-      return pw.Container(
-        width: 120,
-        padding: const pw.EdgeInsets.all(12),
-        decoration: pw.BoxDecoration(
-          color: PdfColor.fromHex('#3B82F6'),
-          borderRadius: pw.BorderRadius.circular(8),
+  pw.Widget _pdfLabelValue(String label, String value) {
+    return pw.Row(
+      children: [
+        pw.SizedBox(
+          width: 90,
+          child: pw.Text(
+            '$label:',
+            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+          ),
         ),
-        child: pw.Column(
+        pw.Text(value, style: pw.TextStyle(fontSize: 11)),
+      ],
+    );
+  }
+
+  pw.Widget _pdfSummaryLine(String label, double amount, {bool bold = false}) {
+    final style = pw.TextStyle(
+      fontSize: 11,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+    );
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label, style: style),
+        pw.Text(_pdfMoney(amount), style: style),
+      ],
+    );
+  }
+
+  pw.Widget _buildBookingSalesPdfTable(
+    List<
+      ({
+        String serviceName,
+        int pax,
+        double price,
+        double salePrice,
+        double total,
+        double tax,
+      })
+    >
+    lines,
+    double taxRate,
+  ) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.6),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(2.8),
+        1: const pw.FlexColumnWidth(0.8),
+        2: const pw.FlexColumnWidth(1.2),
+        3: const pw.FlexColumnWidth(1.2),
+        4: const pw.FlexColumnWidth(1.2),
+      },
+      children: [
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: PdfColor.fromHex('#DCE6F4')),
           children: [
-            pw.Text(
-              e.key,
-              style: const pw.TextStyle(fontSize: 12, color: PdfColors.white),
+            _pdfHeaderCell('Service Name'),
+            _pdfHeaderCell('Pax'),
+            _pdfHeaderCell('Price'),
+            _pdfHeaderCell('Sale Price'),
+            _pdfHeaderCell('Total'),
+          ],
+        ),
+        ...lines.map((line) {
+          return pw.TableRow(
+            children: [
+              _pdfCell(line.serviceName),
+              _pdfCell(line.pax.toString(), alignRight: true),
+              _pdfCell(_pdfMoney(line.price), alignRight: true),
+              _pdfCell(_pdfMoney(line.salePrice), alignRight: true),
+              _pdfCell(_pdfMoney(line.total), alignRight: true),
+            ],
+          );
+        }),
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: PdfColors.grey100),
+          children: [
+            _pdfCell(
+              'Tax (${(taxRate * 100).toStringAsFixed(0)}%)',
+              bold: true,
             ),
-            pw.SizedBox(height: 4),
-            pw.Text(
-              '$count',
-              style: pw.TextStyle(
-                fontSize: 24,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.white,
-              ),
+            _pdfCell(''),
+            _pdfCell(''),
+            _pdfCell(''),
+            _pdfCell(
+              _pdfMoney(lines.fold(0, (sum, l) => sum + l.tax)),
+              alignRight: true,
+              bold: true,
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  pw.Widget _pdfHeaderCell(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+      ),
+    );
+  }
+
+  pw.Widget _pdfCell(
+    String text, {
+    bool alignRight = false,
+    bool bold = false,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        text,
+        textAlign: alignRight ? pw.TextAlign.right : pw.TextAlign.left,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  String _pdfMoney(double value) => '\u20B1${value.toStringAsFixed(2)}';
+
+  List<
+    ({
+      String serviceName,
+      int pax,
+      double price,
+      double salePrice,
+      double total,
+      double tax,
+    })
+  >
+  _extractBookingSalesLines(dynamic data) {
+    final items = data is Map<String, dynamic> ? data['items'] : null;
+    if (items is! List) return [];
+    return items.whereType<Map>().map((item) {
+      final map = Map<String, dynamic>.from(item);
+      final pax = (map['pax'] as num?)?.toInt() ?? 1;
+      final price = (map['price'] as num?)?.toDouble() ?? 0;
+      final salePrice = (map['salePrice'] as num?)?.toDouble() ?? price;
+      final total = (map['total'] as num?)?.toDouble() ?? (salePrice * pax);
+      final tax =
+          (map['tax'] as num?)?.toDouble() ?? (total - (salePrice * pax));
+      return (
+        serviceName: (map['serviceName'] ?? map['title'] ?? 'Service')
+            .toString(),
+        pax: pax,
+        price: price,
+        salePrice: salePrice,
+        total: total,
+        tax: tax,
       );
     }).toList();
   }
 
-  List<pw.Widget> _buildPdfDataTables(Map<String, dynamic> data) {
-    final sections = ['tours', 'cars', 'bookings', 'locations'];
-    return sections
-        .map((key) {
-          final items = data[key];
-          final rows = _extractTableRows(items ?? []);
-          if (rows.isEmpty) return pw.SizedBox.shrink();
-
-          return pw.Padding(
-            padding: const pw.EdgeInsets.only(bottom: 20),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  '${key.toUpperCase()} (${rows.length})',
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 8),
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey400),
-                  defaultColumnWidth: const pw.FlexColumnWidth(),
-                  children: [
-                    pw.TableRow(
-                      decoration: pw.BoxDecoration(
-                        color: PdfColor.fromHex('#1E3A5F'),
-                      ),
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Text(
-                            'ID',
-                            style: pw.TextStyle(
-                              fontSize: 12,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.white,
-                            ),
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Text(
-                            'Title/Name',
-                            style: pw.TextStyle(
-                              fontSize: 12,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.white,
-                            ),
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Text(
-                            'Price',
-                            style: pw.TextStyle(
-                              fontSize: 12,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.white,
-                            ),
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Text(
-                            'Status',
-                            style: pw.TextStyle(
-                              fontSize: 12,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    ...rows.asMap().entries.take(20).map((entry) {
-                      final row = rows[entry.key];
-                      return pw.TableRow(
-                        decoration: pw.BoxDecoration(
-                          color: entry.key % 2 == 0
-                              ? PdfColors.white
-                              : PdfColors.grey50,
-                        ),
-                        children: [
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.all(8),
-                            child: pw.Text(
-                              row.id.toString(),
-                              style: const pw.TextStyle(fontSize: 11),
-                            ),
-                          ),
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.all(8),
-                            child: pw.Text(
-                              row.title ?? '',
-                              style: const pw.TextStyle(fontSize: 11),
-                              maxLines: 2,
-                            ),
-                          ),
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.all(8),
-                            child: pw.Text(
-                              row.price ?? '-',
-                              style: const pw.TextStyle(fontSize: 11),
-                            ),
-                          ),
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.all(8),
-                            child: pw.Text(
-                              row.status ?? '-',
-                              style: const pw.TextStyle(fontSize: 11),
-                            ),
-                          ),
-                        ],
-                      );
-                    }),
-                  ],
-                ),
-              ],
-            ),
-          );
-        })
-        .where((w) => w != pw.SizedBox.shrink())
-        .toList();
+  ({double amount, double tax, double total}) _bookingTotals(
+    List<
+      ({
+        String serviceName,
+        int pax,
+        double price,
+        double salePrice,
+        double total,
+        double tax,
+      })
+    >
+    lines,
+  ) {
+    if (lines.isEmpty) return (amount: 0, tax: 0, total: 0);
+    final amount = lines.fold<double>(
+      0,
+      (sum, line) => sum + (line.salePrice * line.pax),
+    );
+    final tax = lines.fold<double>(0, (sum, line) => sum + line.tax);
+    return (amount: amount, tax: tax, total: amount + tax);
   }
 
-  int _pdfCount(dynamic data) {
-    if (data == null) return 0;
-    if (data is List) return data.length;
-    if (data is Map) return data.length;
-    return 1;
-  }
-
-  List<({int id, String? title, String? price, String? status})>
-  _extractTableRows(dynamic data) {
-    final List<({int id, String? title, String? price, String? status})> rows =
-        [];
-    if (data is List) {
-      for (int i = 0; i < data.length; i++) {
-        final item = data[i];
-        if (item is Map<String, dynamic>) {
-          final id = item['id'] ?? i;
-          rows.add((
-            id: id is int ? id : (id?.hashCode ?? i),
-            title: item['title'] ?? item['name'] ?? item['userName'] ?? '-',
-            price: '\u20B1${item['price'] ?? item['salePrice'] ?? '-'}',
-            status: item['status']?.toString() ?? '-',
-          ));
-        }
-      }
+  double _extractBookingTaxRate(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      final raw = data['taxRate'];
+      if (raw is num) return raw.toDouble();
     }
-    return rows;
+    return 0.12;
   }
 
   Future<void> _loadUsers() async {
@@ -2810,11 +3371,31 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
 
 // --- FORM WIDGETS ---
 
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+}
+
 class _ContentTextEditor extends StatefulWidget {
-  const _ContentTextEditor({
-    required this.controller,
-    required this.label,
-  });
+  const _ContentTextEditor({required this.controller, required this.label});
 
   final TextEditingController controller;
   final String label;
@@ -2914,4 +3495,3 @@ class _ContentTextEditorState extends State<_ContentTextEditor> {
     );
   }
 }
-
