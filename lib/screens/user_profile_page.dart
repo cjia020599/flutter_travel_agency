@@ -8,6 +8,7 @@ import 'admin_dashboard_page.dart';
 import 'package:flutter_travel_agency/features/admin/dashboard/admin_section.dart';
 import '../api/car_rentals_api.dart';
 import '../api/tour_bookings_api.dart';
+import '../api/reports_api.dart';
 import '../models/car_rental.dart';
 import '../models/tour_booking.dart';
 import 'package:intl/intl.dart';
@@ -16,7 +17,7 @@ const _navBlue = Color(0xFF1E3A5F);
 const _primaryBlue = Color(0xFF2563EB);
 const _sidebarBg = Color(0xFF1E3A5F);
 
-enum _ProfileSection { profile, admin }
+enum _ProfileSection { profile, bookingHistory, admin }
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
@@ -49,6 +50,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String? _country;
   late List<CarRental> _rentals = [];
   late List<TourBooking> _tourBookings = [];
+  List<Map<String, dynamic>> _bookingHistoryRows = [];
+  bool _loadingBookingHistory = false;
+  String _bookingHistorySearch = '';
+  String _bookingTypeFilter = 'all';
+  String _bookingStatusFilter = 'all';
+  String _bookingBookedByFilter = '';
+  String _bookingCreatorFilter = '';
   _ProfileSection _activeSection = _ProfileSection.profile;
   AdminSection _adminSection = AdminSection.dashboard;
   bool _adminToursExpanded = true;
@@ -214,8 +222,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Future<void> _loadBookings() async {
     try {
-      _rentals = await CarRentalsApi.getCarRentals();
-      _tourBookings = await TourBookingsApi.getMyBookings();
+      final currentUserIdRaw = await ApiClient.instance.currentUserId;
+      final currentUserId = int.tryParse(currentUserIdRaw ?? '');
+      _rentals = await CarRentalsApi.getCarRentals(userId: currentUserId);
+      _tourBookings = await TourBookingsApi.getMyBookings(
+        userId: currentUserId,
+      );
       setState(() {});
     } catch (e) {
       print('Error loading bookings: $e');
@@ -223,200 +235,213 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> _showBookingsHistory() async {
-    await _loadBookings();
-    final allBookings = [..._rentals, ..._tourBookings];
-    if (allBookings.isEmpty) {
+    setState(() => _activeSection = _ProfileSection.bookingHistory);
+    await _loadBookingHistory();
+  }
+
+  Future<void> _loadBookingHistory() async {
+    if (_loadingBookingHistory) return;
+    setState(() => _loadingBookingHistory = true);
+    try {
+      await _loadBookings();
+      final myRows = <Map<String, dynamic>>[];
+      for (final rental in _rentals) {
+        final row = {
+          'bookingId': rental.id,
+          'serviceName': rental.carTitle,
+          'moduleType': 'car',
+          'bookedBy': rental.bookedBy?.trim().isNotEmpty == true
+              ? rental.bookedBy
+              : (rental.buyerName?.trim().isNotEmpty == true
+                    ? rental.buyerName
+                    : 'You'),
+          'creator': rental.creator?.trim().isNotEmpty == true
+              ? rental.creator
+              : 'Unknown',
+          'price': rental.carPrice,
+          'salePrice': rental.carPrice,
+          'total': rental.carPrice,
+          'bookingDate': rental.startDate.toIso8601String(),
+          'status': rental.status,
+          'actionEnabled': true,
+        };
+        myRows.add(row);
+      }
+      for (final booking in _tourBookings) {
+        final row = {
+          'bookingId': booking.id,
+          'serviceName': booking.tourTitle,
+          'moduleType': 'tour',
+          'bookedBy': booking.bookedBy?.trim().isNotEmpty == true
+              ? booking.bookedBy
+              : (booking.buyerName?.trim().isNotEmpty == true
+                    ? booking.buyerName
+                    : 'You'),
+          'creator': booking.creator?.trim().isNotEmpty == true
+              ? booking.creator
+              : 'Unknown',
+          'price': booking.tourPrice,
+          'salePrice': booking.tourPrice,
+          'total': booking.tourPrice,
+          'bookingDate': booking.startDate.toIso8601String(),
+          'status': booking.status,
+          'actionEnabled': true,
+        };
+        myRows.add(row);
+      }
+
+      if (_isAdmin) {
+        final myRowsByKey = {
+          for (final row in myRows)
+            '${(row['moduleType'] ?? '').toString().toLowerCase()}_${row['bookingId']}':
+                _normalizeBookingHistoryRow(row),
+        };
+        final myKeySet = myRowsByKey.keys.toSet();
+        final data = await ReportsApi.bookings();
+        final items = (data['items'] as List?)?.cast<dynamic>() ?? const [];
+        final allRows = items
+            .map(
+              (item) => item is Map<String, dynamic>
+                  ? item
+                  : Map<String, dynamic>.from(item as Map),
+            )
+            .map(_normalizeBookingHistoryRow)
+            .toList();
+        _bookingHistoryRows = allRows.map((row) {
+          final key =
+              '${(row['moduleType'] ?? '').toString().toLowerCase()}_${row['bookingId']}';
+          final isOwnBooking = myKeySet.contains(key);
+          if (!isOwnBooking) {
+            return {...row, 'actionEnabled': false};
+          }
+          final ownRow = myRowsByKey[key] ?? const <String, dynamic>{};
+          return {
+            ...row,
+            // Prefer own booking source for identity fields so admin sees
+            // reliable "booked by" on records they personally created.
+            'bookedBy': ownRow['bookedBy'] ?? row['bookedBy'] ?? 'You',
+            'creator': ownRow['creator'] ?? row['creator'] ?? 'Unknown',
+            'actionEnabled': true,
+          };
+        }).toList();
+      } else {
+        _bookingHistoryRows = myRows.map(_normalizeBookingHistoryRow).toList();
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load booking history: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingBookingHistory = false);
+    }
+  }
+
+  Future<void> _cancelBookingFromHistory(Map<String, dynamic> row) async {
+    final bookingId = int.tryParse((row['bookingId'] ?? '').toString());
+    final moduleType = (row['moduleType'] ?? '').toString().toLowerCase();
+    if (bookingId == null || (moduleType != 'car' && moduleType != 'tour')) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('No bookings found')));
+      ).showSnackBar(const SnackBar(content: Text('Invalid booking record.')));
       return;
     }
-    showDialog(
+
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Booking History'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 500,
-          child: ListView.builder(
-            itemCount: allBookings.length,
-            itemBuilder: (context, index) {
-              final booking = allBookings[index];
-              if (booking is CarRental) {
-                return Card(
-                  child: ListTile(
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        booking.carImageUrl,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) =>
-                            const Icon(Icons.directions_car, size: 60),
-                      ),
-                    ),
-                    title: Text(booking.carTitle),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}',
-                        ),
-                        Text(
-                          'Car Rental',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    trailing: booking.status != 'cancelled'
-                        ? IconButton(
-                            icon: const Icon(Icons.cancel, color: Colors.red),
-                            onPressed: () async {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text('Confirm Cancel'),
-                                  content: const Text(
-                                    'Are you sure you want to cancel this car rental booking? This action cannot be undone.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, false),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, true),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.red,
-                                      ),
-                                      child: const Text('Cancel Booking'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed == true) {
-                                final success =
-                                    await CarRentalsApi.cancelRental(
-                                      booking.id,
-                                    );
-                                if (success && mounted) {
-                                  Navigator.pop(context);
-                                  _showBookingsHistory();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Car rental cancelled'),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                          )
-                        : const Text(
-                            'Cancelled',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                  ),
-                );
-              } else if (booking is TourBooking) {
-                return Card(
-                  child: ListTile(
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        booking.tourImageUrl,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) =>
-                            const Icon(Icons.card_travel, size: 60),
-                      ),
-                    ),
-                    title: Text(booking.tourTitle),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${DateFormat('MMM dd, yyyy').format(booking.startDate)} - ${DateFormat('MMM dd, yyyy').format(booking.endDate)}',
-                        ),
-                        Text(
-                          'Tour Booking',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    trailing: booking.status != 'cancelled'
-                        ? IconButton(
-                            icon: const Icon(Icons.cancel, color: Colors.red),
-                            onPressed: () async {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text('Confirm Cancel'),
-                                  content: const Text(
-                                    'Are you sure you want to cancel this tour booking? This action cannot be undone.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, false),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, true),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.red,
-                                      ),
-                                      child: const Text('Cancel Booking'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed == true) {
-                                final success =
-                                    await TourBookingsApi.cancelBooking(
-                                      booking.id,
-                                    );
-                                if (success && mounted) {
-                                  Navigator.pop(context);
-                                  _showBookingsHistory();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Tour booking cancelled'),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                          )
-                        : const Text(
-                            'Cancelled',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                  ),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
+        title: const Text('Confirm Cancel Booking'),
+        content: Text(
+          'Are you sure you want to cancel this ${moduleType == 'car' ? 'car rental' : 'tour'} booking?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Yes, Cancel'),
           ),
         ],
       ),
     );
+
+    if (confirmed != true) return;
+
+    final success = moduleType == 'car'
+        ? await CarRentalsApi.cancelRental(bookingId)
+        : await TourBookingsApi.cancelBooking(bookingId);
+
+    if (!mounted) return;
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to cancel booking. Please try again.'),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Booking cancelled successfully.')),
+    );
+    await _loadBookingHistory();
+  }
+
+  Map<String, dynamic> _normalizeBookingHistoryRow(Map<String, dynamic> input) {
+    final row = Map<String, dynamic>.from(input);
+    String pickText(List<dynamic> values, {String fallback = '-'}) {
+      for (final value in values) {
+        final text = (value ?? '').toString().trim();
+        if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+      }
+      return fallback;
+    }
+
+    row['bookedBy'] = pickText([
+      row['bookedBy'],
+      row['buyerName'],
+      row['buyer_name'],
+      row['booked_by'],
+      row['bookerName'],
+      row['booker_name'],
+      row['bookerEmail'],
+      row['booker_email'],
+    ], fallback: 'Unknown');
+
+    row['creator'] = pickText([
+      row['creator'],
+      row['createdBy'],
+      row['creatorName'],
+      row['creator_name'],
+      row['ownerName'],
+      row['owner_name'],
+    ], fallback: 'Unknown');
+
+    row['serviceName'] = pickText([
+      row['serviceName'],
+      row['service_name'],
+      row['item'],
+      row['title'],
+    ], fallback: 'N/A');
+
+    row['moduleType'] = pickText([
+      row['moduleType'],
+      row['module_type'],
+      row['type'],
+    ], fallback: 'unknown').toLowerCase();
+
+    row['status'] = pickText([
+      row['status'],
+      row['bookingStatus'],
+      row['booking_status'],
+    ], fallback: 'unknown').toLowerCase();
+
+    return row;
   }
 
   Future<void> _logout() async {
@@ -462,10 +487,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
       children: [
         _buildTopBar(isMobile: isMobile),
         Expanded(
-          child: IndexedStack(
-            index: _activeSection == _ProfileSection.admin ? 1 : 0,
-            children: [_buildProfileContent(), _buildAdminContent()],
-          ),
+          child: _activeSection == _ProfileSection.admin
+              ? _buildAdminContent()
+              : _activeSection == _ProfileSection.bookingHistory
+              ? _buildBookingHistoryContent()
+              : _buildProfileContent(),
         ),
       ],
     );
@@ -485,6 +511,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   String _pageTitle() {
     if (_activeSection == _ProfileSection.profile) return 'Settings';
+    if (_activeSection == _ProfileSection.bookingHistory) {
+      return 'Booking History';
+    }
     switch (_adminSection) {
       case AdminSection.dashboard:
         return 'Dashboard';
@@ -510,6 +539,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
         return 'Add new car';
       case AdminSection.chatbot:
         return 'Chatbot Q&A';
+      case AdminSection.revenues:
+        return 'Revenues';
       case AdminSection.reports:
         return 'Reports';
       case AdminSection.settings:
@@ -736,6 +767,274 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
+  Widget _buildBookingHistoryContent() {
+    if (_loadingBookingHistory && _bookingHistoryRows.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final query = _bookingHistorySearch.trim().toLowerCase();
+    final bookedByQuery = _bookingBookedByFilter.trim().toLowerCase();
+    final creatorQuery = _bookingCreatorFilter.trim().toLowerCase();
+    final filteredRows = _bookingHistoryRows.where((row) {
+      final type = (row['moduleType'] ?? '').toString().toLowerCase();
+      final status = (row['status'] ?? '').toString().toLowerCase();
+      final bookedBy = (row['bookedBy'] ?? '').toString().toLowerCase();
+      final creator = (row['creator'] ?? '').toString().toLowerCase();
+      final searchable =
+          '${row['bookingId'] ?? ''} ${row['serviceName'] ?? ''} ${row['bookedBy'] ?? ''} ${row['creator'] ?? ''} $type $status'
+              .toLowerCase();
+      final typeOk = _bookingTypeFilter == 'all' || type == _bookingTypeFilter;
+      final statusOk =
+          _bookingStatusFilter == 'all' || status == _bookingStatusFilter;
+      final bookedByOk =
+          bookedByQuery.isEmpty || bookedBy.contains(bookedByQuery);
+      final creatorOk = creatorQuery.isEmpty || creator.contains(creatorQuery);
+      return (query.isEmpty || searchable.contains(query)) &&
+          typeOk &&
+          statusOk &&
+          bookedByOk &&
+          creatorOk;
+    }).toList();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 340,
+                child: TextField(
+                  onChanged: (value) =>
+                      setState(() => _bookingHistorySearch = value),
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search booking history...',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 160,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _bookingTypeFilter,
+                  decoration: const InputDecoration(
+                    labelText: 'Type',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All')),
+                    DropdownMenuItem(value: 'tour', child: Text('Tour')),
+                    DropdownMenuItem(value: 'car', child: Text('Car')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _bookingTypeFilter = value ?? 'all'),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _bookingStatusFilter,
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All')),
+                    DropdownMenuItem(
+                      value: 'confirmed',
+                      child: Text('Confirmed'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'cancelled',
+                      child: Text('Cancelled'),
+                    ),
+                    DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _bookingStatusFilter = value ?? 'all'),
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  onChanged: (value) =>
+                      setState(() => _bookingBookedByFilter = value),
+                  decoration: const InputDecoration(
+                    labelText: 'Booked By',
+                    hintText: 'Filter by booked by...',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  onChanged: (value) =>
+                      setState(() => _bookingCreatorFilter = value),
+                  decoration: const InputDecoration(
+                    labelText: 'Creator',
+                    hintText: 'Filter by creator...',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _loadBookingHistory,
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('#')),
+                  DataColumn(label: Text('Service')),
+                  DataColumn(label: Text('Type')),
+                  DataColumn(label: Text('Booked By')),
+                  DataColumn(label: Text('Creator')),
+                  DataColumn(label: Text('Price')),
+                  DataColumn(label: Text('Sale Price')),
+                  DataColumn(label: Text('Total')),
+                  DataColumn(label: Text('Date')),
+                  DataColumn(label: Text('Status')),
+                  DataColumn(label: Text('Action')),
+                ],
+                rows: filteredRows.map((row) {
+                  final status = (row['status'] ?? '').toString().toLowerCase();
+                  final actionEnabled = row['actionEnabled'] == true;
+                  final dateValue = (row['bookingDate'] ?? '').toString();
+                  String dateText = '-';
+                  if (dateValue.isNotEmpty) {
+                    try {
+                      dateText = DateFormat(
+                        'MMM dd, yyyy',
+                      ).format(DateTime.parse(dateValue));
+                    } catch (_) {}
+                  }
+                  final price = (row['price'] as num?)?.toDouble() ?? 0;
+                  final salePrice = (row['salePrice'] as num?)?.toDouble() ?? 0;
+                  final total = (row['total'] as num?)?.toDouble() ?? 0;
+
+                  return DataRow(
+                    cells: [
+                      DataCell(Text('#${row['bookingId'] ?? '-'}')),
+                      DataCell(
+                        SizedBox(
+                          width: 180,
+                          child: Text(
+                            (row['serviceName'] ?? '-').toString(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        Text(
+                          (row['moduleType'] ?? '-').toString().toUpperCase(),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 140,
+                          child: Text(
+                            (row['bookedBy'] ?? '-').toString(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        SizedBox(
+                          width: 140,
+                          child: Text(
+                            (row['creator'] ?? '-').toString(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      DataCell(Text('₱${price.toStringAsFixed(2)}')),
+                      DataCell(Text('₱${salePrice.toStringAsFixed(2)}')),
+                      DataCell(Text('₱${total.toStringAsFixed(2)}')),
+                      DataCell(Text(dateText)),
+                      DataCell(
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: status == 'cancelled'
+                                ? const Color(0xFFFEE2E2)
+                                : const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            status.isEmpty ? 'unknown' : status,
+                            style: TextStyle(
+                              color: status == 'cancelled'
+                                  ? const Color(0xFF991B1B)
+                                  : const Color(0xFF166534),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        status == 'cancelled'
+                            ? const Text(
+                                'Cancelled',
+                                style: TextStyle(color: Colors.grey),
+                              )
+                            : Tooltip(
+                                message: actionEnabled
+                                    ? 'Cancel this booking'
+                                    : 'You can only cancel your own bookings',
+                                child: TextButton(
+                                  onPressed: actionEnabled
+                                      ? () => _cancelBookingFromHistory(row)
+                                      : null,
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                  ),
+                                  child: const Text('Cancel Booking'),
+                                ),
+                              ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('Showing ${filteredRows.length} booking(s)'),
+        ],
+      ),
+    );
+  }
+
   Widget _section(String title, List<Widget> children) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -817,7 +1116,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
             () => setState(() => _activeSection = _ProfileSection.profile),
             isActive: _activeSection == _ProfileSection.profile,
           ),
-          _sideItem(Icons.history, 'Booking History', _showBookingsHistory),
+          _sideItem(
+            Icons.history,
+            'Booking History',
+            _showBookingsHistory,
+            isActive: _activeSection == _ProfileSection.bookingHistory,
+          ),
           if (_isAdmin) ...[
             const SizedBox(height: 12),
             _sideHeader('Admin'),
@@ -941,6 +1245,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
               isActive:
                   _activeSection == _ProfileSection.admin &&
                   _adminSection == AdminSection.chatbot,
+            ),
+            _sideItem(
+              Icons.payments_outlined,
+              'Revenues',
+              () => _openAdminSection(AdminSection.revenues),
+              isActive:
+                  _activeSection == _ProfileSection.admin &&
+                  _adminSection == AdminSection.revenues,
             ),
             _sideItem(
               Icons.assessment_outlined,

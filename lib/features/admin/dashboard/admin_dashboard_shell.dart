@@ -212,6 +212,12 @@ class AdminDashboardShell extends StatelessWidget {
             onTap: () => onSectionSelected(AdminSection.ratings),
           ),
           _sideItem(
+            icon: Icons.payments_outlined,
+            label: 'Revenues',
+            isActive: current == AdminSection.revenues,
+            onTap: () => onSectionSelected(AdminSection.revenues),
+          ),
+          _sideItem(
             icon: Icons.assessment_outlined,
             label: 'Reports',
             isActive: current == AdminSection.reports,

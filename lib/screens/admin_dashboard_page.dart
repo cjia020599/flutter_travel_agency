@@ -33,6 +33,30 @@ const _sidebarTextMuted = Color(0xFFB0BEC5);
 
 enum _ChatbotFilter { all, unanswered }
 
+enum _ReportRange { daily, weekly, monthly, yearly, custom }
+
+enum _RevenueRange { overall, daily, weekly, monthly, yearly, custom }
+
+typedef _ReportLine = ({
+  String serviceName,
+  String status,
+  int pax,
+  double price,
+  double salePrice,
+  double total,
+  double tax,
+  DateTime? bookedAt,
+});
+
+typedef _ReportSnapshot = ({
+  _ReportRange range,
+  String rangeLabel,
+  String periodLabel,
+  List<_ReportLine> lines,
+  ({double amount, double tax, double total}) totals,
+  double taxRate,
+});
+
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({
     super.key,
@@ -61,6 +85,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   List<dynamic> _cars = [];
   List<dynamic> _users = [];
   String? _currentUserId;
+  String _currentUserDisplayName = 'Admin';
   bool _loading = true;
   bool _loadingUsers = false;
   String? _usersError;
@@ -68,6 +93,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   bool _loadingReports = false;
   Map<String, dynamic> _dashboardData = {};
   bool _loadingDashboard = false;
+  Map<String, dynamic> _revenuesData = {};
+  bool _loadingRevenues = false;
+  _RevenueRange _selectedRevenueRange = _RevenueRange.overall;
+  DateTimeRange? _customRevenueDateRange;
   List<dynamic> _chatQuestions = [];
   bool _loadingChatQuestions = false;
   String? _chatError;
@@ -75,6 +104,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   _ChatbotFilter _chatFilter = _ChatbotFilter.all;
   List<dynamic> _ratings = [];
   bool _loadingRatings = false;
+  List<dynamic> _bookingHistoryRows = [];
+  bool _loadingBookingHistory = false;
+  String _bookingHistorySearch = '';
+  String _bookingTypeFilter = 'all';
+  String _bookingStatusFilter = 'all';
+  _ReportRange _selectedReportRange = _ReportRange.daily;
+  DateTimeRange? _customReportDateRange;
   String _toursSearchQuery = '';
   String _carsSearchQuery = '';
   final TextEditingController _usersSearchController = TextEditingController();
@@ -111,6 +147,21 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   Future<void> _init() async {
     final isAdmin = await UserApi.isAdmin();
     final userId = await ApiClient.instance.currentUserId;
+    String displayName = 'Admin';
+    try {
+      final profile = await UserApi.getProfile();
+      final firstName = (profile['firstName'] ?? '').toString().trim();
+      final username = (profile['userName'] ?? profile['username'] ?? '')
+          .toString()
+          .trim();
+      if (firstName.isNotEmpty) {
+        displayName = firstName;
+      } else if (username.isNotEmpty) {
+        displayName = username;
+      }
+    } catch (_) {
+      // Keep default display name if profile fetch fails.
+    }
     if (!mounted) return;
 
     if (!isAdmin) {
@@ -126,8 +177,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       _isAdmin = true;
       _checkingAdmin = false;
       _currentUserId = userId;
+      _currentUserDisplayName = displayName;
     });
     await Future.wait([_loadData(), _loadDashboard()]);
+    if (!mounted) return;
+    if (_current != AdminSection.dashboard) {
+      _loadForSection(_current);
+    }
   }
 
   List<dynamic> _getFilteredTours() {
@@ -483,6 +539,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       _loadDashboard();
     } else if (section == AdminSection.users) {
       _loadUsers();
+    } else if (section == AdminSection.revenues) {
+      _loadRevenues();
     } else if (section == AdminSection.reports) {
       _loadReports();
     } else if (section == AdminSection.chatbot) {
@@ -576,6 +634,15 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             onTap: () {
               setState(() => _current = AdminSection.ratings);
               _loadRatings();
+            },
+          ),
+          _sideItem(
+            icon: Icons.payments_outlined,
+            label: 'Revenues',
+            isActive: _current == AdminSection.revenues,
+            onTap: () {
+              setState(() => _current = AdminSection.revenues);
+              _loadRevenues();
             },
           ),
           _sideItem(
@@ -787,6 +854,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         return 'Ratings';
       case AdminSection.chatbot:
         return 'Chatbot Q&A';
+      case AdminSection.revenues:
+        return 'Revenues';
       case AdminSection.reports:
         return 'Reports';
       case AdminSection.settings:
@@ -848,6 +917,8 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
         return _buildRatingsList();
       case AdminSection.chatbot:
         return _buildChatbotManager();
+      case AdminSection.revenues:
+        return _buildRevenuesContent();
       case AdminSection.reports:
         return _buildReportsDashboard();
       case AdminSection.settings:
@@ -864,6 +935,34 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     final carsData = _reportsData['cars'];
     final bookingsData = _reportsData['bookings'];
     final locationsData = _reportsData['locations'];
+    final report = _buildActiveReportSnapshot(bookingsData);
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 760;
+    final isDesktop = width >= 1180;
+    final isWideDesktop = width >= 1320;
+    final chips = _ReportRange.values.map((range) {
+      return ChoiceChip(
+        label: Text(_reportRangeLabel(range)),
+        selected: _selectedReportRange == range,
+        onSelected: (_) async {
+          if (range == _ReportRange.custom) {
+            final picked = await _pickCustomReportDateRange();
+            if (!mounted || picked == null) return;
+            setState(() {
+              _customReportDateRange = picked;
+              _selectedReportRange = _ReportRange.custom;
+            });
+            return;
+          }
+          setState(() => _selectedReportRange = range);
+        },
+        selectedColor: _sidebarBg.withOpacity(0.16),
+        labelStyle: TextStyle(
+          color: _selectedReportRange == range ? _sidebarBg : Colors.black87,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    }).toList();
 
     String count(dynamic v) {
       if (v == null) return '0';
@@ -875,86 +974,167 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       return v.toString();
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Reports Overview',
-          style: TextStyle(fontSize: 16, color: Colors.black87),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            _statCard('Tours', count(toursData), Icons.tour),
-            const SizedBox(width: 16),
-            _statCard('Cars', count(carsData), Icons.directions_car),
-            const SizedBox(width: 16),
-            _statCard('Bookings', count(bookingsData), Icons.book_online),
-            const SizedBox(width: 16),
-            _statCard('Locations', count(locationsData), Icons.location_on),
-          ],
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Raw report data',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+    return SingleChildScrollView(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1680),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Travelista Adventures Sales Report',
+                style: TextStyle(
+                  fontSize: isMobile ? 20 : 24,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              Text(
+                '${_reportRangeLabel(_selectedReportRange)} view',
+                style: const TextStyle(fontSize: 14, color: Color(0xFF475569)),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                report.periodLabel,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 14),
+              Wrap(spacing: 8, runSpacing: 8, children: chips),
+              if (_selectedReportRange == _ReportRange.custom) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final picked = await _pickCustomReportDateRange();
+                    if (!mounted || picked == null) return;
+                    setState(() => _customReportDateRange = picked);
+                  },
+                  icon: const Icon(Icons.date_range),
+                  label: const Text('Change custom date span'),
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (isDesktop)
+                Row(
+                  children: [
+                    Expanded(
+                      child: _statCard('Tours', count(toursData), Icons.tour),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _statCard(
+                        'Cars',
+                        count(carsData),
+                        Icons.directions_car,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _statCard(
+                        'Bookings',
+                        count(bookingsData),
+                        Icons.book_online,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _statCard(
+                        'Locations',
+                        count(locationsData),
+                        Icons.location_on,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cardWidth = isMobile
+                        ? constraints.maxWidth
+                        : ((constraints.maxWidth - 12) / 2).clamp(220.0, 520.0);
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        SizedBox(
+                          width: cardWidth,
+                          child: _statCard(
+                            'Tours',
+                            count(toursData),
+                            Icons.tour,
+                          ),
+                        ),
+                        SizedBox(
+                          width: cardWidth,
+                          child: _statCard(
+                            'Cars',
+                            count(carsData),
+                            Icons.directions_car,
+                          ),
+                        ),
+                        SizedBox(
+                          width: cardWidth,
+                          child: _statCard(
+                            'Bookings',
+                            count(bookingsData),
+                            Icons.book_online,
+                          ),
+                        ),
+                        SizedBox(
+                          width: cardWidth,
+                          child: _statCard(
+                            'Locations',
+                            count(locationsData),
+                            Icons.location_on,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              const SizedBox(height: 18),
+              if (isWideDesktop)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 400,
+                      child: _buildReportsSummaryPanel(report, desktop: true),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildReportsDetailsTable(report)),
+                  ],
+                )
+              else ...[
+                _buildReportsSummaryPanel(report, desktop: !isMobile),
+                const SizedBox(height: 12),
+                _buildReportsDetailsTable(report),
+              ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: Text(
+                    'Generate ${_reportRangeLabel(_selectedReportRange)} PDF Report',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _sidebarBg,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: _loadingReports || _reportsData.isEmpty
+                      ? null
+                      : () => _generatePdfReport(context),
+                ),
+              ),
             ],
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Text(
-              _reportsData.entries
-                  .map((e) {
-                    final v = e.value;
-                    if (v is List) return '${e.key}: ${v.length} items';
-                    return '${e.key}: ${v ?? 'null'}';
-                  })
-                  .join('  •  '),
-              style: TextStyle(color: Colors.grey[800]),
-            ),
-          ),
         ),
-        const SizedBox(height: 24),
-        Center(
-          child: SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.picture_as_pdf, size: 24),
-              label: const Text(
-                'Generate PDF Report',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _sidebarBg,
-                foregroundColor: Colors.white,
-                elevation: 8,
-                shadowColor: Colors.black26,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-              onPressed: _loadingReports || _reportsData.isEmpty
-                  ? null
-                  : () => _generatePdfReport(context),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -963,11 +1143,14 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final metrics = (_dashboardData['metrics'] as Map?)?.cast<String, dynamic>() ??
+    final metrics =
+        (_dashboardData['metrics'] as Map?)?.cast<String, dynamic>() ??
         <String, dynamic>{};
-    final chart = (_dashboardData['chart'] as List?)?.cast<dynamic>() ?? const [];
+    final chart =
+        (_dashboardData['chart'] as List?)?.cast<dynamic>() ?? const [];
     final recentBookings =
-        (_dashboardData['recentBookings'] as List?)?.cast<dynamic>() ?? const [];
+        (_dashboardData['recentBookings'] as List?)?.cast<dynamic>() ??
+        const [];
     final width = MediaQuery.of(context).size.width;
     final isNarrow = width < 1100;
     final isMobile = width < 700;
@@ -1009,9 +1192,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'WELCOME SCHOOL!',
-            style: TextStyle(
+          Text(
+            'Welcome $_currentUserDisplayName',
+            style: const TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.3,
@@ -1066,6 +1249,641 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
             ),
         ],
       ),
+    );
+  }
+
+  String _revenueRangeLabel(_RevenueRange range) {
+    switch (range) {
+      case _RevenueRange.overall:
+        return 'Overall';
+      case _RevenueRange.daily:
+        return 'Daily';
+      case _RevenueRange.weekly:
+        return 'Weekly';
+      case _RevenueRange.monthly:
+        return 'Monthly';
+      case _RevenueRange.yearly:
+        return 'Yearly';
+      case _RevenueRange.custom:
+        return 'Custom';
+    }
+  }
+
+  Future<DateTimeRange?> _pickCustomRevenueDateRange() async {
+    final now = DateTime.now();
+    final initial =
+        _customRevenueDateRange ??
+        DateTimeRange(start: now.subtract(const Duration(days: 6)), end: now);
+    DateTime start = initial.start;
+    DateTime end = initial.end;
+
+    return showDialog<DateTimeRange>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocalState) {
+          Future<void> pickStart() async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: start,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(now.year + 1, 12, 31),
+            );
+            if (picked == null) return;
+            setLocalState(() {
+              start = DateTime(picked.year, picked.month, picked.day);
+              if (end.isBefore(start)) end = start;
+            });
+          }
+
+          Future<void> pickEnd() async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: end,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(now.year + 1, 12, 31),
+            );
+            if (picked == null) return;
+            setLocalState(() {
+              end = DateTime(picked.year, picked.month, picked.day);
+              if (end.isBefore(start)) start = end;
+            });
+          }
+
+          return AlertDialog(
+            title: const Text('Select custom revenue date span'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: pickStart,
+                  icon: const Icon(Icons.calendar_today),
+                  label: Text(
+                    'Start: ${DateFormat('MMM dd, yyyy').format(start)}',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: pickEnd,
+                  icon: const Icon(Icons.calendar_today_outlined),
+                  label: Text('End: ${DateFormat('MMM dd, yyyy').format(end)}'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(
+                    dialogContext,
+                  ).pop(DateTimeRange(start: start, end: end));
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  ({DateTime start, DateTime end}) _revenueRangeBounds(
+    _RevenueRange range,
+    DateTime now,
+  ) {
+    final localNow = now.toLocal();
+    switch (range) {
+      case _RevenueRange.daily:
+        final start = DateTime(localNow.year, localNow.month, localNow.day);
+        return (start: start, end: start.add(const Duration(days: 1)));
+      case _RevenueRange.weekly:
+        final start = DateTime(
+          localNow.year,
+          localNow.month,
+          localNow.day,
+        ).subtract(Duration(days: localNow.weekday - 1));
+        return (start: start, end: start.add(const Duration(days: 7)));
+      case _RevenueRange.monthly:
+        final start = DateTime(localNow.year, localNow.month);
+        return (start: start, end: DateTime(localNow.year, localNow.month + 1));
+      case _RevenueRange.yearly:
+        final start = DateTime(localNow.year);
+        return (start: start, end: DateTime(localNow.year + 1));
+      case _RevenueRange.custom:
+        final selected = _customRevenueDateRange;
+        if (selected != null) {
+          final start = DateTime(
+            selected.start.year,
+            selected.start.month,
+            selected.start.day,
+          );
+          final end = DateTime(
+            selected.end.year,
+            selected.end.month,
+            selected.end.day,
+          ).add(const Duration(days: 1));
+          return (start: start, end: end);
+        }
+        final fallbackEnd = DateTime(
+          localNow.year,
+          localNow.month,
+          localNow.day,
+        ).add(const Duration(days: 1));
+        return (
+          start: fallbackEnd.subtract(const Duration(days: 7)),
+          end: fallbackEnd,
+        );
+      case _RevenueRange.overall:
+        final start = DateTime(2000);
+        return (start: start, end: DateTime(localNow.year + 50));
+    }
+  }
+
+  String _revenuePeriodLabel(_RevenueRange range, DateTime now) {
+    if (range == _RevenueRange.overall) return 'All time';
+    final bounds = _revenueRangeBounds(range, now);
+    final endInclusive = bounds.end.subtract(const Duration(days: 1));
+    switch (range) {
+      case _RevenueRange.daily:
+        return DateFormat('MMMM dd, yyyy').format(bounds.start);
+      case _RevenueRange.weekly:
+        return '${DateFormat('MMM dd').format(bounds.start)} - ${DateFormat('MMM dd, yyyy').format(endInclusive)}';
+      case _RevenueRange.monthly:
+        return DateFormat('MMMM yyyy').format(bounds.start);
+      case _RevenueRange.yearly:
+        return DateFormat('yyyy').format(bounds.start);
+      case _RevenueRange.custom:
+        return '${DateFormat('MMM dd, yyyy').format(bounds.start)} - ${DateFormat('MMM dd, yyyy').format(endInclusive)}';
+      case _RevenueRange.overall:
+        return 'All time';
+    }
+  }
+
+  Future<void> _loadRevenues() async {
+    if (_loadingRevenues) return;
+    setState(() {
+      _loadingRevenues = true;
+    });
+    try {
+      // Use the same sales source as Reports to keep both pages consistent.
+      final bookingReport = await ReportsApi.bookings();
+      final lines = _extractBookingSalesLines(bookingReport);
+      final now = DateTime.now();
+      final inRange = _selectedRevenueRange == _RevenueRange.overall
+          ? lines
+          : lines.where((line) {
+              final date = line.bookedAt;
+              if (date == null) return false;
+              final bounds = _revenueRangeBounds(_selectedRevenueRange, now);
+              return !date.isBefore(bounds.start) && date.isBefore(bounds.end);
+            }).toList();
+
+      final billable = inRange.where((line) {
+        final raw = line.status.toLowerCase();
+        return raw == 'confirmed' || raw == 'completed';
+      }).toList();
+
+      final pending = inRange.where((line) {
+        final raw = line.status.toLowerCase();
+        return raw == 'pending';
+      }).length;
+
+      final earnings = billable.fold<double>(
+        0,
+        (sum, line) => sum + line.salePrice,
+      );
+      final tax = billable.fold<double>(0, (sum, line) => sum + line.tax);
+      final revenue = billable.fold<double>(0, (sum, line) => sum + line.total);
+      final services = billable
+          .map((line) => line.serviceName.trim().toLowerCase())
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .length;
+
+      final byDay = <String, ({double earning, double revenue})>{};
+      for (final line in billable) {
+        final bookedAt = line.bookedAt;
+        if (bookedAt == null) continue;
+        final key = DateFormat('yyyy-MM-dd').format(bookedAt);
+        final current = byDay[key] ?? (earning: 0.0, revenue: 0.0);
+        byDay[key] = (
+          earning: current.earning + line.salePrice,
+          revenue: current.revenue + line.total,
+        );
+      }
+
+      final chartKeys = byDay.keys.toList()..sort();
+      final chart = chartKeys
+          .map(
+            (key) => {
+              'date': key,
+              'earning': byDay[key]!.earning,
+              'revenue': byDay[key]!.revenue,
+            },
+          )
+          .toList();
+
+      final data = <String, dynamic>{
+        'metrics': {
+          'pending': pending,
+          'earnings': earnings,
+          'bookings': billable.length,
+          'services': services,
+          'revenue': revenue,
+          'tax': tax,
+        },
+        'chart': chart,
+      };
+      if (!mounted) return;
+      setState(() => _revenuesData = data);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load revenues: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _loadingRevenues = false);
+      }
+    }
+  }
+
+  Widget _buildRevenuesContent() {
+    if (_loadingRevenues && _revenuesData.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final metrics =
+        (_revenuesData['metrics'] as Map?)?.cast<String, dynamic>() ??
+        <String, dynamic>{};
+    final chart =
+        (_revenuesData['chart'] as List?)?.cast<dynamic>() ?? const [];
+    final width = MediaQuery.of(context).size.width;
+    final isNarrow = width < 1100;
+    final isMobile = width < 700;
+    final now = DateTime.now();
+    final revenueChips = _RevenueRange.values
+        .map(
+          (range) => ChoiceChip(
+            label: Text(_revenueRangeLabel(range)),
+            selected: _selectedRevenueRange == range,
+            onSelected: (_) async {
+              if (range == _RevenueRange.custom) {
+                final picked = await _pickCustomRevenueDateRange();
+                if (!mounted || picked == null) return;
+                setState(() {
+                  _customRevenueDateRange = picked;
+                  _selectedRevenueRange = _RevenueRange.custom;
+                });
+                _loadRevenues();
+                return;
+              }
+              setState(() => _selectedRevenueRange = range);
+              _loadRevenues();
+            },
+            selectedColor: _sidebarBg.withOpacity(0.16),
+            labelStyle: TextStyle(
+              color: _selectedRevenueRange == range
+                  ? _sidebarBg
+                  : Colors.black87,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        )
+        .toList();
+
+    final cards = [
+      _dashboardMetricCard(
+        label: 'Pending',
+        value: '${metrics['pending'] ?? 0}',
+        subtitle: 'Total pending',
+        icon: Icons.timelapse,
+        color: const Color(0xFF7C8CE6),
+      ),
+      _dashboardMetricCard(
+        label: 'Earnings',
+        value: _formatPeso((metrics['earnings'] as num?)?.toDouble() ?? 0),
+        subtitle: 'Total earnings',
+        icon: Icons.attach_money,
+        color: const Color(0xFFEC6BA7),
+      ),
+      _dashboardMetricCard(
+        label: 'Bookings',
+        value: '${metrics['bookings'] ?? 0}',
+        subtitle: 'Total bookings',
+        icon: Icons.book_online,
+        color: const Color(0xFF44C0E8),
+      ),
+      _dashboardMetricCard(
+        label: 'Services',
+        value: '${metrics['services'] ?? 0}',
+        subtitle: 'Total bookable services',
+        icon: Icons.bolt,
+        color: const Color(0xFF73CB5C),
+      ),
+    ];
+
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFF3F4F8),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Revenue Dashboard',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _revenuePeriodLabel(_selectedRevenueRange, now),
+            style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 14),
+          Wrap(spacing: 8, runSpacing: 8, children: revenueChips),
+          const SizedBox(height: 14),
+          if (_selectedRevenueRange == _RevenueRange.custom) ...[
+            OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await _pickCustomRevenueDateRange();
+                if (!mounted || picked == null) return;
+                setState(() => _customRevenueDateRange = picked);
+                _loadRevenues();
+              },
+              icon: const Icon(Icons.date_range),
+              label: const Text('Change custom date span'),
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (isNarrow)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cardWidth = isMobile
+                    ? constraints.maxWidth
+                    : ((constraints.maxWidth - 12) / 2).clamp(220.0, 420.0);
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: cards
+                      .map((card) => SizedBox(width: cardWidth, child: card))
+                      .toList(),
+                );
+              },
+            )
+          else
+            Row(
+              children: [
+                Expanded(child: cards[0]),
+                const SizedBox(width: 12),
+                Expanded(child: cards[1]),
+                const SizedBox(width: 12),
+                Expanded(child: cards[2]),
+                const SizedBox(width: 12),
+                Expanded(child: cards[3]),
+              ],
+            ),
+          const SizedBox(height: 14),
+          _dashboardChartCard(
+            chart,
+            panelHeight: isNarrow ? null : 360,
+            rangeLabel: _revenuePeriodLabel(_selectedRevenueRange, now),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _loadBookingHistory() async {
+    if (_loadingBookingHistory) return;
+    setState(() => _loadingBookingHistory = true);
+    try {
+      final data = await ReportsApi.bookings();
+      final items = (data['items'] as List?)?.cast<dynamic>() ?? const [];
+      if (!mounted) return;
+      setState(() => _bookingHistoryRows = items);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load booking history: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingBookingHistory = false);
+    }
+  }
+
+  Widget _buildBookingHistoryPage() {
+    if (_loadingBookingHistory && _bookingHistoryRows.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final query = _bookingHistorySearch.trim().toLowerCase();
+    final rows = _bookingHistoryRows.where((item) {
+      final m = item is Map<String, dynamic>
+          ? item
+          : Map<String, dynamic>.from(item as Map);
+      final status = (m['status'] ?? '').toString().toLowerCase();
+      final type = (m['moduleType'] ?? '').toString().toLowerCase();
+      final hay =
+          '${m['bookingId'] ?? ''} ${m['serviceName'] ?? ''} ${m['bookedBy'] ?? ''} ${m['creator'] ?? ''} $status $type'
+              .toLowerCase();
+      final typeOk = _bookingTypeFilter == 'all' || type == _bookingTypeFilter;
+      final statusOk =
+          _bookingStatusFilter == 'all' || status == _bookingStatusFilter;
+      return (query.isEmpty || hay.contains(query)) && typeOk && statusOk;
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                onChanged: (value) =>
+                    setState(() => _bookingHistorySearch = value),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Search by service, booker, creator...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 150,
+              child: DropdownButtonFormField<String>(
+                initialValue: _bookingTypeFilter,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Type',
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All')),
+                  DropdownMenuItem(value: 'tour', child: Text('Tour')),
+                  DropdownMenuItem(value: 'car', child: Text('Car')),
+                ],
+                onChanged: (value) =>
+                    setState(() => _bookingTypeFilter = value ?? 'all'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 180,
+              child: DropdownButtonFormField<String>(
+                initialValue: _bookingStatusFilter,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Status',
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All')),
+                  DropdownMenuItem(
+                    value: 'confirmed',
+                    child: Text('Confirmed'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'cancelled',
+                    child: Text('Cancelled'),
+                  ),
+                ],
+                onChanged: (value) =>
+                    setState(() => _bookingStatusFilter = value ?? 'all'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            IconButton(
+              onPressed: _loadBookingHistory,
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('#')),
+                DataColumn(label: Text('Service')),
+                DataColumn(label: Text('Type')),
+                DataColumn(label: Text('Booked By')),
+                DataColumn(label: Text('Creator')),
+                DataColumn(label: Text('Price')),
+                DataColumn(label: Text('Sale Price')),
+                DataColumn(label: Text('Total')),
+                DataColumn(label: Text('Date')),
+                DataColumn(label: Text('Status')),
+              ],
+              rows: rows.map<DataRow>((item) {
+                final m = item is Map<String, dynamic>
+                    ? item
+                    : Map<String, dynamic>.from(item as Map);
+                final status = (m['status'] ?? '').toString();
+                final dateRaw = (m['bookingDate'] ?? '').toString();
+                String dateText = '-';
+                if (dateRaw.isNotEmpty) {
+                  try {
+                    dateText = DateFormat(
+                      'MM/dd/yyyy',
+                    ).format(DateTime.parse(dateRaw));
+                  } catch (_) {}
+                }
+                final price = (m['price'] as num?)?.toDouble() ?? 0;
+                final salePrice = (m['salePrice'] as num?)?.toDouble() ?? 0;
+                final total = (m['total'] as num?)?.toDouble() ?? 0;
+                return DataRow(
+                  cells: [
+                    DataCell(Text('#${m['bookingId'] ?? '-'}')),
+                    DataCell(
+                      SizedBox(
+                        width: 180,
+                        child: Text(
+                          (m['serviceName'] ?? '-').toString(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      Text((m['moduleType'] ?? '-').toString().toUpperCase()),
+                    ),
+                    DataCell(
+                      SizedBox(
+                        width: 160,
+                        child: Text(
+                          (m['bookedBy'] ?? '-').toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      SizedBox(
+                        width: 160,
+                        child: Text(
+                          (m['creator'] ?? '-').toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    DataCell(Text(_formatPeso(price))),
+                    DataCell(Text(_formatPeso(salePrice))),
+                    DataCell(Text(_formatPeso(total))),
+                    DataCell(Text(dateText)),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: status.toLowerCase() == 'cancelled'
+                              ? const Color(0xFFFEE2E2)
+                              : const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          status.isEmpty ? 'unknown' : status,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: status.toLowerCase() == 'cancelled'
+                                ? const Color(0xFF991B1B)
+                                : const Color(0xFF166534),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text('Showing ${rows.length} booking(s)'),
+      ],
     );
   }
 
@@ -1186,7 +2004,12 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     );
   }
 
-  Widget _dashboardChartCard(List<dynamic> chartData, {double? panelHeight}) {
+  Widget _dashboardChartCard(
+    List<dynamic> chartData, {
+    double? panelHeight,
+    String rangeLabel = 'Last 7 days',
+    VoidCallback? onRangeTap,
+  }) {
     final hasBoundedHeight = panelHeight != null;
     final values = chartData
         .whereType<Map>()
@@ -1204,103 +2027,134 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           ? ((row['earning'] as num?)?.toDouble() ?? 0)
           : max,
     );
-    final maxValue = [maxRevenue, maxEarning, 1.0].reduce((a, b) => a > b ? a : b);
+    final maxValue = [
+      maxRevenue,
+      maxEarning,
+      1.0,
+    ].reduce((a, b) => a > b ? a : b);
 
     return SizedBox(
       height: panelHeight,
       child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Earning statistics',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Earning statistics',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                InkWell(
+                  onTap: onRangeTap,
                   borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.calendar_month,
+                          size: 14,
+                          color: Colors.black54,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(rangeLabel, style: const TextStyle(fontSize: 12)),
+                        if (onRangeTap != null) ...[
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.arrow_drop_down,
+                            size: 16,
+                            color: Colors.black54,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.calendar_month, size: 14, color: Colors.black54),
-                    SizedBox(width: 6),
-                    Text('Last 7 days', style: TextStyle(fontSize: 12)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (values.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Text('No chart data yet'),
-            )
-          else
-            if (hasBoundedHeight)
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (values.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Text('No chart data yet'),
+              )
+            else if (hasBoundedHeight)
               Expanded(
                 child: SizedBox(
                   height: 250,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: values.map((row) {
-                  final revenue = (row['revenue'] as num?)?.toDouble() ?? 0;
-                  final earning = (row['earning'] as num?)?.toDouble() ?? 0;
-                  final dateRaw = row['date']?.toString() ?? '';
-                  final dateLabel = dateRaw.length >= 10 ? dateRaw.substring(5) : dateRaw;
-                  final revenueHeight = (revenue / maxValue) * 160;
-                  final earningHeight = (earning / maxValue) * 160;
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.bottomCenter,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  AnimatedContainer(
-                                    duration: const Duration(milliseconds: 220),
-                                    width: 10,
-                                    height: revenueHeight.clamp(2, 180),
-                                    color: const Color(0xFF7C8CE6),
+                      final revenue = (row['revenue'] as num?)?.toDouble() ?? 0;
+                      final earning = (row['earning'] as num?)?.toDouble() ?? 0;
+                      final dateRaw = row['date']?.toString() ?? '';
+                      final dateLabel = dateRaw.length >= 10
+                          ? dateRaw.substring(5)
+                          : dateRaw;
+                      final revenueHeight = (revenue / maxValue) * 160;
+                      final earningHeight = (earning / maxValue) * 160;
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 220,
+                                        ),
+                                        width: 10,
+                                        height: revenueHeight.clamp(2, 180),
+                                        color: const Color(0xFF7C8CE6),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 220,
+                                        ),
+                                        width: 10,
+                                        height: earningHeight.clamp(2, 180),
+                                        color: const Color(0xFFEC6BA7),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 4),
-                                  AnimatedContainer(
-                                    duration: const Duration(milliseconds: 220),
-                                    width: 10,
-                                    height: earningHeight.clamp(2, 180),
-                                    color: const Color(0xFFEC6BA7),
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: 8),
+                              Text(
+                                dateLabel,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            dateLabel,
-                            style: const TextStyle(fontSize: 11, color: Colors.black54),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
+                        ),
+                      );
                     }).toList(),
                   ),
                 ),
@@ -1314,7 +2168,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     final revenue = (row['revenue'] as num?)?.toDouble() ?? 0;
                     final earning = (row['earning'] as num?)?.toDouble() ?? 0;
                     final dateRaw = row['date']?.toString() ?? '';
-                    final dateLabel = dateRaw.length >= 10 ? dateRaw.substring(5) : dateRaw;
+                    final dateLabel = dateRaw.length >= 10
+                        ? dateRaw.substring(5)
+                        : dateRaw;
                     final revenueHeight = (revenue / maxValue) * 160;
                     final earningHeight = (earning / maxValue) * 160;
                     return Expanded(
@@ -1331,14 +2187,18 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     AnimatedContainer(
-                                      duration: const Duration(milliseconds: 220),
+                                      duration: const Duration(
+                                        milliseconds: 220,
+                                      ),
                                       width: 10,
                                       height: revenueHeight.clamp(2, 180),
                                       color: const Color(0xFF7C8CE6),
                                     ),
                                     const SizedBox(width: 4),
                                     AnimatedContainer(
-                                      duration: const Duration(milliseconds: 220),
+                                      duration: const Duration(
+                                        milliseconds: 220,
+                                      ),
                                       width: 10,
                                       height: earningHeight.clamp(2, 180),
                                       color: const Color(0xFFEC6BA7),
@@ -1350,7 +2210,10 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                             const SizedBox(height: 8),
                             Text(
                               dateLabel,
-                              style: const TextStyle(fontSize: 11, color: Colors.black54),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.black54,
+                              ),
                             ),
                           ],
                         ),
@@ -1359,16 +2222,16 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   }).toList(),
                 ),
               ),
-          const SizedBox(height: 10),
-          const Row(
-            children: [
-              _LegendDot(color: Color(0xFF7C8CE6), label: 'Total Revenue'),
-              SizedBox(width: 16),
-              _LegendDot(color: Color(0xFFEC6BA7), label: 'Total Earning'),
-            ],
-          ),
-        ],
-      ),
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                _LegendDot(color: Color(0xFF7C8CE6), label: 'Total Revenue'),
+                SizedBox(width: 16),
+                _LegendDot(color: Color(0xFFEC6BA7), label: 'Total Earning'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1385,36 +2248,35 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     return SizedBox(
       height: panelHeight,
       child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Recent Bookings',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              TextButton(
-                onPressed: () => setSection(AdminSection.reports),
-                child: const Text('More'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (rows.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Text('No recent bookings'),
-            )
-          else
-            if (hasBoundedHeight)
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Recent Bookings',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                TextButton(
+                  onPressed: () => setSection(AdminSection.reports),
+                  child: const Text('More'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (rows.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Text('No recent bookings'),
+              )
+            else if (hasBoundedHeight)
               Expanded(
                 child: SingleChildScrollView(
                   child: SingleChildScrollView(
@@ -1433,7 +2295,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                         final createdAt = row['createdAt']?.toString() ?? '';
                         final date = createdAt.isEmpty
                             ? '-'
-                            : DateFormat('MM/dd/yyyy').format(DateTime.parse(createdAt));
+                            : DateFormat(
+                                'MM/dd/yyyy',
+                              ).format(DateTime.parse(createdAt));
                         return DataRow(
                           cells: [
                             DataCell(Text('#${row['id'] ?? '-'}')),
@@ -1447,11 +2311,26 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                                 ),
                               ),
                             ),
-                            DataCell(Text(_formatPeso((row['total'] as num?)?.toDouble() ?? 0))),
-                            DataCell(Text(_formatPeso((row['paid'] as num?)?.toDouble() ?? 0))),
+                            DataCell(
+                              Text(
+                                _formatPeso(
+                                  (row['total'] as num?)?.toDouble() ?? 0,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                _formatPeso(
+                                  (row['paid'] as num?)?.toDouble() ?? 0,
+                                ),
+                              ),
+                            ),
                             DataCell(
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
                                   color: status.toLowerCase() == 'cancelled'
                                       ? const Color(0xFFFEE2E2)
@@ -1484,70 +2363,475 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('#')),
-                  DataColumn(label: Text('Item')),
-                  DataColumn(label: Text('Total')),
-                  DataColumn(label: Text('Paid')),
-                  DataColumn(label: Text('Status')),
-                  DataColumn(label: Text('Created At')),
-                ],
-                rows: rows.map((row) {
-                  final status = (row['status'] ?? '').toString();
-                  final createdAt = row['createdAt']?.toString() ?? '';
-                  final date = createdAt.isEmpty
-                      ? '-'
-                      : DateFormat('MM/dd/yyyy').format(DateTime.parse(createdAt));
-                  return DataRow(
-                    cells: [
-                      DataCell(Text('#${row['id'] ?? '-'}')),
-                      DataCell(
-                        SizedBox(
-                          width: 180,
-                          child: Text(
-                            (row['item'] ?? '-').toString(),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      DataCell(Text(_formatPeso((row['total'] as num?)?.toDouble() ?? 0))),
-                      DataCell(Text(_formatPeso((row['paid'] as num?)?.toDouble() ?? 0))),
-                      DataCell(
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: status.toLowerCase() == 'cancelled'
-                                ? const Color(0xFFFEE2E2)
-                                : const Color(0xFFE0F2FE),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            status.isEmpty ? 'unknown' : status,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: status.toLowerCase() == 'cancelled'
-                                  ? const Color(0xFF991B1B)
-                                  : const Color(0xFF0C4A6E),
+                      columns: const [
+                        DataColumn(label: Text('#')),
+                        DataColumn(label: Text('Item')),
+                        DataColumn(label: Text('Total')),
+                        DataColumn(label: Text('Paid')),
+                        DataColumn(label: Text('Status')),
+                        DataColumn(label: Text('Created At')),
+                      ],
+                      rows: rows.map((row) {
+                        final status = (row['status'] ?? '').toString();
+                        final createdAt = row['createdAt']?.toString() ?? '';
+                        final date = createdAt.isEmpty
+                            ? '-'
+                            : DateFormat(
+                                'MM/dd/yyyy',
+                              ).format(DateTime.parse(createdAt));
+                        return DataRow(
+                          cells: [
+                            DataCell(Text('#${row['id'] ?? '-'}')),
+                            DataCell(
+                              SizedBox(
+                                width: 180,
+                                child: Text(
+                                  (row['item'] ?? '-').toString(),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ),
-                      DataCell(Text(date)),
-                    ],
-                  );
-                }).toList(),
+                            DataCell(
+                              Text(
+                                _formatPeso(
+                                  (row['total'] as num?)?.toDouble() ?? 0,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                _formatPeso(
+                                  (row['paid'] as num?)?.toDouble() ?? 0,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: status.toLowerCase() == 'cancelled'
+                                      ? const Color(0xFFFEE2E2)
+                                      : const Color(0xFFE0F2FE),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  status.isEmpty ? 'unknown' : status,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: status.toLowerCase() == 'cancelled'
+                                        ? const Color(0xFF991B1B)
+                                        : const Color(0xFF0C4A6E),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(Text(date)),
+                          ],
+                        );
+                      }).toList(),
                     ),
                   ),
                 ),
               ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
 
   String _formatPeso(double amount) => '₱${amount.toStringAsFixed(2)}';
+
+  String _reportRangeLabel(_ReportRange range) {
+    switch (range) {
+      case _ReportRange.daily:
+        return 'Daily';
+      case _ReportRange.weekly:
+        return 'Weekly';
+      case _ReportRange.monthly:
+        return 'Monthly';
+      case _ReportRange.yearly:
+        return 'Yearly';
+      case _ReportRange.custom:
+        return 'Custom';
+    }
+  }
+
+  ({DateTime start, DateTime end}) _reportRangeBounds(
+    _ReportRange range,
+    DateTime now,
+  ) {
+    final localNow = now.toLocal();
+    switch (range) {
+      case _ReportRange.daily:
+        final start = DateTime(localNow.year, localNow.month, localNow.day);
+        return (start: start, end: start.add(const Duration(days: 1)));
+      case _ReportRange.weekly:
+        final start = DateTime(
+          localNow.year,
+          localNow.month,
+          localNow.day,
+        ).subtract(Duration(days: localNow.weekday - 1));
+        return (start: start, end: start.add(const Duration(days: 7)));
+      case _ReportRange.monthly:
+        final start = DateTime(localNow.year, localNow.month);
+        return (start: start, end: DateTime(localNow.year, localNow.month + 1));
+      case _ReportRange.yearly:
+        final start = DateTime(localNow.year);
+        return (start: start, end: DateTime(localNow.year + 1));
+      case _ReportRange.custom:
+        final selected = _customReportDateRange;
+        if (selected != null) {
+          final start = DateTime(
+            selected.start.year,
+            selected.start.month,
+            selected.start.day,
+          );
+          final end = DateTime(
+            selected.end.year,
+            selected.end.month,
+            selected.end.day,
+          ).add(const Duration(days: 1));
+          return (start: start, end: end);
+        }
+        final start = DateTime(localNow.year, localNow.month, localNow.day);
+        return (start: start, end: start.add(const Duration(days: 1)));
+    }
+  }
+
+  String _reportPeriodLabel(_ReportRange range, DateTime now) {
+    final bounds = _reportRangeBounds(range, now);
+    final endInclusive = bounds.end.subtract(const Duration(days: 1));
+    switch (range) {
+      case _ReportRange.daily:
+        return DateFormat('MMMM dd, yyyy').format(bounds.start);
+      case _ReportRange.weekly:
+        return '${DateFormat('MMM dd').format(bounds.start)} - ${DateFormat('MMM dd, yyyy').format(endInclusive)}';
+      case _ReportRange.monthly:
+        return DateFormat('MMMM yyyy').format(bounds.start);
+      case _ReportRange.yearly:
+        return DateFormat('yyyy').format(bounds.start);
+      case _ReportRange.custom:
+        return '${DateFormat('MMM dd, yyyy').format(bounds.start)} - ${DateFormat('MMM dd, yyyy').format(endInclusive)}';
+    }
+  }
+
+  _ReportSnapshot _buildActiveReportSnapshot(dynamic bookingReport) {
+    final now = DateTime.now();
+    final lines = _filterSalesLinesByRange(
+      _extractBookingSalesLines(bookingReport),
+      _selectedReportRange,
+      now,
+    );
+    return (
+      range: _selectedReportRange,
+      rangeLabel: _reportRangeLabel(_selectedReportRange),
+      periodLabel: _reportPeriodLabel(_selectedReportRange, now),
+      lines: lines,
+      totals: _bookingTotals(lines),
+      taxRate: _extractBookingTaxRate(bookingReport),
+    );
+  }
+
+  Future<DateTimeRange?> _pickCustomReportDateRange() async {
+    final now = DateTime.now();
+    final initial =
+        _customReportDateRange ??
+        DateTimeRange(start: now.subtract(const Duration(days: 6)), end: now);
+
+    DateTime start = initial.start;
+    DateTime end = initial.end;
+
+    final result = await showDialog<DateTimeRange>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocalState) {
+          Future<void> pickStart() async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: start,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(now.year + 1, 12, 31),
+            );
+            if (picked == null) return;
+            setLocalState(() {
+              start = DateTime(picked.year, picked.month, picked.day);
+              if (end.isBefore(start)) end = start;
+            });
+          }
+
+          Future<void> pickEnd() async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: end,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(now.year + 1, 12, 31),
+            );
+            if (picked == null) return;
+            setLocalState(() {
+              end = DateTime(picked.year, picked.month, picked.day);
+              if (end.isBefore(start)) start = end;
+            });
+          }
+
+          return AlertDialog(
+            title: const Text('Custom report date span'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: pickStart,
+                  icon: const Icon(Icons.calendar_today),
+                  label: Text(
+                    'Start: ${DateFormat('MMM dd, yyyy').format(start)}',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: pickEnd,
+                  icon: const Icon(Icons.calendar_today_outlined),
+                  label: Text('End: ${DateFormat('MMM dd, yyyy').format(end)}'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(
+                    dialogContext,
+                  ).pop(DateTimeRange(start: start, end: end));
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return result;
+  }
+
+  DateTime? _parseReportDate(Map<String, dynamic> map) {
+    final raw =
+        map['bookingDate'] ??
+        map['createdAt'] ??
+        map['date'] ??
+        map['updatedAt'];
+    if (raw is! String || raw.trim().isEmpty) return null;
+    return DateTime.tryParse(raw)?.toLocal();
+  }
+
+  List<
+    ({
+      String serviceName,
+      String status,
+      int pax,
+      double price,
+      double salePrice,
+      double total,
+      double tax,
+      DateTime? bookedAt,
+    })
+  >
+  _filterSalesLinesByRange(
+    List<
+      ({
+        String serviceName,
+        String status,
+        int pax,
+        double price,
+        double salePrice,
+        double total,
+        double tax,
+        DateTime? bookedAt,
+      })
+    >
+    lines,
+    _ReportRange range,
+    DateTime now,
+  ) {
+    final bounds = _reportRangeBounds(range, now);
+    return lines.where((line) {
+      final d = line.bookedAt;
+      if (d == null) return range == _ReportRange.daily;
+      return !d.isBefore(bounds.start) && d.isBefore(bounds.end);
+    }).toList();
+  }
+
+  Widget _reportSummaryRow(
+    String label,
+    String value, {
+    bool emphasize = false,
+  }) {
+    final textStyle = TextStyle(
+      fontSize: emphasize ? 16 : 14,
+      fontWeight: emphasize ? FontWeight.w700 : FontWeight.w500,
+      color: const Color(0xFF0F172A),
+    );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: textStyle),
+        Text(value, style: textStyle),
+      ],
+    );
+  }
+
+  Widget _buildReportsSummaryPanel(
+    _ReportSnapshot report, {
+    bool desktop = false,
+  }) {
+    final spacing = desktop ? 12.0 : 6.0;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(desktop ? 18 : 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sales Summary',
+            style: TextStyle(
+              fontSize: desktop ? 16 : 15,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF0F172A),
+            ),
+          ),
+          SizedBox(height: spacing),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: desktop ? 8 : 0),
+            child: _reportSummaryRow(
+              'Sales Amount',
+              _formatPeso(report.totals.amount),
+            ),
+          ),
+          SizedBox(height: spacing),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: desktop ? 8 : 0),
+            child: _reportSummaryRow(
+              'Sales Tax',
+              _formatPeso(report.totals.tax),
+            ),
+          ),
+          const Divider(height: 24),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: desktop ? 8 : 0),
+            child: _reportSummaryRow(
+              'Sales Total',
+              _formatPeso(report.totals.total),
+              emphasize: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportsDetailsTable(_ReportSnapshot report) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 12, 14, 8),
+            child: Text(
+              'Sales Details',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: DataTable(
+                    columnSpacing: 28,
+                    headingRowColor: WidgetStateProperty.all(
+                      const Color(0xFFDCE6F4),
+                    ),
+                    columns: const [
+                      DataColumn(label: Text('Service Name')),
+                      DataColumn(label: Text('Pax')),
+                      DataColumn(label: Text('Price')),
+                      DataColumn(label: Text('Sale Price')),
+                      DataColumn(label: Text('Total')),
+                    ],
+                    rows: [
+                      ...report.lines.map(
+                        (line) => DataRow(
+                          cells: [
+                            DataCell(Text(line.serviceName)),
+                            DataCell(Text(line.pax.toString())),
+                            DataCell(Text(_formatPeso(line.price))),
+                            DataCell(Text(_formatPeso(line.salePrice))),
+                            DataCell(Text(_formatPeso(line.total))),
+                          ],
+                        ),
+                      ),
+                      DataRow(
+                        color: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                        cells: [
+                          DataCell(
+                            Text(
+                              'Tax (${(report.taxRate * 100).toStringAsFixed(0)}%)',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const DataCell(Text('')),
+                          const DataCell(Text('')),
+                          const DataCell(Text('')),
+                          DataCell(
+                            Text(
+                              _formatPeso(
+                                report.lines.fold(0, (sum, l) => sum + l.tax),
+                              ),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          if (report.lines.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 0, 14, 12),
+              child: Text(
+                'No sales found for this range.',
+                style: TextStyle(color: Color(0xFF64748B)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildUsersList() {
     if (_loadingUsers) return const Center(child: CircularProgressIndicator());
@@ -2431,11 +3715,9 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
           profile['firstName'] ??
           'Admin';
       final bookingReport = _reportsData['bookings'];
-      final lines = _extractBookingSalesLines(bookingReport);
-      final totals = _bookingTotals(lines);
-      final taxRate = _extractBookingTaxRate(bookingReport);
+      final report = _buildActiveReportSnapshot(bookingReport);
       final now = DateTime.now();
-      final dateLabel = DateFormat('MMMM dd, yyyy').format(now);
+      final reportRangeTitle = report.rangeLabel.toUpperCase();
       final pdfBaseFont = await PdfGoogleFonts.notoSansRegular();
       final pdfBoldFont = await PdfGoogleFonts.notoSansBold();
       final pdf = pw.Document();
@@ -2460,7 +3742,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
               ),
               pw.SizedBox(height: 4),
               pw.Text(
-                'BASIC DAILY SALES REPORT',
+                'BASIC $reportRangeTitle SALES REPORT',
                 style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
               ),
               pw.SizedBox(height: 10),
@@ -2473,7 +3755,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     children: [
                       _pdfLabelValue('Sales Person', userName.toString()),
                       pw.SizedBox(height: 6),
-                      _pdfLabelValue('Date', dateLabel),
+                      _pdfLabelValue('Period', report.periodLabel),
                     ],
                   ),
                   pw.Container(
@@ -2486,13 +3768,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                       children: [
-                        _pdfSummaryLine('Sales Amount', totals.amount),
+                        _pdfSummaryLine('Sales Amount', report.totals.amount),
                         pw.SizedBox(height: 4),
-                        _pdfSummaryLine('Sales Tax', totals.tax),
+                        _pdfSummaryLine('Sales Tax', report.totals.tax),
                         pw.Divider(color: PdfColors.grey500),
                         _pdfSummaryLine(
                           'Sales Total',
-                          totals.total,
+                          report.totals.total,
                           bold: true,
                         ),
                       ],
@@ -2501,7 +3783,7 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
                 ],
               ),
               pw.SizedBox(height: 14),
-              _buildBookingSalesPdfTable(lines, taxRate),
+              _buildBookingSalesPdfTable(report.lines, report.taxRate),
               pw.Spacer(),
               pw.Container(
                 alignment: pw.Alignment.centerRight,
@@ -2573,11 +3855,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     List<
       ({
         String serviceName,
+        String status,
         int pax,
         double price,
         double salePrice,
         double total,
         double tax,
+        DateTime? bookedAt,
       })
     >
     lines,
@@ -2668,11 +3952,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
   List<
     ({
       String serviceName,
+      String status,
       int pax,
       double price,
       double salePrice,
       double total,
       double tax,
+      DateTime? bookedAt,
     })
   >
   _extractBookingSalesLines(dynamic data) {
@@ -2689,11 +3975,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
       return (
         serviceName: (map['serviceName'] ?? map['title'] ?? 'Service')
             .toString(),
+        status: (map['status'] ?? '').toString(),
         pax: pax,
         price: price,
         salePrice: salePrice,
         total: total,
         tax: tax,
+        bookedAt: _parseReportDate(map),
       );
     }).toList();
   }
@@ -2702,11 +3990,13 @@ class AdminDashboardPageState extends State<AdminDashboardPage> {
     List<
       ({
         String serviceName,
+        String status,
         int pax,
         double price,
         double salePrice,
         double total,
         double tax,
+        DateTime? bookedAt,
       })
     >
     lines,

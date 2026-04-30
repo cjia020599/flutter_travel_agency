@@ -11,6 +11,8 @@ class CarRental {
   final String? buyerName;
   final String? buyerEmail;
   final String? buyerPhone;
+  final String? bookedBy;
+  final String? creator;
 
   CarRental({
     required this.id,
@@ -24,6 +26,8 @@ class CarRental {
     this.buyerName,
     this.buyerEmail,
     this.buyerPhone,
+    this.bookedBy,
+    this.creator,
   });
 
   factory CarRental.fromJson(Map<String, dynamic> json) {
@@ -39,6 +43,8 @@ class CarRental {
       buyerName: json['buyerName'],
       buyerEmail: json['buyerEmail'],
       buyerPhone: json['buyerPhone'],
+      bookedBy: json['bookedBy']?.toString(),
+      creator: json['creator']?.toString(),
     );
   }
 
@@ -54,6 +60,8 @@ class CarRental {
     'buyerName': buyerName,
     'buyerEmail': buyerEmail,
     'buyerPhone': buyerPhone,
+    'bookedBy': bookedBy,
+    'creator': creator,
   };
 }
 

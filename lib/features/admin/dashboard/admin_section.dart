@@ -12,6 +12,7 @@ enum AdminSection {
   carsAdd,
   ratings,
   chatbot,
+  revenues,
   reports,
   settings,
 }

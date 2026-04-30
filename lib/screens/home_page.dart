@@ -293,9 +293,11 @@ class _TravelHomePageState extends State<TravelHomePage> {
     } catch (e) {
       if (mounted) {
         setState(() => _notificationsLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load notifications: $e')),
-        );
+        if (!_isNotificationAuthError(e)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load notifications: $e')),
+          );
+        }
       }
     }
   }
@@ -415,11 +417,23 @@ class _TravelHomePageState extends State<TravelHomePage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to mark read: $e')));
+        if (!_isNotificationAuthError(e)) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to mark read: $e')));
+        }
       }
     }
+  }
+
+  bool _isNotificationAuthError(Object error) {
+    if (error is ApiException) {
+      return error.statusCode == 401 || error.statusCode == 403;
+    }
+    final lower = error.toString().toLowerCase();
+    return lower.contains('unauthorized') ||
+        lower.contains('forbidden') ||
+        lower.contains('authorization');
   }
 
   Future<void> _openNotificationsDialog() async {

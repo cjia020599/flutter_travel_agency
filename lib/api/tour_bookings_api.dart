@@ -4,9 +4,10 @@ import 'package:flutter_travel_agency/models/tour_booking.dart';
 class TourBookingsApi {
   static final _client = ApiClient.instance;
 
-  static Future<List<TourBooking>> getMyBookings() async {
+  static Future<List<TourBooking>> getMyBookings({int? userId}) async {
     try {
-      final res = await _client.get('/api/tour-bookings', auth: true);
+      final path = '/api/tour-bookings${userId != null ? '?userId=$userId' : ''}';
+      final res = await _client.get(path, auth: true);
       final data = res['data'] ?? res;
       if (data is List) {
         return data.map((json) => TourBooking.fromJson(json as Map<String, dynamic>)).toList();
