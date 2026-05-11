@@ -1067,10 +1067,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Widget _buildSidebar() {
-    return Container(
-      width: 240,
-      color: _sidebarBg,
+    final scrollableNav = SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
@@ -1271,7 +1271,29 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   _adminSection == AdminSection.settings,
             ),
           ],
-          const Spacer(),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+
+    return Container(
+      width: 240,
+      color: _sidebarBg,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Scrollbar(
+              thickness: 6,
+              radius: const Radius.circular(8),
+              child: scrollableNav,
+            ),
+          ),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: Colors.white.withValues(alpha: 0.12),
+          ),
           _sideItem(Icons.logout, 'Log Out', _logout),
         ],
       ),

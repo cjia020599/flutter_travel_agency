@@ -54,14 +54,16 @@ class AdminDashboardShell extends StatelessWidget {
 
     if (showSidebar && isMobile) {
       return Scaffold(
-        drawer: Drawer(child: SafeArea(child: _buildSidebar())),
+        drawer: Drawer(
+          child: SafeArea(child: _buildSidebar(context)),
+        ),
         body: content,
       );
     }
 
     return Row(
       children: [
-        if (showSidebar) _buildSidebar(),
+        if (showSidebar) _buildSidebar(context),
         Expanded(child: content),
       ],
     );
@@ -106,13 +108,12 @@ class AdminDashboardShell extends StatelessWidget {
     );
   }
 
-  Widget _buildSidebar() {
-    return Container(
-      width: 260,
-      color: _sidebarBg,
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        children: [
+  Widget _buildSidebar(BuildContext context) {
+    final listView = ListView(
+      primary: false,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             child: Row(
@@ -236,6 +237,22 @@ class AdminDashboardShell extends StatelessWidget {
             onTap: () => onSectionSelected(AdminSection.settings),
           ),
         ],
+    );
+
+    return SizedBox(
+      width: 260,
+      child: ColoredBox(
+        color: _sidebarBg,
+        child: Scrollbar(
+          thickness: 6,
+          radius: const Radius.circular(8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: listView),
+            ],
+          ),
+        ),
       ),
     );
   }
