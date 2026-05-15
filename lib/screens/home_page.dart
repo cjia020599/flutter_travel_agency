@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_travel_agency/widgets/banner_text.dart';
 import '../api/api_client.dart';
 import '../api/tours_api.dart';
 import '../api/cars_api.dart';
@@ -1429,8 +1430,12 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
     syncPartyNameControllers(partySize);
 
-    final buyerEmailController = TextEditingController(text: pre['email'] ?? '');
-    final buyerPhoneController = TextEditingController(text: pre['phone'] ?? '');
+    final buyerEmailController = TextEditingController(
+      text: pre['email'] ?? '',
+    );
+    final buyerPhoneController = TextEditingController(
+      text: pre['phone'] ?? '',
+    );
 
     await _loadRatingsFor('car', carId);
     await _cacheCurrentUserId();
@@ -1444,7 +1449,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 20,
+            ),
             title: Text(title),
             content: SizedBox(
               width: dialogW,
@@ -1493,7 +1501,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
                                 decoration: InputDecoration(
                                   labelText: 'Start Date',
                                   suffixIcon: IconButton(
-                                    icon: const Icon(Icons.calendar_today, size: 20),
+                                    icon: const Icon(
+                                      Icons.calendar_today,
+                                      size: 20,
+                                    ),
                                     onPressed: () async {
                                       final picked = await showDatePicker(
                                         context: context,
@@ -1529,7 +1540,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
                                 decoration: InputDecoration(
                                   labelText: 'End Date',
                                   suffixIcon: IconButton(
-                                    icon: const Icon(Icons.calendar_today, size: 20),
+                                    icon: const Icon(
+                                      Icons.calendar_today,
+                                      size: 20,
+                                    ),
                                     onPressed: () async {
                                       final picked = await showDatePicker(
                                         context: context,
@@ -1642,7 +1656,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
                           keyboardType: TextInputType.phone,
                         ),
                         const SizedBox(height: 16),
-                        _buildRatingsSection(moduleType: 'car', moduleId: carId),
+                        _buildRatingsSection(
+                          moduleType: 'car',
+                          moduleId: carId,
+                        ),
                       ],
                     ),
                   ),
@@ -1896,8 +1913,12 @@ class _TravelHomePageState extends State<TravelHomePage> {
 
     syncGuestNameControllers(guestCount);
 
-    final buyerEmailController = TextEditingController(text: pre['email'] ?? '');
-    final buyerPhoneController = TextEditingController(text: pre['phone'] ?? '');
+    final buyerEmailController = TextEditingController(
+      text: pre['email'] ?? '',
+    );
+    final buyerPhoneController = TextEditingController(
+      text: pre['phone'] ?? '',
+    );
 
     await _loadRatingsFor('tour', tourId);
     await _cacheCurrentUserId();
@@ -1923,7 +1944,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 20,
+            ),
             title: Text(title),
             content: SizedBox(
               width: dialogW,
@@ -2115,7 +2139,10 @@ class _TravelHomePageState extends State<TravelHomePage> {
                           keyboardType: TextInputType.phone,
                         ),
                         const SizedBox(height: 16),
-                        _buildRatingsSection(moduleType: 'tour', moduleId: tourId),
+                        _buildRatingsSection(
+                          moduleType: 'tour',
+                          moduleId: tourId,
+                        ),
                       ],
                     ),
                   ),
@@ -2132,7 +2159,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
                   final names = guestNameControllers
                       .map((c) => c.text.trim())
                       .toList();
-                  if (names.length != guestCount || names.any((n) => n.isEmpty)) {
+                  if (names.length != guestCount ||
+                      names.any((n) => n.isEmpty)) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
@@ -2305,6 +2333,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
                         ),
                       ),
                     ] else if (_isLoggedIn) ...[
+                      ScrollingBanner(),
+                      Spacer(),
                       _buildNotificationBell(),
                       TextButton(
                         onPressed: () async {
