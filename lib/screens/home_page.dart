@@ -2313,7 +2313,6 @@ class _TravelHomePageState extends State<TravelHomePage> {
         ),
         child: LayoutBuilder(
           builder: (context, _) {
-            // 1. If checking authentication, show the loading indicator
             if (_authChecking) {
               return const Wrap(
                 alignment: WrapAlignment.end,
@@ -2331,15 +2330,67 @@ class _TravelHomePageState extends State<TravelHomePage> {
               );
             }
 
-            // 2. IF LOGGED IN: Use a Row instead of a Wrap.
-            // This allows ScrollingBanner's 'Expanded' widget to dynamically
-            // take up all left-over space and forces everything onto ONE line.
             if (_isLoggedIn) {
+              // 📱 MOBILE LAYOUT: Stack banner on top, buttons on the bottom right
+              if (isMobile) {
+                return Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.stretch, // Forces banner full width
+                  children: [
+                    const ScrollingBanner(), // Line 1: Solo line banner
+                    const SizedBox(height: 8), // Gap between banner and buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment
+                          .end, // Line 2: Aligns actions to the right
+                      children: [
+                        _buildNotificationBell(),
+                        TextButton(
+                          onPressed: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const UserProfilePage(),
+                              ),
+                            );
+                            _loadData();
+                          },
+                          child: Text(
+                            'Hi ${_userDisplayName ?? 'User'}',
+                            style: TextStyle(
+                              color: Colors.grey[300],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            await _confirmAndLogout();
+                          },
+                          child: Text(
+                            'Logout',
+                            style: TextStyle(
+                              color: Colors.grey[300],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              }
+
+              // 💻 DESKTOP LAYOUT: Everything on a single horizontal line
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const ScrollingBanner(), // 👈 This will now beautifully auto-adjust its width!
-                  const SizedBox(width: 20), // Slight spacing before the bell
+                  Expanded(
+                    child: ScrollingBanner(
+                      bgColor: MediaQuery.of(context).size.width < 700
+                          ? Color(0xFF2563EB)
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   _buildNotificationBell(),
                   TextButton(
                     onPressed: () async {
@@ -2368,7 +2419,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
               );
             }
 
-            // 3. IF LOGGED OUT: Keep the Wrap alignment to push Sign In/Register to the right
+            // IF LOGGED OUT
             return Wrap(
               alignment: WrapAlignment.end,
               crossAxisAlignment: WrapCrossAlignment.center,
