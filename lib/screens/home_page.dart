@@ -2313,116 +2313,116 @@ class _TravelHomePageState extends State<TravelHomePage> {
         ),
         child: LayoutBuilder(
           builder: (context, _) {
+            // 1. If checking authentication, show the loading indicator
+            if (_authChecking) {
+              return const Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            // 2. IF LOGGED IN: Use a Row instead of a Wrap.
+            // This allows ScrollingBanner's 'Expanded' widget to dynamically
+            // take up all left-over space and forces everything onto ONE line.
+            if (_isLoggedIn) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const ScrollingBanner(), // 👈 This will now beautifully auto-adjust its width!
+                  const SizedBox(width: 20), // Slight spacing before the bell
+                  _buildNotificationBell(),
+                  TextButton(
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const UserProfilePage(),
+                        ),
+                      );
+                      _loadData();
+                    },
+                    child: Text(
+                      'Hi ${_userDisplayName ?? 'User'}',
+                      style: TextStyle(color: Colors.grey[300], fontSize: 13),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await _confirmAndLogout();
+                    },
+                    child: Text(
+                      'Logout',
+                      style: TextStyle(color: Colors.grey[300], fontSize: 13),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            // 3. IF LOGGED OUT: Keep the Wrap alignment to push Sign In/Register to the right
             return Wrap(
               alignment: WrapAlignment.end,
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 4,
               runSpacing: 4,
               children: [
-                Wrap(
-                  spacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (_authChecking) ...[
-                      const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white70,
+                TextButton(
+                  onPressed: () async {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        insetPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 40,
                         ),
-                      ),
-                    ] else if (_isLoggedIn) ...[
-                      ScrollingBanner(),
-                      Spacer(),
-                      _buildNotificationBell(),
-                      TextButton(
-                        onPressed: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const UserProfilePage(),
-                            ),
-                          );
-                          _loadData();
-                        },
-                        child: Text(
-                          'Hi ${_userDisplayName ?? 'User'}',
-                          style: TextStyle(
-                            color: Colors.grey[300],
-                            fontSize: 13,
+                        content: LoginDialogContent(onSuccess: _loadData),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
                           ),
-                        ),
+                        ],
                       ),
-                      TextButton(
-                        onPressed: () async {
-                          await _confirmAndLogout();
-                        },
-                        child: Text(
-                          'Logout',
-                          style: TextStyle(
-                            color: Colors.grey[300],
-                            fontSize: 13,
+                    );
+                  },
+                  child: Text(
+                    'Sign In',
+                    style: TextStyle(color: Colors.grey[300], fontSize: 13),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        insetPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 40,
+                        ),
+                        content: const RegisterDialogContent(),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
                           ),
-                        ),
+                        ],
                       ),
-                    ] else ...[
-                      TextButton(
-                        onPressed: () async {
-                          showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              insetPadding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 40,
-                              ),
-                              content: LoginDialogContent(onSuccess: _loadData),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Cancel'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                        child: Text(
-                          'Sign In',
-                          style: TextStyle(
-                            color: Colors.grey[300],
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          await showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              insetPadding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 40,
-                              ),
-                              content: const RegisterDialogContent(),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Cancel'),
-                                ),
-                              ],
-                            ),
-                          );
-                          _loadData();
-                        },
-                        child: Text(
-                          'Register',
-                          style: TextStyle(
-                            color: Colors.grey[300],
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                    );
+                    _loadData();
+                  },
+                  child: Text(
+                    'Register',
+                    style: TextStyle(color: Colors.grey[300], fontSize: 13),
+                  ),
                 ),
               ],
             );
