@@ -18,7 +18,11 @@ class ListingDataHelpers {
     return math.max(1, n ?? 1);
   }
 
-  static int maxPeople(Map<String, dynamic> item, {int fallback = 32}) {
+  /// Returns the tour max capacity.
+  ///
+  /// If the API does not provide `maxPeople`, we avoid showing a fake ceiling
+  /// (like 32). In that case, this returns [minPeople] (i.e. no range).
+  static int maxPeople(Map<String, dynamic> item, {int fallback = 0}) {
     final min = minPeople(item);
     final n = int.tryParse(item['maxPeople']?.toString() ?? '');
     return math.max(min, n ?? fallback);
