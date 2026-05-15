@@ -20,6 +20,9 @@ import '../api/notifications_api.dart';
 import 'package:intl/intl.dart';
 import '../models/notification_item.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import '../utils/listing_data_helpers.dart';
+import '../widgets/listing_detail_sections.dart';
+import '../widgets/listing_price_summary.dart';
 
 // Design colors
 const _navBlue = Color(0xFF1E3A5F);
@@ -52,6 +55,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
   bool _authChecking = true;
   bool _isAdmin = false;
   String? _userDisplayName;
+  Map<String, dynamic>? _userProfile;
   List<dynamic> _tours = [];
   List<dynamic> _cars = [];
   List<dynamic> _locations = [];
@@ -115,14 +119,19 @@ class _TravelHomePageState extends State<TravelHomePage> {
     if (loggedIn) {
       try {
         profile = await UserApi.getProfile();
+        final resolved = _unwrapProfilePayload(profile);
         if (mounted) {
           setState(() {
-            _userDisplayName = _displayNameFromProfile(profile);
+            _userProfile = resolved;
+            _userDisplayName = _displayNameFromProfile(resolved);
           });
         }
       } catch (_) {
         profile = null;
+        if (mounted) setState(() => _userProfile = null);
       }
+    } else if (mounted) {
+      setState(() => _userProfile = null);
     }
     final isAdmin = await UserApi.isAdmin();
     final tours = await ToursApi.list();
@@ -135,8 +144,9 @@ class _TravelHomePageState extends State<TravelHomePage> {
       _cars = cars;
       _locations = locations;
       _userDisplayName = loggedIn
-          ? _displayNameFromProfile(profile)
-          : _userDisplayName;
+          ? _displayNameFromProfile(_userProfile)
+          : null;
+      if (!loggedIn) _userProfile = null;
     });
     await _loadRentals();
     await _syncNotifications();
@@ -163,15 +173,119 @@ class _TravelHomePageState extends State<TravelHomePage> {
       _notifications.where((n) => !n.isRead).length;
 
   String _displayNameFromProfile(Map<String, dynamic>? profile) {
+    if (profile == null) return 'User';
+    final fn = profile['firstName']?.toString().trim() ?? '';
+    final ln = profile['lastName']?.toString().trim() ?? '';
+    if (fn.isNotEmpty && ln.isNotEmpty) return '$fn $ln';
+    if (fn.isNotEmpty) return fn;
     final raw =
-        profile?['firstName'] ??
-        profile?['name'] ??
-        profile?['userName'] ??
-        profile?['username'] ??
-        profile?['email'];
+        profile['name'] ??
+        profile['userName'] ??
+        profile['username'] ??
+        profile['email'];
     final value = raw?.toString().trim();
     if (value == null || value.isEmpty) return 'User';
     return value;
+  }
+
+  Map<String, dynamic>? _unwrapProfilePayload(Map<String, dynamic>? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final data = raw['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return raw;
+  }
+
+  Map<String, dynamic> _unwrapTourOrCarResponse(Map<String, dynamic> res) {
+    final data = res['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return res;
+  }
+
+  Map<String, String> _contactPrefillFromProfile(Map<String, dynamic>? p) {
+    if (p == null) {
+      return {'name': '', 'email': '', 'phone': ''};
+    }
+    final fn = p['firstName']?.toString().trim() ?? '';
+    final ln = p['lastName']?.toString().trim() ?? '';
+    final name = () {
+      if (fn.isNotEmpty && ln.isNotEmpty) return '$fn $ln';
+      if (fn.isNotEmpty) return fn;
+      return (p['name'] ?? p['userName'] ?? p['username'] ?? '')
+          .toString()
+          .trim();
+    }();
+    return {
+      'name': name,
+      'email': p['email']?.toString().trim() ?? '',
+      'phone':
+          p['phoneNumber']?.toString().trim() ??
+          p['phone']?.toString().trim() ??
+          '',
+    };
+  }
+
+  String _tourLocationLabel(Map<String, dynamic> tour) {
+    final loc = tour['location'];
+    if (loc is Map) {
+      return (loc['name'] ?? loc['title'] ?? '').toString().trim();
+    }
+    return tour['locationName']?.toString().trim() ?? '';
+  }
+
+  Widget _bookingGuidelinesCard({required bool isTour}) {
+    final kind = isTour ? 'tour' : 'car rental';
+    return Card(
+      margin: EdgeInsets.zero,
+      color: const Color(0xFFEFF6FF),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.info_outline, size: 20, color: Colors.blue[800]),
+                const SizedBox(width: 8),
+                Text(
+                  'Before you book',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.blue[900],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '• Dates: choose the $kind start and end shown on this form.',
+              style: TextStyle(fontSize: 13, color: Colors.grey[900]),
+            ),
+            Text(
+              '• Travelers: set how many people are included and enter each full name (as on an ID).',
+              style: TextStyle(fontSize: 13, color: Colors.grey[900]),
+            ),
+            Text(
+              '• Contact: email and phone are used for confirmations and updates.',
+              style: TextStyle(fontSize: 13, color: Colors.grey[900]),
+            ),
+            Text(
+              isTour
+                  ? '• Review itinerary, gallery, and inclusions on the left before booking.'
+                  : '• Review photos, description, and listing details on the left before booking.',
+              style: TextStyle(fontSize: 13, color: Colors.grey[900]),
+            ),
+            Text(
+              isTour
+                  ? '• Total price updates automatically when you change guest count.'
+                  : '• Total price updates when you change rental dates (per-day rate).',
+              style: TextStyle(fontSize: 13, color: Colors.grey[900]),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   List<String> _locationOptions() {
@@ -866,6 +980,41 @@ class _TravelHomePageState extends State<TravelHomePage> {
     return int.tryParse(id?.toString() ?? '') ?? 0;
   }
 
+  int _listingColumnCount(double width) {
+    if (width < 600) return 1;
+    if (width < 960) return 2;
+    return 3;
+  }
+
+  /// Multi-column layout using natural card height (no fixed aspect-ratio cells).
+  Widget _buildListingCardGrid({
+    required double width,
+    required List<Widget> children,
+    double spacing = 16,
+  }) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    final cols = _listingColumnCount(width);
+    if (cols == 1) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) SizedBox(height: spacing),
+            children[i],
+          ],
+        ],
+      );
+    }
+    final itemWidth = (width - spacing * (cols - 1)) / cols;
+    return Wrap(
+      spacing: spacing,
+      runSpacing: spacing,
+      children: children
+          .map((child) => SizedBox(width: itemWidth, child: child))
+          .toList(),
+    );
+  }
+
   Future<List<dynamic>> _loadRatingsFor(String moduleType, int moduleId) async {
     final key = _ratingsKey(moduleType, moduleId);
     if (mounted) {
@@ -1235,13 +1384,19 @@ class _TravelHomePageState extends State<TravelHomePage> {
       return;
     }
 
-    final title = car['title']?.toString() ?? 'Car';
-    final price = car['salePrice'] ?? car['price'];
-    final priceStr = price != null ? '$_peso${price.toString()} / day' : '';
-    final imageUrl = _itemImageUrl(car);
-    final passengers = car['passenger']?.toString() ?? '-';
-    final gear = car['gearShift']?.toString() ?? '-';
-    final carDesc = car['description']?.toString().trim();
+    Map<String, dynamic> merged = Map<String, dynamic>.from(car);
+    try {
+      final res = await CarsApi.get(carId);
+      merged.addAll(_unwrapTourOrCarResponse(res));
+    } catch (_) {}
+
+    final title = merged['title']?.toString() ?? 'Car';
+    final imageUrl = _itemImageUrl(merged);
+    final passengers = merged['passenger']?.toString() ?? '-';
+    final gear = merged['gearShift']?.toString() ?? '-';
+
+    final capRaw = int.tryParse(merged['passenger']?.toString() ?? '') ?? 8;
+    final cap = math.max(1, math.min(capRaw, 32));
 
     final startController = TextEditingController(
       text: DateFormat(
@@ -1253,237 +1408,337 @@ class _TravelHomePageState extends State<TravelHomePage> {
         'MMM dd, yyyy',
       ).format(DateTime.now().add(const Duration(days: 5))),
     );
-    final buyerNameController = TextEditingController();
-    final buyerEmailController = TextEditingController(
-      text: 'test@example.com',
-    );
-    final buyerPhoneController = TextEditingController(text: '+1234567890');
+
+    final pre = _contactPrefillFromProfile(_userProfile);
+    int partySize = math.min(math.max(1, _effectiveGuestCount), cap);
+    final partyCountController = TextEditingController(text: '$partySize');
+
+    final partyNameControllers = <TextEditingController>[];
+
+    void syncPartyNameControllers(int n) {
+      while (partyNameControllers.length < n) {
+        final idx = partyNameControllers.length;
+        partyNameControllers.add(
+          TextEditingController(text: idx == 0 ? pre['name'] ?? '' : ''),
+        );
+      }
+      while (partyNameControllers.length > n) {
+        partyNameControllers.removeLast().dispose();
+      }
+    }
+
+    syncPartyNameControllers(partySize);
+
+    final buyerEmailController = TextEditingController(text: pre['email'] ?? '');
+    final buyerPhoneController = TextEditingController(text: pre['phone'] ?? '');
 
     await _loadRatingsFor('car', carId);
     await _cacheCurrentUserId();
 
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 450,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Car Image
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      imageUrl,
-                      height: 180,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(
-                        height: 180,
-                        color: Colors.grey[300],
-                        child: const Icon(
-                          Icons.directions_car,
-                          size: 80,
-                          color: Colors.grey,
+    if (!mounted) return;
+    final maxH = MediaQuery.sizeOf(context).height * 0.9;
+    final dialogW = math.min(960.0, MediaQuery.sizeOf(context).width - 32);
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            title: Text(title),
+            content: SizedBox(
+              width: dialogW,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxH),
+                child: SingleChildScrollView(
+                  child: ListingResponsiveColumns(
+                    info: ListingDetailSections(
+                      entity: merged,
+                      isTour: false,
+                      heroImageUrl: imageUrl,
+                      placeholderIcon: Icons.directions_car,
+                      specRows: [
+                        _infoRow(Icons.people, 'Passengers', passengers),
+                        const SizedBox(height: 8),
+                        _infoRow(Icons.speed, 'Gear Shift', gear),
+                      ],
+                    ),
+                    booking: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListingPriceSummary(
+                          entity: merged,
+                          isTour: false,
+                          peso: _peso,
+                          peopleCount: partySize,
+                          startDateText: startController.text,
+                          endDateText: endController.text,
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Price
-                  Text(
-                    priceStr,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: _primaryBlue,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Details
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _infoRow(Icons.people, 'Passengers', passengers),
-                          const SizedBox(height: 8),
-                          _infoRow(Icons.speed, 'Gear Shift', gear),
-                          if (carDesc != null && carDesc.isNotEmpty) ...[
-                            const Divider(height: 24),
-                            Text(
-                              carDesc,
-                              style: TextStyle(
-                                color: Colors.grey[700],
-                                fontSize: 14,
+                        const SizedBox(height: 12),
+                        _bookingGuidelinesCard(isTour: false),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Rental dates',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: startController,
+                                decoration: InputDecoration(
+                                  labelText: 'Start Date',
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.calendar_today, size: 20),
+                                    onPressed: () async {
+                                      final picked = await showDatePicker(
+                                        context: context,
+                                        initialDate: DateTime.now().add(
+                                          const Duration(days: 1),
+                                        ),
+                                        firstDate: DateTime.now().add(
+                                          const Duration(days: 1),
+                                        ),
+                                        lastDate: DateTime.now().add(
+                                          const Duration(days: 365),
+                                        ),
+                                      );
+                                      if (picked != null) {
+                                        startController.text = DateFormat(
+                                          'MMM dd, yyyy',
+                                        ).format(picked);
+                                        setDialogState(() {});
+                                      }
+                                    },
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                readOnly: true,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: endController,
+                                decoration: InputDecoration(
+                                  labelText: 'End Date',
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.calendar_today, size: 20),
+                                    onPressed: () async {
+                                      final picked = await showDatePicker(
+                                        context: context,
+                                        initialDate: DateTime.now().add(
+                                          const Duration(days: 5),
+                                        ),
+                                        firstDate: DateTime.now().add(
+                                          const Duration(days: 1),
+                                        ),
+                                        lastDate: DateTime.now().add(
+                                          const Duration(days: 365),
+                                        ),
+                                      );
+                                      if (picked != null) {
+                                        endController.text = DateFormat(
+                                          'MMM dd, yyyy',
+                                        ).format(picked);
+                                        setDialogState(() {});
+                                      }
+                                    },
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                readOnly: true,
                               ),
                             ),
                           ],
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Who is travelling',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: partyCountController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'People in this rental',
+                            helperText: 'Max $cap (vehicle capacity)',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onChanged: (v) {
+                            final parsed = int.tryParse(v.trim());
+                            if (parsed == null) return;
+                            final next = parsed.clamp(1, cap);
+                            if (next != parsed) {
+                              partyCountController.text = '$next';
+                              partyCountController.selection =
+                                  TextSelection.collapsed(
+                                    offset: partyCountController.text.length,
+                                  );
+                            }
+                            partySize = next;
+                            syncPartyNameControllers(partySize);
+                            setDialogState(() {});
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        ...List.generate(partyNameControllers.length, (i) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: TextField(
+                              controller: partyNameControllers[i],
+                              decoration: InputDecoration(
+                                labelText: 'Traveler ${i + 1} full name',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Contact (from your profile — edit under Account)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: buyerEmailController,
+                          decoration: InputDecoration(
+                            labelText: 'Email',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: buyerPhoneController,
+                          decoration: InputDecoration(
+                            labelText: 'Phone',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          keyboardType: TextInputType.phone,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildRatingsSection(moduleType: 'car', moduleId: carId),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  // Date Pickers (compact style)
-                  Text(
-                    'Rental Dates:',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: startController,
-                          decoration: InputDecoration(
-                            labelText: 'Start Date',
-                            hintText: 'Select start date',
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.calendar_today, size: 20),
-                              onPressed: () async {
-                                final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: DateTime.now().add(
-                                    const Duration(days: 1),
-                                  ),
-                                  firstDate: DateTime.now().add(
-                                    const Duration(days: 1),
-                                  ),
-                                  lastDate: DateTime.now().add(
-                                    const Duration(days: 365),
-                                  ),
-                                );
-                                if (picked != null) {
-                                  startController.text = DateFormat(
-                                    'MMM dd, yyyy',
-                                  ).format(picked);
-                                  setDialogState(() {});
-                                }
-                              },
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                          ),
-                          readOnly: true,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: endController,
-                          decoration: InputDecoration(
-                            labelText: 'End Date',
-                            hintText: 'Select end date',
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.calendar_today, size: 20),
-                              onPressed: () async {
-                                final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: DateTime.now().add(
-                                    const Duration(days: 5),
-                                  ),
-                                  firstDate: DateTime.now().add(
-                                    const Duration(days: 1),
-                                  ),
-                                  lastDate: DateTime.now().add(
-                                    const Duration(days: 365),
-                                  ),
-                                );
-                                if (picked != null) {
-                                  endController.text = DateFormat(
-                                    'MMM dd, yyyy',
-                                  ).format(picked);
-                                  setDialogState(() {});
-                                }
-                              },
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                          ),
-                          readOnly: true,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _buildRatingsSection(moduleType: 'car', moduleId: carId),
-                  const SizedBox(height: 24),
-                ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  final startDate = DateFormat(
-                    'MMM dd, yyyy',
-                  ).parse(startController.text);
-                  final endDate = DateFormat(
-                    'MMM dd, yyyy',
-                  ).parse(endController.text);
-
-                  final CreateRentalRequest request = CreateRentalRequest(
-                    carId: carId,
-                    startDate: startDate,
-                    endDate: endDate,
-                    buyerName: buyerNameController.text.trim(),
-                    buyerEmail: buyerEmailController.text.trim(),
-                    buyerPhone: buyerPhoneController.text.trim(),
-                  );
-
-                  final success = await CarRentalsApi.rentCar(request);
-                  Navigator.pop(context);
-
-                  if (success) {
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final names = partyNameControllers
+                      .map((c) => c.text.trim())
+                      .toList();
+                  if (names.length != partySize ||
+                      names.any((n) => n.isEmpty)) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('$title rented successfully!'),
-                        backgroundColor: Colors.green,
+                      const SnackBar(
+                        content: Text(
+                          'Enter a full name for each traveler listed.',
+                        ),
                       ),
                     );
-                    await _loadRentals();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Failed to rent car')),
-                    );
+                    return;
                   }
-                } catch (e) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryBlue,
-                foregroundColor: Colors.white,
+                  if (buyerEmailController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Email is required')),
+                    );
+                    return;
+                  }
+                  try {
+                    final startDate = DateFormat(
+                      'MMM dd, yyyy',
+                    ).parse(startController.text);
+                    final endDate = DateFormat(
+                      'MMM dd, yyyy',
+                    ).parse(endController.text);
+
+                    final request = CreateRentalRequest(
+                      carId: carId,
+                      startDate: startDate,
+                      endDate: endDate,
+                      buyerName: names.join(', '),
+                      buyerEmail: buyerEmailController.text.trim(),
+                      buyerPhone: buyerPhoneController.text.trim(),
+                      partySize: partySize,
+                      partyMemberNames: names,
+                    );
+
+                    final success = await CarRentalsApi.rentCar(request);
+                    if (!context.mounted) return;
+                    Navigator.pop(dialogContext);
+
+                    if (success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('$title rented successfully!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      await _loadRentals();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Failed to rent car')),
+                      );
+                    }
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryBlue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Rent Now'),
               ),
-              child: const Text('Rent Now'),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      partyCountController.dispose();
+      for (final c in partyNameControllers) {
+        c.dispose();
+      }
+      startController.dispose();
+      endController.dispose();
+      buyerEmailController.dispose();
+      buyerPhoneController.dispose();
+    }
   }
 
   Future<void> _showMyRentals() async {
@@ -1594,11 +1849,18 @@ class _TravelHomePageState extends State<TravelHomePage> {
       return;
     }
 
-    final title = tour['title']?.toString() ?? 'Tour';
-    final price = tour['salePrice'] ?? tour['price'];
-    final priceStr = price != null ? '$_peso${price.toString()} / person' : '';
-    final imageUrl = _itemImageUrl(tour);
-    final tourDesc = tour['description']?.toString().trim();
+    Map<String, dynamic> merged = Map<String, dynamic>.from(tour);
+    try {
+      final res = await ToursApi.get(tourId);
+      merged.addAll(_unwrapTourOrCarResponse(res));
+    } catch (_) {}
+
+    final title = merged['title']?.toString() ?? 'Tour';
+    final imageUrl = _itemImageUrl(merged);
+    final duration = merged['duration']?.toString().trim();
+    final lo = ListingDataHelpers.minPeople(merged);
+    final hi = ListingDataHelpers.maxPeople(merged);
+    final locLabel = _tourLocationLabel(merged);
 
     final startController = TextEditingController(
       text: DateFormat(
@@ -1610,235 +1872,342 @@ class _TravelHomePageState extends State<TravelHomePage> {
         'MMM dd, yyyy',
       ).format(DateTime.now().add(const Duration(days: 5))),
     );
-    final buyerNameController = TextEditingController(text: 'John Doe');
-    final buyerEmailController = TextEditingController(
-      text: 'test@example.com',
+
+    final pre = _contactPrefillFromProfile(_userProfile);
+    int guestCount = math.min(
+      math.max(math.max(_effectiveGuestCount, lo), lo),
+      hi,
     );
-    final buyerPhoneController = TextEditingController(text: '+1234567890');
+    final guestCountController = TextEditingController(text: '$guestCount');
+
+    final guestNameControllers = <TextEditingController>[];
+
+    void syncGuestNameControllers(int n) {
+      while (guestNameControllers.length < n) {
+        final idx = guestNameControllers.length;
+        guestNameControllers.add(
+          TextEditingController(text: idx == 0 ? pre['name'] ?? '' : ''),
+        );
+      }
+      while (guestNameControllers.length > n) {
+        guestNameControllers.removeLast().dispose();
+      }
+    }
+
+    syncGuestNameControllers(guestCount);
+
+    final buyerEmailController = TextEditingController(text: pre['email'] ?? '');
+    final buyerPhoneController = TextEditingController(text: pre['phone'] ?? '');
 
     await _loadRatingsFor('tour', tourId);
     await _cacheCurrentUserId();
 
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 550,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      imageUrl,
-                      height: 180,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(
-                        height: 180,
-                        color: Colors.grey[300],
-                        child: const Icon(
-                          Icons.travel_explore,
-                          size: 80,
-                          color: Colors.grey,
+    if (!mounted) return;
+    final maxH = MediaQuery.sizeOf(context).height * 0.9;
+    final dialogW = math.min(960.0, MediaQuery.sizeOf(context).width - 32);
+
+    final tourSpecRows = <Widget>[
+      if (duration != null && duration.isNotEmpty) ...[
+        _infoRow(Icons.schedule, 'Duration', duration),
+        const SizedBox(height: 8),
+      ],
+      _infoRow(Icons.people, 'Group size', '$lo–$hi guests'),
+      if (locLabel.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        _infoRow(Icons.place, 'Location', locLabel),
+      ],
+    ];
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            title: Text(title),
+            content: SizedBox(
+              width: dialogW,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxH),
+                child: SingleChildScrollView(
+                  child: ListingResponsiveColumns(
+                    info: ListingDetailSections(
+                      entity: merged,
+                      isTour: true,
+                      heroImageUrl: imageUrl,
+                      placeholderIcon: Icons.travel_explore,
+                      specRows: tourSpecRows,
+                    ),
+                    booking: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListingPriceSummary(
+                          entity: merged,
+                          isTour: true,
+                          peso: _peso,
+                          peopleCount: guestCount,
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    priceStr,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: _primaryBlue,
-                    ),
-                  ),
-                  if (tourDesc != null && tourDesc.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      tourDesc,
-                      style: TextStyle(color: Colors.grey[700], fontSize: 14),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Text(
-                    'Tour Dates:',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: startController,
-                          decoration: InputDecoration(
-                            labelText: 'Start Date',
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.calendar_today),
-                              onPressed: () async {
-                                final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: DateTime.now().add(
-                                    const Duration(days: 1),
+                        const SizedBox(height: 12),
+                        _bookingGuidelinesCard(isTour: true),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Tour dates',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: startController,
+                                decoration: InputDecoration(
+                                  labelText: 'Start Date',
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.calendar_today),
+                                    onPressed: () async {
+                                      final picked = await showDatePicker(
+                                        context: context,
+                                        initialDate: DateTime.now().add(
+                                          const Duration(days: 1),
+                                        ),
+                                        firstDate: DateTime.now().add(
+                                          const Duration(days: 1),
+                                        ),
+                                        lastDate: DateTime.now().add(
+                                          const Duration(days: 365),
+                                        ),
+                                      );
+                                      if (picked != null) {
+                                        startController.text = DateFormat(
+                                          'MMM dd, yyyy',
+                                        ).format(picked);
+                                        setDialogState(() {});
+                                      }
+                                    },
                                   ),
-                                  firstDate: DateTime.now().add(
-                                    const Duration(days: 1),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  lastDate: DateTime.now().add(
-                                    const Duration(days: 365),
-                                  ),
-                                );
-                                if (picked != null)
-                                  startController.text = DateFormat(
-                                    'MMM dd, yyyy',
-                                  ).format(picked);
-                              },
+                                ),
+                                readOnly: true,
+                              ),
                             ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: endController,
+                                decoration: InputDecoration(
+                                  labelText: 'End Date',
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.calendar_today),
+                                    onPressed: () async {
+                                      final picked = await showDatePicker(
+                                        context: context,
+                                        initialDate: DateTime.now().add(
+                                          const Duration(days: 5),
+                                        ),
+                                        firstDate: DateTime.now().add(
+                                          const Duration(days: 1),
+                                        ),
+                                        lastDate: DateTime.now().add(
+                                          const Duration(days: 365),
+                                        ),
+                                      );
+                                      if (picked != null) {
+                                        endController.text = DateFormat(
+                                          'MMM dd, yyyy',
+                                        ).format(picked);
+                                        setDialogState(() {});
+                                      }
+                                    },
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                readOnly: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Guests',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: guestCountController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'Number of guests',
+                            helperText: 'Allowed range for this tour: $lo–$hi',
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          readOnly: true,
+                          onChanged: (v) {
+                            final parsed = int.tryParse(v.trim());
+                            if (parsed == null) return;
+                            final next = parsed.clamp(lo, hi);
+                            if (next != parsed) {
+                              guestCountController.text = '$next';
+                              guestCountController.selection =
+                                  TextSelection.collapsed(
+                                    offset: guestCountController.text.length,
+                                  );
+                            }
+                            guestCount = next;
+                            syncGuestNameControllers(guestCount);
+                            setDialogState(() {});
+                          },
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: endController,
-                          decoration: InputDecoration(
-                            labelText: 'End Date',
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.calendar_today),
-                              onPressed: () async {
-                                final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: DateTime.now().add(
-                                    const Duration(days: 5),
-                                  ),
-                                  firstDate: DateTime.now().add(
-                                    const Duration(days: 1),
-                                  ),
-                                  lastDate: DateTime.now().add(
-                                    const Duration(days: 365),
-                                  ),
-                                );
-                                if (picked != null)
-                                  endController.text = DateFormat(
-                                    'MMM dd, yyyy',
-                                  ).format(picked);
-                              },
+                        const SizedBox(height: 8),
+                        ...List.generate(guestNameControllers.length, (i) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: TextField(
+                              controller: guestNameControllers[i],
+                              decoration: InputDecoration(
+                                labelText: 'Guest ${i + 1} full name',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
                             ),
+                          );
+                        }),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Contact (from your profile — edit under Account)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: buyerEmailController,
+                          decoration: InputDecoration(
+                            labelText: 'Email',
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          readOnly: true,
+                          keyboardType: TextInputType.emailAddress,
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _buildRatingsSection(moduleType: 'tour', moduleId: tourId),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Buyer Information:',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: buyerNameController,
-                    decoration: InputDecoration(
-                      labelText: 'Full Name',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: buyerPhoneController,
+                          decoration: InputDecoration(
+                            labelText: 'Phone',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          keyboardType: TextInputType.phone,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildRatingsSection(moduleType: 'tour', moduleId: tourId),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: buyerEmailController,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: buyerPhoneController,
-                    decoration: InputDecoration(
-                      labelText: 'Phone',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    keyboardType: TextInputType.phone,
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  final startDate = DateFormat(
-                    'MMM dd, yyyy',
-                  ).parse(startController.text);
-                  final endDate = DateFormat(
-                    'MMM dd, yyyy',
-                  ).parse(endController.text);
-                  final request = CreateTourBookingRequest(
-                    tourId: tourId,
-                    startDate: startDate,
-                    endDate: endDate,
-                    buyerName: buyerNameController.text.trim(),
-                    buyerEmail: buyerEmailController.text.trim(),
-                    buyerPhone: buyerPhoneController.text.trim(),
-                  );
-                  final success = await TourBookingsApi.buyTour(request);
-                  Navigator.pop(context);
-                  if (success) {
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final names = guestNameControllers
+                      .map((c) => c.text.trim())
+                      .toList();
+                  if (names.length != guestCount || names.any((n) => n.isEmpty)) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('$title booked!'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 2),
+                      const SnackBar(
+                        content: Text(
+                          'Enter a full name for each guest in your party.',
+                        ),
                       ),
                     );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Booking failed')),
-                    );
+                    return;
                   }
-                } catch (e) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryBlue,
-                foregroundColor: Colors.white,
+                  if (buyerEmailController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Email is required')),
+                    );
+                    return;
+                  }
+                  try {
+                    final startDate = DateFormat(
+                      'MMM dd, yyyy',
+                    ).parse(startController.text);
+                    final endDate = DateFormat(
+                      'MMM dd, yyyy',
+                    ).parse(endController.text);
+                    final request = CreateTourBookingRequest(
+                      tourId: tourId,
+                      startDate: startDate,
+                      endDate: endDate,
+                      buyerName: names.join(', '),
+                      buyerEmail: buyerEmailController.text.trim(),
+                      buyerPhone: buyerPhoneController.text.trim(),
+                      guestCount: guestCount,
+                      guestNames: names,
+                    );
+                    final success = await TourBookingsApi.buyTour(request);
+                    if (!context.mounted) return;
+                    Navigator.pop(dialogContext);
+                    if (success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('$title booked!'),
+                          backgroundColor: Colors.green,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Booking failed')),
+                      );
+                    }
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryBlue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Book Now'),
               ),
-              child: const Text('Book Now'),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      guestCountController.dispose();
+      for (final c in guestNameControllers) {
+        c.dispose();
+      }
+      startController.dispose();
+      endController.dispose();
+      buyerEmailController.dispose();
+      buyerPhoneController.dispose();
+    }
   }
 
   @override
@@ -2936,7 +3305,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Stack(
             children: [
@@ -2977,6 +3347,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -3060,19 +3431,14 @@ class _TravelHomePageState extends State<TravelHomePage> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final isMobile = width < 600;
-        final cols = isMobile ? 1 : 3;
-        final aspect = isMobile ? 1.15 : 1.3;
         final padding = EdgeInsets.symmetric(horizontal: isMobile ? 16 : 48);
+        final gap = isMobile ? 14.0 : 20.0;
 
         return Padding(
           padding: padding,
-          child: GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: cols,
-            mainAxisSpacing: isMobile ? 14 : 24,
-            crossAxisSpacing: isMobile ? 14 : 24,
-            childAspectRatio: aspect,
+          child: _buildListingCardGrid(
+            width: width - padding.horizontal,
+            spacing: gap,
             children: entries.map<Widget>((e) {
               final title =
                   e.m['title']?.toString() ?? (e.isTour ? 'Tour' : 'Car');
@@ -3118,19 +3484,14 @@ class _TravelHomePageState extends State<TravelHomePage> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final isMobile = width < 600;
-        final cols = isMobile ? 1 : 3;
-        final aspect = isMobile ? 1.15 : 1.3;
         final padding = EdgeInsets.symmetric(horizontal: isMobile ? 16 : 48);
+        final gap = isMobile ? 14.0 : 20.0;
 
         return Padding(
           padding: padding,
-          child: GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: cols,
-            mainAxisSpacing: isMobile ? 14 : 24,
-            crossAxisSpacing: isMobile ? 14 : 24,
-            childAspectRatio: aspect,
+          child: _buildListingCardGrid(
+            width: width - padding.horizontal,
+            spacing: gap,
             children: _tours.map<Widget>((t) {
               final m = t as Map<String, dynamic>;
               final title = m['title']?.toString() ?? 'Tour';
@@ -3167,19 +3528,14 @@ class _TravelHomePageState extends State<TravelHomePage> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final isMobile = width < 600;
-        final cols = isMobile ? 1 : 3;
-        final aspect = isMobile ? 1.15 : 1.3;
         final padding = EdgeInsets.symmetric(horizontal: isMobile ? 16 : 48);
+        final gap = isMobile ? 14.0 : 20.0;
 
         return Padding(
           padding: padding,
-          child: GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: cols,
-            mainAxisSpacing: isMobile ? 14 : 24,
-            crossAxisSpacing: isMobile ? 14 : 24,
-            childAspectRatio: aspect,
+          child: _buildListingCardGrid(
+            width: width - padding.horizontal,
+            spacing: gap,
             children: _cars.map<Widget>((c) {
               final m = c as Map<String, dynamic>;
               final title = m['title']?.toString() ?? 'Car';
@@ -3878,59 +4234,49 @@ class _TravelHomePageState extends State<TravelHomePage> {
     required bool isTour,
     bool showHeader = true,
   }) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 700;
-    final crossAxisCount = isMobile ? 1 : 3;
-    final childAspectRatio = isMobile ? 1.45 : 0.9;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (showHeader)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '${items.length} $itemLabel found',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  color: _navBlue,
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (showHeader)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${items.length} $itemLabel found',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: _navBlue,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        if (showHeader) const SizedBox(height: 12),
-        items.isEmpty
-            ? const Padding(
+            if (showHeader) const SizedBox(height: 12),
+            if (items.isEmpty)
+              const Padding(
                 padding: EdgeInsets.all(48),
                 child: Center(child: Text('No items found.')),
               )
-            : GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: crossAxisCount,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: childAspectRatio,
-                children: List.generate(
-                  items.length,
-                  (index) => InkWell(
+            else
+              _buildListingCardGrid(
+                width: constraints.maxWidth,
+                spacing: 16,
+                children: List.generate(items.length, (index) {
+                  final item = items[index] as Map<String, dynamic>;
+                  return InkWell(
                     onTap: () => isTour
-                        ? _showTourDetailsDialog(
-                            items[index] as Map<String, dynamic>,
-                          )
-                        : _showCarDetailsDialog(
-                            items[index] as Map<String, dynamic>,
-                          ),
-                    child: _buildResultCard(
-                      items[index] as Map<String, dynamic>,
-                      isTour,
-                    ),
-                  ),
-                ),
+                        ? _showTourDetailsDialog(item)
+                        : _showCarDetailsDialog(item),
+                    borderRadius: BorderRadius.circular(8),
+                    child: _buildResultCard(item, isTour),
+                  );
+                }),
               ),
-      ],
+          ],
+        );
+      },
     );
   }
 
@@ -3958,7 +4304,8 @@ class _TravelHomePageState extends State<TravelHomePage> {
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Stack(
             children: [
@@ -4005,6 +4352,7 @@ class _TravelHomePageState extends State<TravelHomePage> {
           Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(

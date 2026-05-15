@@ -47,6 +47,10 @@ class CreateTourBookingRequest {
   final String? buyerName;
   final String? buyerEmail;
   final String? buyerPhone;
+  /// Number of travelers (UI); backend may ignore until supported.
+  final int? guestCount;
+  /// One name per guest; backend may ignore until supported (see `buyerName` fallback).
+  final List<String>? guestNames;
 
   CreateTourBookingRequest({
     required this.tourId,
@@ -55,14 +59,21 @@ class CreateTourBookingRequest {
     this.buyerName,
     this.buyerEmail,
     this.buyerPhone,
+    this.guestCount,
+    this.guestNames,
   });
 
-  Map<String, dynamic> toJson() => {
-    'tourId': tourId,
-    'startDate': startDate.toUtc().toIso8601String(),
-    'endDate': endDate.toUtc().toIso8601String(),
-    if (buyerName != null) 'buyerName': buyerName,
-    if (buyerEmail != null) 'buyerEmail': buyerEmail,
-    if (buyerPhone != null) 'buyerPhone': buyerPhone,
-  };
+  Map<String, dynamic> toJson() {
+    final gn = guestNames;
+    return {
+      'tourId': tourId,
+      'startDate': startDate.toUtc().toIso8601String(),
+      'endDate': endDate.toUtc().toIso8601String(),
+      if (buyerName != null) 'buyerName': buyerName,
+      if (buyerEmail != null) 'buyerEmail': buyerEmail,
+      if (buyerPhone != null) 'buyerPhone': buyerPhone,
+      if (guestCount != null) 'guestCount': guestCount,
+      if (gn != null && gn.isNotEmpty) 'guestNames': gn,
+    };
+  }
 }

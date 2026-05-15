@@ -47,6 +47,10 @@ class CreateRentalRequest {
   final String? buyerName;
   final String? buyerEmail;
   final String? buyerPhone;
+  /// People in the vehicle for this rental; backend may ignore until supported.
+  final int? partySize;
+  /// One name per person in the party; backend may ignore until supported.
+  final List<String>? partyMemberNames;
 
   CreateRentalRequest({
     required this.carId,
@@ -55,14 +59,21 @@ class CreateRentalRequest {
     this.buyerName,
     this.buyerEmail,
     this.buyerPhone,
+    this.partySize,
+    this.partyMemberNames,
   });
 
-  Map<String, dynamic> toJson() => {
-    'carId': carId,
-    'startDate': startDate.toUtc().toIso8601String(),
-    'endDate': endDate.toUtc().toIso8601String(),
-    if (buyerName != null) 'buyerName': buyerName,
-    if (buyerEmail != null) 'buyerEmail': buyerEmail,
-    if (buyerPhone != null) 'buyerPhone': buyerPhone,
-  };
+  Map<String, dynamic> toJson() {
+    final pm = partyMemberNames;
+    return {
+      'carId': carId,
+      'startDate': startDate.toUtc().toIso8601String(),
+      'endDate': endDate.toUtc().toIso8601String(),
+      if (buyerName != null) 'buyerName': buyerName,
+      if (buyerEmail != null) 'buyerEmail': buyerEmail,
+      if (buyerPhone != null) 'buyerPhone': buyerPhone,
+      if (partySize != null) 'partySize': partySize,
+      if (pm != null && pm.isNotEmpty) 'partyMemberNames': pm,
+    };
+  }
 }
