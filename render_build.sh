@@ -4,7 +4,7 @@ set -o errexit
 
 # 1. Download Flutter
 if [ ! -d "flutter" ]; then
-  git clone https://github.com/flutter/flutter.git -b stable
+  git clone https://github.com/flutter/flutter.git -b 3.41.7
 fi
 
 # 2. Set the Path
