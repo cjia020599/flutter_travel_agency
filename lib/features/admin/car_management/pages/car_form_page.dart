@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_travel_agency/api/cars_api.dart';
 import 'package:flutter_travel_agency/api/lookups_api.dart';
@@ -38,6 +41,7 @@ class _CarFormPageState extends State<CarFormPage> {
   final _passenger = TextEditingController(text: '4');
   final _baggage = TextEditingController(text: '2');
   final _door = TextEditingController(text: '4');
+  final _locationAddress = TextEditingController();
   String _gearShift = 'Auto';
   String _status = 'publish';
   double? _mapLat;
@@ -68,10 +72,7 @@ class _CarFormPageState extends State<CarFormPage> {
 
   List<DropdownMenuItem<String?>> _buildLocationItems() {
     final items = <DropdownMenuItem<String?>>[
-      const DropdownMenuItem(
-        value: null,
-        child: Text('-- Please Select --'),
-      ),
+      const DropdownMenuItem(value: null, child: Text('-- Please Select --')),
     ];
     final seenIds = <String>{};
     for (final row in _locationRows) {
@@ -113,6 +114,11 @@ class _CarFormPageState extends State<CarFormPage> {
       _galleryUrls
         ..clear()
         ..addAll(draft.gallery);
+      _locationAddress.text =
+          (widget.itemToEdit?['locationAddress'] ??
+                  widget.itemToEdit?['address'] ??
+                  '')
+              .toString();
     }
     if (_slug.text.trim().isEmpty) {
       _slug.text = _slugify(_title.text);
@@ -143,6 +149,7 @@ class _CarFormPageState extends State<CarFormPage> {
     _passenger.dispose();
     _baggage.dispose();
     _door.dispose();
+    _locationAddress.dispose();
     super.dispose();
   }
 
@@ -218,6 +225,48 @@ class _CarFormPageState extends State<CarFormPage> {
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
         .replaceAll(RegExp(r'^-+|-+$'), '');
+  }
+
+  Future<void> _fetchAddressFromCoordinates(LatLng point) async {
+    final lat = point.latitude;
+    final lon = point.longitude;
+
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+        'format': 'jsonv2',
+        'lat': lat.toString(),
+        'lon': lon.toString(),
+      });
+      final response = await http.get(
+        uri,
+        headers: {'User-Agent': 'flutter_travel_agency/1.0'},
+      );
+      if (!mounted || response.statusCode != 200) return;
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final displayName = (data['display_name'] as String?)?.trim();
+      if (displayName != null && displayName.isNotEmpty) {
+        setState(() => _locationAddress.text = displayName);
+        return;
+      }
+
+      final address = data['address'] as Map<String, dynamic>?;
+      if (address != null && address.isNotEmpty) {
+        final addressText = <String?>[
+          address['road'] as String?,
+          address['neighbourhood'] as String?,
+          address['suburb'] as String?,
+          address['city'] as String?,
+          address['state'] as String?,
+          address['country'] as String?,
+        ].where((part) => part != null && part.trim().isNotEmpty).join(', ');
+        if (addressText.isNotEmpty) {
+          setState(() => _locationAddress.text = addressText);
+        }
+      }
+    } catch (_) {
+      if (!mounted) return;
+    }
   }
 
   Future<void> _pickAndUploadGalleryImages() async {
@@ -310,8 +359,8 @@ class _CarFormPageState extends State<CarFormPage> {
         .map((e) => e.value)
         .whereType<String>()
         .toSet();
-    final selectedLocationValue = (_locationId != null &&
-            availableLocationIds.contains(_locationId))
+    final selectedLocationValue =
+        (_locationId != null && availableLocationIds.contains(_locationId))
         ? _locationId
         : null;
 
@@ -439,15 +488,26 @@ class _CarFormPageState extends State<CarFormPage> {
               onChanged: (v) => setState(() => _locationId = v),
             ),
             const SizedBox(height: 16),
+            TextFormField(
+              controller: _locationAddress,
+              decoration: const InputDecoration(
+                labelText: 'Address',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
             SizedBox(
               height: 300,
               child: CarLocationMapPicker(
                 key: ValueKey('car_map_$_mapLat'),
                 initial: mapInitial,
-                onPick: (p) => setState(() {
-                  _mapLat = p.latitude;
-                  _mapLng = p.longitude;
-                }),
+                onPick: (p) {
+                  setState(() {
+                    _mapLat = p.latitude;
+                    _mapLng = p.longitude;
+                  });
+                  _fetchAddressFromCoordinates(p);
+                },
               ),
             ),
           ]),

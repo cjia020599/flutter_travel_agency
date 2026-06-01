@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_travel_agency/api/lookups_api.dart';
 import 'package:flutter_travel_agency/api/tours_api.dart';
@@ -95,22 +98,14 @@ class _TourFormPageState extends State<TourFormPage> {
     required String fallbackLabel,
   }) {
     final items = <DropdownMenuItem<String?>>[
-      const DropdownMenuItem(
-        value: null,
-        child: Text('-- Please Select --'),
-      ),
+      const DropdownMenuItem(value: null, child: Text('-- Please Select --')),
     ];
     final seenIds = <String>{};
     for (final row in rows) {
       final id = (row['id'] ?? '').toString().trim();
       if (id.isEmpty || !seenIds.add(id)) continue;
       final label = (row['name'] ?? row['title'] ?? fallbackLabel).toString();
-      items.add(
-        DropdownMenuItem<String?>(
-          value: id,
-          child: Text(label),
-        ),
-      );
+      items.add(DropdownMenuItem<String?>(value: id, child: Text(label)));
     }
     return items;
   }
@@ -256,6 +251,53 @@ class _TourFormPageState extends State<TourFormPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('No images were uploaded.')));
+    }
+  }
+
+  Future<void> _fetchAddressFromCoordinates(LatLng point) async {
+    final lat = point.latitude;
+    final lon = point.longitude;
+
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+        'format': 'jsonv2',
+        'lat': lat.toString(),
+        'lon': lon.toString(),
+      });
+
+      final response = await http.get(
+        uri,
+        headers: {'User-Agent': 'flutter_travel_agency/1.0'},
+      );
+      if (!mounted) return;
+      if (response.statusCode != 200) return;
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final displayName = (data['display_name'] as String?)?.trim();
+      if (displayName != null && displayName.isNotEmpty) {
+        setState(() {
+          _realTourAddress.text = displayName;
+        });
+        return;
+      }
+
+      final address = data['address'] as Map<String, dynamic>?;
+      if (address != null && address.isNotEmpty) {
+        final addressText = <String?>[
+          address['road'] as String?,
+          address['suburb'] as String?,
+          address['city'] as String?,
+          address['state'] as String?,
+          address['country'] as String?,
+        ].where((part) => part != null && part.trim().isNotEmpty).join(', ');
+        if (addressText.isNotEmpty) {
+          setState(() {
+            _realTourAddress.text = addressText;
+          });
+        }
+      }
+    } catch (_) {
+      if (!mounted) return;
     }
   }
 
@@ -460,12 +502,12 @@ class _TourFormPageState extends State<TourFormPage> {
         .map((e) => e.value)
         .whereType<String>()
         .toSet();
-    final selectedCategoryValue = (_categoryId != null &&
-            availableCategoryIds.contains(_categoryId))
+    final selectedCategoryValue =
+        (_categoryId != null && availableCategoryIds.contains(_categoryId))
         ? _categoryId
         : null;
-    final selectedLocationValue = (_locationId != null &&
-            availableLocationIds.contains(_locationId))
+    final selectedLocationValue =
+        (_locationId != null && availableLocationIds.contains(_locationId))
         ? _locationId
         : null;
 
@@ -685,10 +727,13 @@ class _TourFormPageState extends State<TourFormPage> {
               child: CarLocationMapPicker(
                 key: ValueKey('map_${_mapLat}_$_mapLng'),
                 initial: mapInitial,
-                onPick: (p) => setState(() {
-                  _mapLat = p.latitude;
-                  _mapLng = p.longitude;
-                }),
+                onPick: (p) {
+                  setState(() {
+                    _mapLat = p.latitude;
+                    _mapLng = p.longitude;
+                  });
+                  _fetchAddressFromCoordinates(p);
+                },
               ),
             ),
           ]),

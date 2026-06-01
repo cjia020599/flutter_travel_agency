@@ -19,6 +19,9 @@ import '../api/tour_bookings_api.dart';
 import '../api/ratings_api.dart';
 import '../api/notifications_api.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'package:latlong2/latlong.dart';
+import '../widgets/booking_route_dialog.dart';
 import '../models/notification_item.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../utils/listing_data_helpers.dart';
@@ -1898,6 +1901,32 @@ class _TravelHomePageState extends State<TravelHomePage> {
     final guestCountController = TextEditingController(text: '$guestCount');
 
     final guestNameControllers = <TextEditingController>[];
+    Map<String, dynamic>? selectedRoute;
+    bool routeLookupLoading = false;
+
+    Future<LatLng?> _forwardGeocode(String query) async {
+      try {
+        final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+          'q': query,
+          'format': 'json',
+          'limit': '1',
+        });
+        final resp = await http.get(
+          uri,
+          headers: {'User-Agent': 'flutter_travel_agency/1.0'},
+        );
+        if (resp.statusCode != 200) return null;
+        final body = jsonDecode(resp.body) as List<dynamic>;
+        if (body.isEmpty) return null;
+        final first = body.first as Map<String, dynamic>;
+        return LatLng(
+          double.parse(first['lat'].toString()),
+          double.parse(first['lon'].toString()),
+        );
+      } catch (_) {
+        return null;
+      }
+    }
 
     void syncGuestNameControllers(int n) {
       while (guestNameControllers.length < n) {
@@ -2139,6 +2168,149 @@ class _TravelHomePageState extends State<TravelHomePage> {
                           keyboardType: TextInputType.phone,
                         ),
                         const SizedBox(height: 16),
+                        // Transport estimate sub-item for booking (user-facing)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Travel to destination',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 8),
+                            if (routeLookupLoading)
+                              const SizedBox(
+                                height: 36,
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              ),
+                            Row(
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: routeLookupLoading
+                                      ? null
+                                      : () async {
+                                          setDialogState(
+                                            () => routeLookupLoading = true,
+                                          );
+                                          LatLng? dest;
+                                          final latRaw = merged['mapLat']
+                                              ?.toString();
+                                          final lngRaw = merged['mapLng']
+                                              ?.toString();
+                                          final realAddr =
+                                              (merged['realTourAddress'] ??
+                                                      merged['address'] ??
+                                                      '')
+                                                  .toString()
+                                                  .trim();
+                                          final lat = double.tryParse(
+                                            latRaw ?? '',
+                                          );
+                                          final lng = double.tryParse(
+                                            lngRaw ?? '',
+                                          );
+                                          if (lat != null && lng != null) {
+                                            dest = LatLng(lat, lng);
+                                          } else if (realAddr.isNotEmpty) {
+                                            dest = await _forwardGeocode(
+                                              realAddr,
+                                            );
+                                          }
+                                          if (dest == null) {
+                                            if (!context.mounted) return;
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Destination coordinates not available.',
+                                                ),
+                                              ),
+                                            );
+                                            setDialogState(
+                                              () => routeLookupLoading = false,
+                                            );
+                                            return;
+                                          }
+                                          final result =
+                                              await showBookingRouteDialog(
+                                                context,
+                                                destination: dest,
+                                                destinationAddress:
+                                                    realAddr.isNotEmpty
+                                                    ? realAddr
+                                                    : null,
+                                              );
+                                          if (!context.mounted) return;
+                                          if (result != null) {
+                                            setDialogState(
+                                              () => selectedRoute = result,
+                                            );
+                                          }
+                                          setDialogState(
+                                            () => routeLookupLoading = false,
+                                          );
+                                        },
+                                  icon: const Icon(Icons.directions),
+                                  label: const Text('How will you get there?'),
+                                ),
+                                const SizedBox(width: 12),
+                                if (selectedRoute != null && selectedRoute!['recommendation'] is Map)
+                                  Expanded(
+                                    child: Card(
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                      color: Colors.blue.shade50,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(14.0),
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 18,
+                                              backgroundColor: Colors.blue.shade700,
+                                              child: Icon(
+                                                (selectedRoute!['recommendation'] as Map)['profile'] == 'driving'
+                                                    ? Icons.directions_car
+                                                    : (selectedRoute!['recommendation'] as Map)['profile'] == 'walking'
+                                                        ? Icons.directions_walk
+                                                        : Icons.directions_bike,
+                                                color: Colors.white,
+                                                size: 18,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  const Text(
+                                                    'How will I get there?',
+                                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                                  ),
+                                                  const SizedBox(height: 6),
+                                                  Text(
+                                                    '${(selectedRoute!['recommendation'] as Map)['label']} • ${((((selectedRoute!['allRoutes'] as Map<String, dynamic>)[(selectedRoute!['recommendation'] as Map)['profile']]?['duration'] as num?) ?? 0) / 60).round()} min • ${((((selectedRoute!['allRoutes'] as Map<String, dynamic>)[(selectedRoute!['recommendation'] as Map)['profile']]?['distance'] as num?) ?? 0) / 1000).toStringAsFixed(1)} km',
+                                                    style: const TextStyle(fontSize: 13),
+                                                  ),
+                                                  const SizedBox(height: 6),
+                                                  Text(
+                                                    (selectedRoute!['recommendation'] as Map)['reason'] ?? '',
+                                                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                        ),
                         _buildRatingsSection(
                           moduleType: 'tour',
                           moduleId: tourId,
